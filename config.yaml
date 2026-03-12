@@ -1,0 +1,85 @@
+llm:
+  default_provider: opencode
+  use_model_registry: true  # Use models.dev for model discovery
+  default_model: "opencode/gpt-5-nano"  # Free model via OpenCode Zen
+  
+  providers:
+    opencode:
+      api_key: public  # Use "public" for free models
+      base_url: https://opencode.ai/zen/v1
+      model: gpt-5-nano
+    
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      base_url: https://api.openai.com/v1
+      model: gpt-4o
+    
+    anthropic:
+      api_key: ${ANTHROPIC_API_KEY}
+      model: claude-3-5-sonnet-20241022
+    
+    ollama:
+      base_url: http://localhost:11434
+      model: llama3
+    
+    lm-studio:
+      base_url: http://localhost:1234/v1
+      model: local-model
+
+context:
+  strategy: sliding_window  # sliding_window, summary, importance
+  max_tokens: 8000
+  preserve_system: true
+  preserve_last_n: 3
+  summarize_threshold: 0.8
+
+mcp:
+  servers:
+    filesystem:
+      url: http://localhost:3000
+      enabled: false
+    
+    git:
+      url: http://localhost:3001
+      enabled: false
+
+    # Free Exa MCP - no API key required
+    exa:
+      url: https://mcp.exa.ai/mcp?tools=web_search_exa,deep_search_exa,get_code_context_exa
+      enabled: false
+
+    # Open WebSearch MCP - free multi-engine search
+    openwebsearch:
+      url: https://open-web-search.vercel.app/mcp
+      enabled: false
+
+planning:
+  max_steps: 20
+  max_retries: 3
+  checkpoint_enabled: true
+
+tools:
+  enabled:
+    - bash
+    - read
+    - write
+    - edit
+    - glob
+    - grep
+    - ls
+    - webfetch
+    - websearch
+    - exa          # Paid Exa (requires API key)
+    - exa_fetch   # Paid Exa fetch (requires API key)
+    - free_exa    # Free Exa (no API key, rate limited)
+    - openwebsearch  # Free multi-engine search
+    - todo
+
+file_tracker:
+  cache_dir: .agent/cache
+  enabled: true
+
+exa:
+  api_key: ${EXA_API_KEY}
+  num_results: 10
+  default_type: auto
