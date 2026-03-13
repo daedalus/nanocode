@@ -75,6 +75,21 @@ class Config:
         """Get planning configuration."""
         return self.get("planning", {})
 
+    @property
+    def agents(self) -> dict:
+        """Get agents configuration."""
+        return self.get("agents", {})
+
+    @property
+    def default_agent(self) -> str:
+        """Get default agent name."""
+        return self.get("agents.default", "build")
+
+    @property
+    def permission(self) -> dict:
+        """Get permission configuration."""
+        return self.get("permission", {})
+
 
 _config: Optional[Config] = None
 

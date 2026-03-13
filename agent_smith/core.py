@@ -16,6 +16,8 @@ from agent_smith.multimodal import MultimodalManager
 from agent_smith.lsp import LSPServerManager
 from agent_smith.context import ContextManager, ContextStrategy
 from agent_smith.config import Config, get_config
+from agent_smith.agents import AgentRegistry, AgentInfo, get_agent_registry, PermissionAction
+from agent_smith.agents.permission import PermissionHandler, PermissionRequest, PermissionReply, PermissionReplyType
 
 
 class AutonomousAgent:
@@ -25,6 +27,7 @@ class AutonomousAgent:
         self.config = config or get_config()
         self.state = AgentStateData()
         
+        self._init_agents()
         self._init_storage()
         self._init_file_tracker()
         self._init_llm()
@@ -33,6 +36,38 @@ class AutonomousAgent:
         self._init_mcp()
         self._init_planning()
         self._init_multimodal()
+
+    def _init_agents(self):
+        """Initialize agent system."""
+        self.agent_registry = get_agent_registry()
+        self.current_agent = self.agent_registry.get_default()
+        self.permission_handler = PermissionHandler()
+
+    def switch_agent(self, agent_name: str) -> bool:
+        """Switch to a different agent."""
+        agent = self.agent_registry.get(agent_name)
+        if agent is None:
+            return False
+        self.current_agent = agent
+        if agent.system_prompt:
+            self.context_manager.set_system_prompt(agent.system_prompt)
+        return True
+
+    def get_current_agent(self) -> Optional[AgentInfo]:
+        """Get the current agent."""
+        return self.current_agent
+
+    def list_agents(self) -> list[AgentInfo]:
+        """List available agents."""
+        return self.agent_registry.list_primary()
+
+    def get_disabled_tools(self) -> set:
+        """Get tools disabled for the current agent."""
+        from agent_smith.agents import get_disabled_tools
+        tools = [t.name for t in self.tool_registry.list_tools()]
+        if self.current_agent is None:
+            return set()
+        return get_disabled_tools(tools, self.current_agent.permission)
 
     def _init_storage(self):
         """Initialize persistent storage."""
@@ -148,11 +183,37 @@ class AutonomousAgent:
         return {"status": "not implemented"}
 
     async def _handle_tool_calls(self, tool_calls: list) -> list[dict]:
-        """Handle tool calls from LLM."""
+        """Handle tool calls from LLM with permission checking."""
         results = []
         for tc in tool_calls:
             tool_name = tc.name
             args = tc.arguments
+            
+            if self.current_agent:
+                action = self.permission_handler.check_permission(
+                    self.current_agent, tool_name, args
+                )
+                if action == PermissionAction.DENY:
+                    results.append({
+                        "tool_call_id": tc.id,
+                        "tool_name": tool_name,
+                        "result": f"Error: Permission denied for tool '{tool_name}'",
+                        "success": False,
+                    })
+                    continue
+                if action == PermissionAction.ASK:
+                    try:
+                        await self.permission_handler.request_permission(
+                            self.current_agent, tool_name, args
+                        )
+                    except Exception as e:
+                        results.append({
+                            "tool_call_id": tc.id,
+                            "tool_name": tool_name,
+                            "result": f"Error: {str(e)}",
+                            "success": False,
+                        })
+                        continue
             
             result = await self.tool_executor.execute(tool_name, args)
             
