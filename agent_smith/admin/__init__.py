@@ -86,7 +86,7 @@ class AdminConsole:
     async def handle_dashboard(self, request):
         """Dashboard overview."""
         try:
-            storage = get_storage()
+            storage = await get_storage()
             stats = await self._get_usage_stats()
             
             recent_sessions = []
@@ -121,7 +121,7 @@ class AdminConsole:
     async def handle_sessions(self, request):
         """List all sessions."""
         try:
-            storage = get_storage()
+            storage = await get_storage()
             page = int(request.query.get("page", 1))
             limit = 50
             offset = (page - 1) * limit
@@ -156,7 +156,7 @@ class AdminConsole:
         session_id = request.match_info["session_id"]
         
         try:
-            storage = get_storage()
+            storage = await get_storage()
             session = None
             messages = []
             
@@ -185,7 +185,7 @@ class AdminConsole:
         session_id = request.match_info["session_id"]
         
         try:
-            storage = get_storage()
+            storage = await get_storage()
             if storage:
                 await storage.delete_session(session_id)
             return web.HTTPFound("/sessions")
@@ -279,7 +279,7 @@ class AdminConsole:
         stats = UsageStats()
         
         try:
-            storage = get_storage()
+            storage = await get_storage()
             if storage:
                 sessions = await storage.list_sessions(limit=10000)
                 stats.total_sessions = len(sessions)
