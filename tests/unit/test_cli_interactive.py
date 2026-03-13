@@ -223,3 +223,74 @@ class TestTraceCommand:
             assert "Show last error trace" in output
         finally:
             sys.stdout = old_stdout
+
+
+class TestCompactCommand:
+    """Test /compact command functionality."""
+
+    def test_compact_no_context_manager(self):
+        """Test /compact when context manager is not available."""
+        mock_agent = Mock()
+        mock_agent.context_manager = None
+        cli = InteractiveCLI(mock_agent)
+
+        import io
+        import sys
+
+        old_stdout = sys.stdout
+        sys.stdout = buffer = io.StringIO()
+
+        import asyncio
+
+        async def test():
+            await cli._compact_context()
+
+        asyncio.run(test())
+        output = buffer.getvalue()
+        assert "not available" in output or "Error" in output
+        sys.stdout = old_stdout
+
+    def test_compact_with_context_manager(self):
+        """Test /compact with context manager."""
+        mock_agent = Mock()
+        mock_ctx = Mock()
+        mock_ctx._messages = [Mock(), Mock(), Mock()]
+        mock_ctx.get_token_usage.return_value = {"current_tokens": 1000}
+        mock_ctx._compact_async = AsyncMock()
+        mock_agent.context_manager = mock_ctx
+
+        cli = InteractiveCLI(mock_agent)
+
+        import io
+        import sys
+
+        old_stdout = sys.stdout
+        sys.stdout = buffer = io.StringIO()
+
+        import asyncio
+
+        async def test():
+            await cli._compact_context()
+
+        asyncio.run(test())
+        output = buffer.getvalue()
+        assert "Context compacted" in output
+        sys.stdout = old_stdout
+
+    def test_compact_command_in_help(self):
+        """Test that /compact appears in help text."""
+        ui = ConsoleUI()
+
+        import io
+        import sys
+
+        old_stdout = sys.stdout
+        sys.stdout = buffer = io.StringIO()
+
+        try:
+            ui.print_help()
+            output = buffer.getvalue()
+            assert "/compact" in output
+            assert "Compact context" in output
+        finally:
+            sys.stdout = old_stdout

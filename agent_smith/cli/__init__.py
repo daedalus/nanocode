@@ -240,6 +240,7 @@ class ConsoleUI:
 ║  /snapshots    - List available snapshots                  ║
 ║  /revert <hash> - Revert to a snapshot (hash or 'latest')║
 ║  /trace        - Show last error trace                     ║
+║  /compact      - Compact context (summarize old messages)  ║
 ╚══════════════════════════════════════════════════════════════╝
 
 NOTE: All commands MUST be prefixed with '/'. 
@@ -362,6 +363,10 @@ class InteractiveCLI:
 
                     if command == "/trace":
                         self._print_trace()
+                        continue
+
+                    if command == "/compact":
+                        await self._compact_context()
                         continue
 
                     # If it starts with "/" but doesn't match any known command, treat as regular input
@@ -834,3 +839,29 @@ class InteractiveCLI:
             print(self.last_error_trace)
         else:
             print(self.ui.color("gray", "\nNo error trace available."))
+
+    async def _compact_context(self):
+        """Compact the context by summarizing old messages."""
+        try:
+            ctx_mgr = getattr(self.agent, "context_manager", None)
+            if not ctx_mgr:
+                self.ui.print_error("Context manager not available")
+                return
+
+            before_count = len(ctx_mgr._messages)
+            before_tokens = ctx_mgr.get_token_usage().get("current_tokens", 0)
+
+            if hasattr(ctx_mgr, "_compact_async"):
+                await ctx_mgr._compact_async()
+            elif hasattr(ctx_mgr, "_compact"):
+                ctx_mgr._compact()
+
+            after_count = len(ctx_mgr._messages)
+            after_tokens = ctx_mgr.get_token_usage().get("current_tokens", 0)
+
+            self.ui.print_success(
+                f"Context compacted: {before_count} → {after_count} messages, "
+                f"{before_tokens} → {after_tokens} tokens"
+            )
+        except Exception as e:
+            self.ui.print_error(f"Failed to compact context: {e}")
