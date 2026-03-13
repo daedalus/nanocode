@@ -23,11 +23,39 @@ A fully autonomous AI agent for console with advanced tool use, multi-provider L
 - Tool result validation and error handling
 - Parallel tool execution support
 
-### Planning & Execution
-- Task decomposition into executable steps
-- Checkpoint-based execution for long-horizon tasks
-- Automatic replanning on failures
-- Progress monitoring and evaluation
+### Multi-Agent System
+- Build, Plan, General, and Explore agents with different permission levels
+- Fine-grained permission controls: `allow`, `deny`, `ask`
+- Agent switching support
+- Subagent support for specialized tasks
+
+### Permission System
+- Tool execution control with allow/deny/ask actions
+- Pattern-based permission rules
+- Callback-based user approval prompts
+
+### ACP (Agent Client Protocol)
+- Protocol-compliant ACP server for IDE integration
+- Works with Zed, VSCode, and other ACP clients
+- JSON-RPC over stdio communication
+- Session management: create, load, prompt
+
+### HTTP Server
+- REST API for remote agent operation
+- Session management via HTTP endpoints
+- Basic authentication support
+- mDNS integration for service discovery
+
+### mDNS Service Discovery
+- Publish agent services on local network
+- Auto-discover remote agents
+- Uses `_agent-smith._tcp.local.` service type
+
+### Retry Logic
+- Exponential backoff for API calls
+- Respects `retry-after` headers
+- Context overflow errors are NOT retried
+- Configurable via RetryConfig
 
 ### MCP (Model Context Protocol)
 - Full MCP protocol client
@@ -40,6 +68,13 @@ A fully autonomous AI agent for console with advanced tool use, multi-provider L
 - Built-in support for: pyright, typescript, deno, gopls, rust-analyzer, clangd, jedi-language-server, omnisharp
 - LSP tool operations: `definition`, `references`, `hover`, `completion`, `symbols`, `workspace_symbol`, `implementation`, `diagnostics`
 - Configurable LSP servers in `config.yaml`
+
+### Enhanced Context Management
+- Message parts: text, reasoning, tool_call, tool_result
+- Automatic compaction when context exceeds limits
+- Scrap-based storage for large tool outputs
+- Per-model context limits from models.dev
+- Multi-part system prompts
 
 ### Multimodal Support
 - Image understanding (vision models)
@@ -173,6 +208,50 @@ result = await tool_executor.execute("lsp", {
 python3 main.py
 ```
 
+### HTTP Server Mode
+
+```bash
+# Start HTTP server on default port (8080)
+python3 main.py --serve
+
+# With authentication
+python3 main.py --serve --serve-auth "admin:password"
+
+# With mDNS discovery
+python3 main.py --serve --mdns
+
+# Custom host and port
+python3 main.py --serve --serve-host "0.0.0.0" --serve-port 8080
+```
+
+API endpoints:
+- `GET /health` - Health check
+- `GET /sessions` - List sessions
+- `POST /sessions` - Create session
+- `POST /sessions/{id}/prompt` - Send prompt
+
+### ACP Server Mode (for Zed, VSCode)
+
+```bash
+# Start ACP server (for IDE integration)
+python3 main.py --acp
+
+# In specific directory
+python3 main.py --acp --cwd /path/to/project
+```
+
+Works with Zed's agent configuration:
+```json
+{
+  "agent_servers": {
+    "AgentSmith": {
+      "command": "python",
+      "args": ["main.py", "--acp"]
+    }
+  }
+}
+```
+
 ### NCurses GUI
 
 ```bash
@@ -256,6 +335,26 @@ llm, config = await create_llm_from_model_id("opencode/gpt-5-nano")
 
 ## Architecture
 
+```
+agent/
+├── core.py           # Main agent loop
+├── config.py         # Configuration management
+├── state.py         # State machine
+├── context.py       # Context management (with compaction)
+├── llm/             # Multi-provider LLM layer
+├── tools/           # Tool system
+├── mcp/             # MCP protocol client
+├── lsp/             # LSP client
+├── planning/        # Task planning engine
+├── multimodal/      # Vision, audio, documents
+├── agents/          # Multi-agent system & permissions
+├── acp/             # ACP (Agent Client Protocol) server
+├── server/          # HTTP server for remote operation
+├── mdns/            # mDNS service discovery
+├── retry/           # Retry logic with backoff
+├── skills/          # Skills system
+├── snapshot/        # Git-based snapshots
+└── cli/             # Console interface
 ```
 agent/
 ├── core.py           # Main agent loop
