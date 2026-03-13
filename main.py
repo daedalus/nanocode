@@ -52,6 +52,17 @@ def parse_args():
         default="cli",
         help="UI mode (default: cli)",
     )
+    parser.add_argument(
+        "--acp",
+        action="store_true",
+        help="Start ACP (Agent Client Protocol) server",
+    )
+    parser.add_argument(
+        "--cwd",
+        type=str,
+        default=".",
+        help="Working directory for ACP server",
+    )
     return parser.parse_args()
 
 
@@ -59,6 +70,15 @@ async def run_cli(agent):
     """Run the CLI interface."""
     cli = InteractiveCLI(agent)
     await cli.run()
+
+
+async def run_acp(agent):
+    """Run the ACP server."""
+    from agent_smith.acp import ACPServer
+    
+    print("Starting ACP server...")
+    server = ACPServer(agent)
+    await server.start()
 
 
 def run_ncurses(agent):
@@ -94,6 +114,13 @@ def run_ncurses(agent):
 async def main():
     """Main entry point."""
     args = parse_args()
+    
+    if args.acp:
+        os.chdir(args.cwd)
+        config = Config(args.config)
+        agent = AutonomousAgent(config)
+        await run_acp(agent)
+        return
     
     config = Config(args.config)
     
