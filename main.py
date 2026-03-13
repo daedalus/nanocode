@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from agent_smith.core import AutonomousAgent
 from agent_smith.cli import InteractiveCLI
 from agent_smith.config import Config
+from agent_smith.server import run_server
 
 
 def parse_args():
@@ -58,10 +59,37 @@ def parse_args():
         help="Start ACP (Agent Client Protocol) server",
     )
     parser.add_argument(
+        "--serve",
+        action="store_true",
+        help="Start HTTP server for remote operation",
+    )
+    parser.add_argument(
+        "--serve-host",
+        type=str,
+        default="0.0.0.0",
+        help="HTTP server host (default: 0.0.0.0)",
+    )
+    parser.add_argument(
+        "--serve-port",
+        type=int,
+        default=8080,
+        help="HTTP server port (default: 8080)",
+    )
+    parser.add_argument(
+        "--serve-auth",
+        type=str,
+        help="HTTP server auth (format: username:password)",
+    )
+    parser.add_argument(
+        "--mdns",
+        action="store_true",
+        help="Publish service via mDNS",
+    )
+    parser.add_argument(
         "--cwd",
         type=str,
         default=".",
-        help="Working directory for ACP server",
+        help="Working directory for ACP/server",
     )
     return parser.parse_args()
 
@@ -114,6 +142,39 @@ def run_ncurses(agent):
 async def main():
     """Main entry point."""
     args = parse_args()
+    
+    if args.serve:
+        os.chdir(args.cwd)
+        config = Config(args.config)
+        
+        auth_username = None
+        auth_password = None
+        if args.serve_auth:
+            if ":" in args.serve_auth:
+                auth_username, auth_password = args.serve_auth.split(":", 1)
+            else:
+                auth_username = args.serve_auth
+        
+        agent = AutonomousAgent(config)
+        
+        if args.mdns:
+            try:
+                from agent_smith.mdns import get_manager
+                mdns = get_manager()
+                await mdns.start()
+                mdns.publish(args.serve_port)
+                print(f"Published via mDNS on port {args.serve_port}")
+            except ImportError:
+                print("mDNS not available. Install: pip install zeroconf")
+        
+        await run_server(
+            host=args.serve_host,
+            port=args.serve_port,
+            agent=agent,
+            auth_username=auth_username,
+            auth_password=auth_password,
+        )
+        return
     
     if args.acp:
         os.chdir(args.cwd)
