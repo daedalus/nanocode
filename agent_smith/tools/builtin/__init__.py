@@ -16,16 +16,38 @@ class BashTool(Tool):
     def __init__(self, allowed_commands: list[str] = None):
         super().__init__(
             name="bash",
-            description="Execute shell commands in the terminal. Returns command output.",
+            description="Execute shell commands in the terminal. Returns command output. Use pty=true for interactive commands.",
         )
         self.allowed_commands = allowed_commands or []
         self.blocked_patterns = ["rm -rf /", "dd if=", ":(){:|:&};:", "mkfs"]
+        self.pty_session: Optional[str] = None
+        self.parameters = {
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "Shell command to execute"},
+                "workdir": {"type": "string", "description": "Working directory"},
+                "timeout": {"type": "integer", "default": 60, "description": "Timeout in seconds"},
+                "pty": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Use PTY for interactive commands",
+                },
+            },
+            "required": ["command"],
+        }
 
-    async def execute(self, command: str, workdir: str = None, timeout: int = 60) -> ToolResult:
+    async def execute(
+        self, command: str, workdir: str = None, timeout: int = 60, pty: bool = False
+    ) -> ToolResult:
         """Execute a shell command."""
         for pattern in self.blocked_patterns:
             if pattern in command:
-                return ToolResult(success=False, content=None, error=f"Blocked command pattern: {pattern}")
+                return ToolResult(
+                    success=False, content=None, error=f"Blocked command pattern: {pattern}"
+                )
+
+        if pty:
+            return await self._execute_pty(command, workdir)
 
         try:
             work_path = Path(workdir) if workdir else Path.cwd()
@@ -37,11 +59,11 @@ class BashTool(Tool):
                 timeout=timeout,
                 cwd=str(work_path),
             )
-            
+
             output = result.stdout
             if result.stderr:
                 output += f"\nSTDERR: {result.stderr}"
-            
+
             return ToolResult(
                 success=result.returncode == 0,
                 content=output or "(command completed with no output)",
@@ -51,6 +73,38 @@ class BashTool(Tool):
             return ToolResult(success=False, content=None, error="Command timed out")
         except Exception as e:
             return ToolResult(success=False, content=None, error=str(e))
+
+    async def _execute_pty(self, command: str, workdir: str = None) -> ToolResult:
+        """Execute command in a PTY session."""
+        from agent_smith.pty import PtyManager
+        import uuid
+
+        session_id = self.pty_session
+        if not session_id or PtyManager.get(session_id) is None:
+            info = await PtyManager.create(cwd=workdir)
+            session_id = info.id
+            self.pty_session = session_id
+
+        await PtyManager.write(session_id, command + "\n")
+
+        import time
+
+        start = time.time()
+        output = ""
+
+        while time.time() - start < 60:
+            await asyncio.sleep(0.1)
+            data = PtyManager.read_buffer(session_id)
+            if data and len(data) > len(output):
+                output = data
+                if "$ " in output or "# " in output:
+                    break
+
+        return ToolResult(
+            success=True,
+            content=output,
+            metadata={"session_id": session_id},
+        )
 
 
 class GlobTool(Tool):
@@ -90,10 +144,11 @@ class GrepTool(Tool):
     async def execute(self, pattern: str, path: str = None, include: str = None) -> ToolResult:
         """Search for pattern in files."""
         import re
+
         try:
             search_path = Path(path) if path else self.root_dir
             results = []
-            
+
             if include:
                 files = search_path.glob(include)
             else:
@@ -108,10 +163,12 @@ class GrepTool(Tool):
                             if re.search(pattern, line):
                                 matches.append(f"{i}: {line}")
                         if matches:
-                            results.append({
-                                "file": str(file_path.relative_to(search_path)),
-                                "matches": matches[:10],
-                            })
+                            results.append(
+                                {
+                                    "file": str(file_path.relative_to(search_path)),
+                                    "matches": matches[:10],
+                                }
+                            )
                     except:
                         continue
 
@@ -135,7 +192,9 @@ class ReadFileTool(Tool):
         self.root_dir = Path(root_dir) if root_dir else Path.cwd()
         self.file_tracker = file_tracker
 
-    async def execute(self, path: str, limit: int = None, offset: int = None, force_refresh: bool = False) -> ToolResult:
+    async def execute(
+        self, path: str, limit: int = None, offset: int = None, force_refresh: bool = False
+    ) -> ToolResult:
         """Read a file."""
         try:
             file_path = self.root_dir / path
@@ -143,7 +202,7 @@ class ReadFileTool(Tool):
                 return ToolResult(success=False, content=None, error="File not found")
 
             full_path = str(file_path.resolve())
-            
+
             if self.file_tracker and not force_refresh:
                 content, refreshed = self.file_tracker.get_or_read(full_path)
                 was_cached = not refreshed
@@ -152,13 +211,13 @@ class ReadFileTool(Tool):
                 was_cached = False
                 if self.file_tracker:
                     self.file_tracker.set(full_path, content)
-            
+
             lines = content.splitlines()
             if offset:
-                lines = lines[offset - 1:]
+                lines = lines[offset - 1 :]
             if limit:
                 lines = lines[:limit]
-            
+
             return ToolResult(
                 success=True,
                 content="\n".join(lines),
@@ -190,10 +249,10 @@ class WriteFileTool(Tool):
             file_path = self.root_dir / path
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(content)
-            
+
             if self.file_tracker:
                 self.file_tracker.invalidate(str(file_path.resolve()))
-            
+
             return ToolResult(
                 success=True,
                 content=f"Written to {file_path}",
@@ -222,22 +281,22 @@ class EditFileTool(Tool):
                 return ToolResult(success=False, content=None, error="File not found")
 
             full_path = str(file_path.resolve())
-            
+
             if self.file_tracker and not self.file_tracker.is_modified(full_path):
                 cached = self.file_tracker.get(full_path)
                 content = cached.content if cached else file_path.read_text()
             else:
                 content = file_path.read_text()
-            
+
             if old not in content:
                 return ToolResult(success=False, content=None, error="Old string not found in file")
 
             new_content = content.replace(old, new, 1)
             file_path.write_text(new_content)
-            
+
             if self.file_tracker:
                 self.file_tracker.invalidate(full_path)
-            
+
             return ToolResult(
                 success=True,
                 content=f"Edited {file_path}",
@@ -293,17 +352,18 @@ class WebFetchTool(Tool):
         """Fetch URL content."""
         try:
             import httpx
+
             async with httpx.AsyncClient() as client:
                 response = await client.get(url, timeout=30.0)
                 response.raise_for_status()
-                
+
                 if format == "text":
                     content = response.text[:50000]
                 elif format == "html":
                     content = response.text
                 else:
                     content = response.text
-                
+
                 return ToolResult(
                     success=True,
                     content=content,
@@ -326,8 +386,9 @@ class WebSearchTool(Tool):
         """Search the web."""
         try:
             import httpx
+
             headers = {"Accept": "application/json"}
-            
+
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     "https://api.exa.ai/search",
@@ -336,15 +397,17 @@ class WebSearchTool(Tool):
                     timeout=30.0,
                 )
                 data = response.json()
-                
+
                 results = []
                 for r in data.get("results", []):
-                    results.append({
-                        "title": r.get("title"),
-                        "url": r.get("url"),
-                        "snippet": r.get("snippet", "")[:200],
-                    })
-                
+                    results.append(
+                        {
+                            "title": r.get("title"),
+                            "url": r.get("url"),
+                            "snippet": r.get("snippet", "")[:200],
+                        }
+                    )
+
                 return ToolResult(
                     success=True,
                     content=results,
@@ -368,6 +431,7 @@ class TodoTool(Tool):
         """Manage todos."""
         if action == "add":
             import uuid
+
             task_id = str(uuid.uuid4())[:8]
             self.tasks[task_id] = {"content": task, "status": "pending"}
             return ToolResult(success=True, content=f"Added task {task_id}: {task}")
@@ -395,23 +459,27 @@ class LSPTool(Tool):
         )
         self.lsp_manager = lsp_manager
 
-    async def execute(self, operation: str, file_path: str, line: int = 1, character: int = 1, query: str = None) -> ToolResult:
+    async def execute(
+        self, operation: str, file_path: str, line: int = 1, character: int = 1, query: str = None
+    ) -> ToolResult:
         """Perform LSP operation."""
         if self.lsp_manager is None:
             return ToolResult(success=False, content=None, error="LSP manager not configured")
 
         try:
             from agent_smith.lsp import path_to_file_uri, file_uri_to_path
-            
+
             file_path = str(Path(file_path).resolve())
             uri = path_to_file_uri(file_path)
-            
+
             client = self.lsp_manager.get_server_for_file(file_path)
             if client is None:
                 client = await self.lsp_manager.auto_start_for_file(file_path)
-            
+
             if client is None:
-                return ToolResult(success=False, content=None, error="No LSP server available for this file type")
+                return ToolResult(
+                    success=False, content=None, error="No LSP server available for this file type"
+                )
 
             if isinstance(client, tuple):
                 client = client[0]
@@ -422,11 +490,15 @@ class LSPTool(Tool):
                     return ToolResult(success=True, content="No definition found")
                 locations = []
                 for loc in result:
-                    locations.append({
-                        "file": file_uri_to_path(loc.uri),
-                        "range": loc.range,
-                    })
-                return ToolResult(success=True, content=locations, metadata={"count": len(locations)})
+                    locations.append(
+                        {
+                            "file": file_uri_to_path(loc.uri),
+                            "range": loc.range,
+                        }
+                    )
+                return ToolResult(
+                    success=True, content=locations, metadata={"count": len(locations)}
+                )
 
             elif operation == "references":
                 result = await client.text_document__references(uri, line - 1, character - 1)
@@ -434,11 +506,15 @@ class LSPTool(Tool):
                     return ToolResult(success=True, content="No references found")
                 locations = []
                 for loc in result:
-                    locations.append({
-                        "file": file_uri_to_path(loc.uri),
-                        "range": loc.range,
-                    })
-                return ToolResult(success=True, content=locations, metadata={"count": len(locations)})
+                    locations.append(
+                        {
+                            "file": file_uri_to_path(loc.uri),
+                            "range": loc.range,
+                        }
+                    )
+                return ToolResult(
+                    success=True, content=locations, metadata={"count": len(locations)}
+                )
 
             elif operation == "hover":
                 result = await client.text_document__hover(uri, line - 1, character - 1)
@@ -455,11 +531,13 @@ class LSPTool(Tool):
                     return ToolResult(success=True, content=[])
                 items = []
                 for item in result:
-                    items.append({
-                        "label": item.label,
-                        "kind": item.kind,
-                        "detail": item.detail,
-                    })
+                    items.append(
+                        {
+                            "label": item.label,
+                            "kind": item.kind,
+                            "detail": item.detail,
+                        }
+                    )
                 return ToolResult(success=True, content=items, metadata={"count": len(items)})
 
             elif operation == "symbols":
@@ -468,32 +546,38 @@ class LSPTool(Tool):
                     return ToolResult(success=True, content="No symbols found")
                 symbols = []
                 for sym in result:
-                    symbols.append({
-                        "name": sym.name,
-                        "kind": sym.kind,
-                        "location": {
-                            "file": file_uri_to_path(sym.location.uri),
-                            "range": sym.location.range,
-                        },
-                    })
+                    symbols.append(
+                        {
+                            "name": sym.name,
+                            "kind": sym.kind,
+                            "location": {
+                                "file": file_uri_to_path(sym.location.uri),
+                                "range": sym.location.range,
+                            },
+                        }
+                    )
                 return ToolResult(success=True, content=symbols, metadata={"count": len(symbols)})
 
             elif operation == "workspace_symbol":
                 if not query:
-                    return ToolResult(success=False, content=None, error="query is required for workspace_symbol")
+                    return ToolResult(
+                        success=False, content=None, error="query is required for workspace_symbol"
+                    )
                 result = await client.workspace__symbol(query)
                 if not result:
                     return ToolResult(success=True, content="No symbols found")
                 symbols = []
                 for sym in result:
-                    symbols.append({
-                        "name": sym.name,
-                        "kind": sym.kind,
-                        "location": {
-                            "file": file_uri_to_path(sym.location.uri),
-                            "range": sym.location.range,
-                        },
-                    })
+                    symbols.append(
+                        {
+                            "name": sym.name,
+                            "kind": sym.kind,
+                            "location": {
+                                "file": file_uri_to_path(sym.location.uri),
+                                "range": sym.location.range,
+                            },
+                        }
+                    )
                 return ToolResult(success=True, content=symbols, metadata={"count": len(symbols)})
 
             elif operation == "implementation":
@@ -502,11 +586,15 @@ class LSPTool(Tool):
                     return ToolResult(success=True, content="No implementation found")
                 locations = []
                 for loc in result:
-                    locations.append({
-                        "file": file_uri_to_path(loc.uri),
-                        "range": loc.range,
-                    })
-                return ToolResult(success=True, content=locations, metadata={"count": len(locations)})
+                    locations.append(
+                        {
+                            "file": file_uri_to_path(loc.uri),
+                            "range": loc.range,
+                        }
+                    )
+                return ToolResult(
+                    success=True, content=locations, metadata={"count": len(locations)}
+                )
 
             elif operation == "diagnostics":
                 result = await client.text_document__diagnostics(uri)
@@ -514,17 +602,233 @@ class LSPTool(Tool):
                     return ToolResult(success=True, content="No diagnostics")
                 diags = []
                 for diag in result:
-                    diags.append({
-                        "message": diag.message,
-                        "severity": diag.severity,
-                        "range": diag.range,
-                        "code": diag.code,
-                    })
+                    diags.append(
+                        {
+                            "message": diag.message,
+                            "severity": diag.severity,
+                            "range": diag.range,
+                            "code": diag.code,
+                        }
+                    )
                 return ToolResult(success=True, content=diags, metadata={"count": len(diags)})
 
             else:
-                return ToolResult(success=False, content=None, error=f"Unknown operation: {operation}")
+                return ToolResult(
+                    success=False, content=None, error=f"Unknown operation: {operation}"
+                )
 
+        except Exception as e:
+            return ToolResult(success=False, content=None, error=str(e))
+
+
+class PtyCreateTool(Tool):
+    """Create a new PTY session."""
+
+    def __init__(self):
+        super().__init__(
+            name="pty_create",
+            description="Create a new PTY (pseudo-terminal) session",
+        )
+        self.parameters = {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "Shell command to run (default: system shell)",
+                },
+                "args": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Command arguments",
+                },
+                "cwd": {"type": "string", "description": "Working directory"},
+                "title": {"type": "string", "description": "Terminal title"},
+                "rows": {"type": "integer", "default": 24, "description": "Terminal rows"},
+                "cols": {"type": "integer", "default": 80, "description": "Terminal columns"},
+            },
+        }
+
+    async def execute(
+        self,
+        command: str = None,
+        args: list = None,
+        cwd: str = None,
+        title: str = None,
+        rows: int = 24,
+        cols: int = 80,
+    ) -> ToolResult:
+        """Create a new PTY session."""
+        try:
+            from agent_smith.pty import PtyManager
+
+            info = await PtyManager.create(
+                command=command,
+                args=args,
+                cwd=cwd,
+                title=title,
+            )
+
+            await PtyManager.resize(info.id, cols, rows)
+
+            return ToolResult(
+                success=True,
+                content={
+                    "id": info.id,
+                    "title": info.title,
+                    "command": info.command,
+                    "cwd": info.cwd,
+                    "pid": info.pid,
+                    "status": info.status.value,
+                },
+            )
+        except Exception as e:
+            return ToolResult(success=False, content=None, error=str(e))
+
+
+class PtyListTool(Tool):
+    """List all PTY sessions."""
+
+    def __init__(self):
+        super().__init__(
+            name="pty_list",
+            description="List all active PTY sessions",
+        )
+
+    async def execute(self) -> ToolResult:
+        """List all PTY sessions."""
+        try:
+            from agent_smith.pty import PtyManager
+
+            sessions = PtyManager.list()
+            return ToolResult(
+                success=True,
+                content=[
+                    {"id": s.id, "title": s.title, "status": s.status.value, "pid": s.pid}
+                    for s in sessions
+                ],
+            )
+        except Exception as e:
+            return ToolResult(success=False, content=None, error=str(e))
+
+
+class PtyWriteTool(Tool):
+    """Write to a PTY session."""
+
+    def __init__(self):
+        super().__init__(
+            name="pty_write",
+            description="Write input to a PTY session",
+        )
+        self.parameters = {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string", "description": "PTY session ID"},
+                "data": {"type": "string", "description": "Data to write to the terminal"},
+            },
+            "required": ["id", "data"],
+        }
+
+    async def execute(self, id: str, data: str) -> ToolResult:
+        """Write to a PTY session."""
+        try:
+            from agent_smith.pty import PtyManager
+
+            await PtyManager.write(id, data)
+            return ToolResult(success=True, content="Data written")
+        except Exception as e:
+            return ToolResult(success=False, content=None, error=str(e))
+
+
+class PtyResizeTool(Tool):
+    """Resize a PTY terminal."""
+
+    def __init__(self):
+        super().__init__(
+            name="pty_resize",
+            description="Resize a PTY terminal",
+        )
+        self.parameters = {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string", "description": "PTY session ID"},
+                "rows": {"type": "integer", "description": "Number of rows"},
+                "cols": {"type": "integer", "description": "Number of columns"},
+            },
+            "required": ["id", "rows", "cols"],
+        }
+
+    async def execute(self, id: str, rows: int, cols: int) -> ToolResult:
+        """Resize a PTY terminal."""
+        try:
+            from agent_smith.pty import PtyManager
+
+            await PtyManager.resize(id, cols, rows)
+            return ToolResult(success=True, content=f"Resized to {cols}x{rows}")
+        except Exception as e:
+            return ToolResult(success=False, content=None, error=str(e))
+
+
+class PtyReadTool(Tool):
+    """Read output from a PTY session."""
+
+    def __init__(self):
+        super().__init__(
+            name="pty_read",
+            description="Read terminal output from a PTY session",
+        )
+        self.parameters = {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string", "description": "PTY session ID"},
+                "cursor": {"type": "integer", "description": "Cursor position to read from"},
+                "length": {"type": "integer", "description": "Maximum length to read"},
+            },
+            "required": ["id"],
+        }
+
+    async def execute(self, id: str, cursor: int = 0, length: int = None) -> ToolResult:
+        """Read from a PTY session."""
+        try:
+            from agent_smith.pty import PtyManager
+
+            data = PtyManager.read_buffer(id, cursor, length)
+            info = PtyManager.get(id)
+
+            return ToolResult(
+                success=True,
+                content=data,
+                metadata={
+                    "cursor": info.cursor if info else cursor,
+                    "status": info.status.value if info else "unknown",
+                },
+            )
+        except Exception as e:
+            return ToolResult(success=False, content=None, error=str(e))
+
+
+class PtyRemoveTool(Tool):
+    """Remove a PTY session."""
+
+    def __init__(self):
+        super().__init__(
+            name="pty_remove",
+            description="Kill a PTY session",
+        )
+        self.parameters = {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string", "description": "PTY session ID"},
+            },
+            "required": ["id"],
+        }
+
+    async def execute(self, id: str) -> ToolResult:
+        """Remove a PTY session."""
+        try:
+            from agent_smith.pty import PtyManager
+
+            await PtyManager.remove(id)
+            return ToolResult(success=True, content="Session removed")
         except Exception as e:
             return ToolResult(success=False, content=None, error=str(e))
 
@@ -532,9 +836,9 @@ class LSPTool(Tool):
 def create_builtin_tools(config: dict = None, file_tracker=None, lsp_manager=None) -> list[Tool]:
     from agent_smith.tools.builtin.exa_search import ExaSearchTool, ExaFetchTool
     from agent_smith.tools.builtin.free_search import FreeExaSearchTool, OpenWebSearchTool
-    
+
     exa_config = config.get("exa", {}) if config else {}
-    
+
     tools = [
         BashTool(),
         GlobTool(),
@@ -557,28 +861,37 @@ def create_builtin_tools(config: dict = None, file_tracker=None, lsp_manager=Non
         TodoTool(),
         # LSP tool
         LSPTool(lsp_manager=lsp_manager),
+        # PTY tools
+        PtyCreateTool(),
+        PtyListTool(),
+        PtyWriteTool(),
+        PtyResizeTool(),
+        PtyReadTool(),
+        PtyRemoveTool(),
     ]
     return tools
 
 
-def register_builtin_tools(registry: ToolRegistry, config: dict = None, file_tracker=None, lsp_manager=None):
+def register_builtin_tools(
+    registry: ToolRegistry, config: dict = None, file_tracker=None, lsp_manager=None
+):
     """Register all built-in tools."""
     for tool in create_builtin_tools(config, file_tracker, lsp_manager):
         registry.register(tool)
-    
+
     try:
         from agent_smith.skills import create_skills_manager
         from agent_smith.tools.builtin.skill import register_skill_tools
-        
+
         skills_manager = create_skills_manager()
         register_skill_tools(registry, skills_manager)
     except ImportError:
         pass
-    
+
     try:
         from agent_smith.snapshot import create_snapshot_manager
         from agent_smith.tools.builtin.snapshot import register_snapshot_tools
-        
+
         snapshot_manager = create_snapshot_manager()
         register_snapshot_tools(registry, snapshot_manager)
     except ImportError:

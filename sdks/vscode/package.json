@@ -1,0 +1,70 @@
+{
+  "name": "agent-smith",
+  "displayName": "Agent Smith",
+  "description": "VSCode extension for Agent Smith AI coding assistant",
+  "version": "0.1.0",
+  "publisher": "agent-smith",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:agent-smith.openTerminal",
+    "onCommand:agent-smith.openNewTerminal",
+    "onCommand:agent-smith.addFilepathToTerminal"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "agent-smith.openTerminal",
+        "title": "Open Agent Smith Terminal",
+        "description": "Open Agent Smith in a split terminal view"
+      },
+      {
+        "command": "agent-smith.openNewTerminal",
+        "title": "New Agent Smith Session",
+        "description": "Start a new Agent Smith terminal session"
+      },
+      {
+        "command": "agent-smith.addFilepathToTerminal",
+        "title": "Add File Path to Agent Smith",
+        "description": "Insert file reference to Agent Smith terminal"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "agent-smith.openTerminal",
+        "key": "Ctrl+Esc",
+        "mac": "Cmd+Esc",
+        "when": "!terminalFocus"
+      },
+      {
+        "command": "agent-smith.openNewTerminal",
+        "key": "Ctrl+Shift+Esc",
+        "mac": "Cmd+Shift+Esc",
+        "when": "!terminalFocus"
+      },
+      {
+        "command": "agent-smith.addFilepathToTerminal",
+        "key": "Alt+Ctrl+k",
+        "mac": "Cmd+Option+k",
+        "when": "editorTextFocus"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "^18.0.0",
+    "@vscode/test-electron": "^2.3.0",
+    "typescript": "^5.0.0"
+  }
+}
