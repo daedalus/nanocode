@@ -183,9 +183,67 @@ class ModelLimits:
         "default": {"context": 8000, "output": 4096},
     }
 
+    _registry = None
+
+    @classmethod
+    def _get_registry(cls):
+        """Get the model registry."""
+        if cls._registry is None:
+            try:
+                from agent_smith.llm.registry import get_registry
+                cls._registry = get_registry()
+            except ImportError:
+                pass
+        return cls._registry
+
+    @classmethod
+    async def load_registry(cls):
+        """Load model registry from models.dev."""
+        registry = cls._get_registry()
+        if registry:
+            try:
+                await registry.load()
+            except Exception:
+                pass
+
     @classmethod
     def get_limits(cls, model: str) -> dict:
-        """Get context and output limits for a model."""
+        """Get context and output limits for a model.
+        
+        First tries to get limits from models.dev registry,
+        then falls back to built-in defaults.
+        """
+        registry = cls._get_registry()
+        
+        if registry and registry._providers:
+            full_id = model
+            if "/" in full_id:
+                model_info = registry.get_model_by_full_id(full_id)
+                if model_info:
+                    context_limit = model_info.context_limit
+                    output_limit = min(context_limit // 8, 16384)
+                    return {"context": context_limit, "output": output_limit}
+        
+        model_lower = model.lower()
+        for key, limits in cls.DEFAULT_LIMITS.items():
+            if key in model_lower:
+                return limits.copy()
+        return cls.DEFAULT_LIMITS["default"].copy()
+
+    @classmethod
+    def get_limits_sync(cls, model: str) -> dict:
+        """Synchronous version of get_limits (uses cache only)."""
+        registry = cls._get_registry()
+        
+        if registry and registry._providers:
+            full_id = model
+            if "/" in full_id:
+                model_info = registry.get_model_by_full_id(full_id)
+                if model_info:
+                    context_limit = model_info.context_limit
+                    output_limit = min(context_limit // 8, 16384)
+                    return {"context": context_limit, "output": output_limit}
+        
         model_lower = model.lower()
         for key, limits in cls.DEFAULT_LIMITS.items():
             if key in model_lower:
@@ -296,7 +354,15 @@ class ContextManager:
         self._token_buffer = max_tokens // 10
         self._scrap_manager = ScrapManager()
         
-        model_limits = ModelLimits.get_limits(model)
+        model_limits = ModelLimits.get_limits_sync(model)
+        self._context_limit = model_limits["context"]
+        self._output_limit = model_limits["output"]
+        self._reserved_tokens = min(2000, self._output_limit // 4)
+
+    async def init_async(self):
+        """Async initialization - load model limits from registry."""
+        await ModelLimits.load_registry()
+        model_limits = ModelLimits.get_limits_sync(self.model)
         self._context_limit = model_limits["context"]
         self._output_limit = model_limits["output"]
         self._reserved_tokens = min(2000, self._output_limit // 4)

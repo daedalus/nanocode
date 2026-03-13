@@ -91,24 +91,30 @@ class TestModelLimits:
 
     def test_get_limits_gpt4(self):
         """Test getting limits for GPT-4."""
-        limits = ModelLimits.get_limits("gpt-4")
+        limits = ModelLimits.get_limits_sync("gpt-4")
         
         assert limits["context"] == 8192
         assert limits["output"] == 4096
 
     def test_get_limits_claude(self):
         """Test getting limits for Claude."""
-        limits = ModelLimits.get_limits("claude-3-5-sonnet")
+        limits = ModelLimits.get_limits_sync("claude-3-5-sonnet")
         
         assert limits["context"] == 200000
         assert limits["output"] == 8192
 
     def test_get_limits_default(self):
         """Test getting default limits."""
-        limits = ModelLimits.get_limits("unknown-model")
+        limits = ModelLimits.get_limits_sync("unknown-model")
         
         assert limits["context"] == 8000
         assert limits["output"] == 4096
+
+    def test_get_limits_with_provider_prefix(self):
+        """Test getting limits with provider prefix (e.g., openai/gpt-4o)."""
+        limits = ModelLimits.get_limits_sync("openai/gpt-4o")
+        
+        assert limits["context"] == 128000
 
 
 class TestScrapManager:
