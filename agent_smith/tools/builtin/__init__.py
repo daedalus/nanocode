@@ -420,3 +420,12 @@ def register_builtin_tools(registry: ToolRegistry, config: dict = None, file_tra
     """Register all built-in tools."""
     for tool in create_builtin_tools(config, file_tracker):
         registry.register(tool)
+    
+    try:
+        from agent_smith.skills import create_skills_manager
+        from agent_smith.tools.builtin.skill import register_skill_tools
+        
+        skills_manager = create_skills_manager()
+        register_skill_tools(registry, skills_manager)
+    except ImportError:
+        pass

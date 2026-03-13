@@ -83,3 +83,12 @@ exa:
   api_key: ${EXA_API_KEY}
   num_results: 10
   default_type: auto
+
+storage:
+  enabled: true
+  db_path: ~/.agent_smith/data/agent_smith.db
+
+skills:
+  directories:
+    - .agent/skills
+    - .agent/commands

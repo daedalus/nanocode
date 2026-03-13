@@ -50,6 +50,37 @@ A fully autonomous AI agent for console with advanced tool use, multi-provider L
 - Automatic tool result truncation
 - Context persistence
 
+### Persistent Session Storage
+- SQLite database for storing sessions, messages, and projects
+- Automatic session history across restarts
+- Works with the ContextManager for seamless persistence
+- Configure via `config.yaml`:
+
+```yaml
+storage:
+  enabled: true
+  db_path: ~/.agent_smith/data/agent_smith.db
+```
+
+### Skills System
+- Custom commands defined in `.agent/skills/<skill-name>/skill.md`
+- Each skill is a markdown file with YAML frontmatter
+- Skills are automatically discovered and registered as tools
+
+Example skill file `.agent/skills/hello/skill.md`:
+```markdown
+---
+name: hello
+description: A simple hello world skill
+---
+
+# Hello Skill
+
+This skill returns a greeting.
+```
+
+Use `/skills` CLI command to list available skills.
+
 ## Installation
 
 ```bash

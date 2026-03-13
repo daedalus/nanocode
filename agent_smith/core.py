@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from typing import Any, Optional
 
 from agent_smith.llm import LLMBase, Message, create_llm
@@ -24,6 +25,7 @@ class AutonomousAgent:
         self.config = config or get_config()
         self.state = AgentStateData()
         
+        self._init_storage()
         self._init_file_tracker()
         self._init_llm()
         self._init_tools()
@@ -31,6 +33,13 @@ class AutonomousAgent:
         self._init_mcp()
         self._init_planning()
         self._init_multimodal()
+
+    def _init_storage(self):
+        """Initialize persistent storage."""
+        self.storage = None
+        self.session_id = None
+        self.project_id = None
+        use_storage = self.config.get("storage.enabled", True)
 
     def _init_file_tracker(self):
         """Initialize file tracker for auto-reload on modification."""
@@ -97,12 +106,16 @@ class AutonomousAgent:
         strategy_str = ctx_config.get("strategy", "sliding_window")
         strategy = ContextStrategy(strategy_str)
         
+        session_id = ctx_config.get("session_id")
+        
         self.context_manager = ContextManager(
             max_tokens=ctx_config.get("max_tokens", 8000),
             strategy=strategy,
             preserve_system=ctx_config.get("preserve_system", True),
             preserve_last_n=ctx_config.get("preserve_last_n", 3),
             llm=self.llm,
+            session_id=session_id,
+            storage=self.storage,
         )
         
         if system_prompt := ctx_config.get("system_prompt"):

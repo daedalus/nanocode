@@ -234,6 +234,7 @@ class ConsoleUI:
 ║  /checkpoint   - List saved checkpoints                    ║
 ║  /resume <id>  - Resume from a checkpoint                  ║
 ║  /tools        - List available tools                      ║
+║  /skills       - List available skills                     ║
 ╚══════════════════════════════════════════════════════════════╝
 
 NOTE: All commands MUST be prefixed with '/'. 
@@ -334,6 +335,10 @@ class InteractiveCLI:
 
                     if command == "/checkpoint":
                         self._list_checkpoints()
+                        continue
+
+                    if command == "/skills":
+                        self._list_skills()
                         continue
 
                     # If it starts with "/" but doesn't match any known command, treat as regular input
@@ -714,3 +719,23 @@ class InteractiveCLI:
                 print(self.ui.color("gray", "No checkpoints found"))
         else:
             print(self.ui.color("gray", "No checkpoints found"))
+
+    def _list_skills(self):
+        """List available skills."""
+        try:
+            from agent_smith.skills import create_skills_manager
+            manager = create_skills_manager()
+            skills = manager.list_skills()
+            
+            if not skills:
+                print(self.ui.color("yellow", "\nNo skills found."))
+                print("Create skills in .agent/skills/<skill-name>/skill.md")
+                return
+            
+            print(self.ui.color("cyan", "\nAvailable Skills:"))
+            print(self.ui.color("gray", "─" * 40))
+            for skill in skills:
+                print(f"  • {self.ui.color('magenta', skill['name'])}: {skill['description']}")
+                print(f"    {self.ui.color('gray', skill['location'])}")
+        except ImportError:
+            print(self.ui.color("gray", "\nSkills module not available."))

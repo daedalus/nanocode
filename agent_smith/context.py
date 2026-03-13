@@ -82,12 +82,16 @@ class ContextManager:
         preserve_system: bool = True,
         preserve_last_n: int = 3,
         llm=None,
+        session_id: str = None,
+        storage=None,
     ):
         self.max_tokens = max_tokens
         self.strategy = strategy
         self.preserve_system = preserve_system
         self.preserve_last_n = preserve_last_n
         self.llm = llm
+        self.session_id = session_id
+        self.storage = storage
         
         self._system_message: Optional[MessageToken] = None
         self._messages: list[MessageToken] = []
@@ -117,6 +121,9 @@ class ContextManager:
         )
         self._messages.append(msg)
 
+        if self.storage and self.session_id:
+            self._persist_message(role, content_str, tool_call_id, tokens)
+
     def _serialize_content(self, content: Any) -> str:
         """Serialize message content to string."""
         if isinstance(content, str):
@@ -131,6 +138,55 @@ class ContextManager:
                         parts.append("[image]")
             return " ".join(parts)
         return str(content)
+
+    async def _persist_message(self, role: str, content: str, tool_call_id: str, tokens: int):
+        """Persist message to database."""
+        try:
+            await self.storage.add_message(
+                session_id=self.session_id,
+                role=role,
+                content=content,
+                tool_call_id=tool_call_id,
+                tokens=tokens,
+            )
+        except Exception:
+            pass
+
+    async def load_from_storage(self):
+        """Load messages from persistent storage."""
+        if not self.storage or not self.session_id:
+            return
+        
+        try:
+            messages = await self.storage.get_messages(self.session_id)
+            for msg in messages:
+                self._messages.append(MessageToken(
+                    role=msg.role,
+                    content=msg.content,
+                    tool_call_id=msg.tool_call_id,
+                    tokens=msg.tokens,
+                    timestamp=msg.created_at,
+                ))
+        except Exception:
+            pass
+
+    async def save_to_storage(self):
+        """Save all messages to persistent storage."""
+        if not self.storage or not self.session_id:
+            return
+        
+        try:
+            await self.storage.clear_messages(self.session_id)
+            for msg in self._messages:
+                await self.storage.add_message(
+                    session_id=self.session_id,
+                    role=msg.role,
+                    content=msg.content,
+                    tool_call_id=msg.tool_call_id,
+                    tokens=msg.tokens,
+                )
+        except Exception:
+            pass
 
     def _calculate_importance(self, role: str, content: str) -> float:
         """Calculate message importance score."""
