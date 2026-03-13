@@ -92,3 +92,7 @@ skills:
   directories:
     - .agent/skills
     - .agent/commands
+
+snapshot:
+  enabled: true
+  prune_days: 7

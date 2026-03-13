@@ -81,6 +81,22 @@ This skill returns a greeting.
 
 Use `/skills` CLI command to list available skills.
 
+### Snapshot/Revert
+- Capture and rollback changes using Git
+- Uses a separate git repository for snapshot tracking
+- Creates lightweight snapshots using `git write-tree`
+
+```yaml
+snapshot:
+  enabled: true
+  prune_days: 7
+```
+
+CLI commands:
+- `/snapshot` - Create a new snapshot
+- `/snapshots` - List available snapshots
+- `/revert <hash>` - Revert to a snapshot (use 'latest' for most recent)
+
 ## Installation
 
 ```bash

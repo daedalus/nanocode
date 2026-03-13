@@ -235,6 +235,9 @@ class ConsoleUI:
 ║  /resume <id>  - Resume from a checkpoint                  ║
 ║  /tools        - List available tools                      ║
 ║  /skills       - List available skills                     ║
+║  /snapshot     - Create a new snapshot                     ║
+║  /snapshots    - List available snapshots                  ║
+║  /revert <hash> - Revert to a snapshot (hash or 'latest')║
 ╚══════════════════════════════════════════════════════════════╝
 
 NOTE: All commands MUST be prefixed with '/'. 
@@ -339,6 +342,19 @@ class InteractiveCLI:
 
                     if command == "/skills":
                         self._list_skills()
+                        continue
+
+                    if command == "/snapshot":
+                        await self._create_snapshot()
+                        continue
+
+                    if command.startswith("/revert "):
+                        snapshot_hash = user_input[8:].strip()
+                        await self._revert_snapshot(snapshot_hash)
+                        continue
+
+                    if command == "/snapshots":
+                        await self._list_snapshots()
                         continue
 
                     # If it starts with "/" but doesn't match any known command, treat as regular input
@@ -739,3 +755,62 @@ class InteractiveCLI:
                 print(f"    {self.ui.color('gray', skill['location'])}")
         except ImportError:
             print(self.ui.color("gray", "\nSkills module not available."))
+
+    async def _create_snapshot(self):
+        """Create a new snapshot."""
+        try:
+            from agent_smith.snapshot import create_snapshot_manager
+            manager = create_snapshot_manager()
+            snapshot_hash = await manager.track()
+            
+            if snapshot_hash:
+                self.ui.print_success(f"Snapshot created: {snapshot_hash[:8]}")
+            else:
+                self.ui.print_error("Failed to create snapshot")
+        except Exception as e:
+            self.ui.print_error(f"Error: {e}")
+
+    async def _revert_snapshot(self, snapshot_hash: str):
+        """Revert to a snapshot."""
+        if not snapshot_hash:
+            self.ui.print_error("Snapshot hash required. Use /snapshots to list available.")
+            return
+        
+        try:
+            from agent_smith.snapshot import create_snapshot_manager
+            manager = create_snapshot_manager()
+            
+            if snapshot_hash == "latest":
+                snapshots = await manager.list_snapshots()
+                if not snapshots:
+                    self.ui.print_error("No snapshots available")
+                    return
+                snapshot_hash = snapshots[0]["hash"]
+            
+            success = await manager.restore(snapshot_hash)
+            
+            if success:
+                self.ui.print_success(f"Reverted to snapshot: {snapshot_hash[:8]}")
+            else:
+                self.ui.print_error("Failed to revert snapshot")
+        except Exception as e:
+            self.ui.print_error(f"Error: {e}")
+
+    async def _list_snapshots(self):
+        """List available snapshots."""
+        try:
+            from agent_smith.snapshot import create_snapshot_manager
+            manager = create_snapshot_manager()
+            snapshots = await manager.list_snapshots()
+            
+            if not snapshots:
+                print(self.ui.color("yellow", "\nNo snapshots available."))
+                print("Use /snapshot to create one.")
+                return
+            
+            print(self.ui.color("cyan", "\nAvailable Snapshots:"))
+            print(self.ui.color("gray", "─" * 40))
+            for s in snapshots:
+                print(f"  • {self.ui.color('magenta', s['hash'][:8])} ({s['timestamp']})")
+        except Exception as e:
+            self.ui.print_error(f"Error: {e}")

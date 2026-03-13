@@ -429,3 +429,12 @@ def register_builtin_tools(registry: ToolRegistry, config: dict = None, file_tra
         register_skill_tools(registry, skills_manager)
     except ImportError:
         pass
+    
+    try:
+        from agent_smith.snapshot import create_snapshot_manager
+        from agent_smith.tools.builtin.snapshot import register_snapshot_tools
+        
+        snapshot_manager = create_snapshot_manager()
+        register_snapshot_tools(registry, snapshot_manager)
+    except ImportError:
+        pass
