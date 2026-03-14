@@ -116,6 +116,17 @@ class GlobTool(Tool):
             description="Find files matching a glob pattern (e.g., **/*.py)",
         )
         self.root_dir = Path(root_dir) if root_dir else Path.cwd()
+        self.parameters = {
+            "type": "object",
+            "properties": {
+                "pattern": {
+                    "type": "string",
+                    "description": "Glob pattern to match files (e.g., **/*.py, *.txt)",
+                },
+                "path": {"type": "string", "description": "Directory to search in (optional)"},
+            },
+            "required": ["pattern"],
+        }
 
     async def execute(self, pattern: str, path: str = None) -> ToolResult:
         """Find files matching pattern."""
@@ -140,6 +151,18 @@ class GrepTool(Tool):
             description="Search for patterns in file contents",
         )
         self.root_dir = Path(root_dir) if root_dir else Path.cwd()
+        self.parameters = {
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string", "description": "Regex pattern to search for"},
+                "path": {"type": "string", "description": "Directory to search in (optional)"},
+                "include": {
+                    "type": "string",
+                    "description": "Glob pattern to filter files (e.g., *.py)",
+                },
+            },
+            "required": ["pattern"],
+        }
 
     async def execute(self, pattern: str, path: str = None, include: str = None) -> ToolResult:
         """Search for pattern in files."""

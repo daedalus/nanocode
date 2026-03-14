@@ -7,11 +7,18 @@ import os
 
 import httpx
 
-from agent_smith.retry import RetryConfig, retry_with_backoff, create_error_from_response, RateLimitError, ProviderOverloadedError
+from agent_smith.retry import (
+    RetryConfig,
+    retry_with_backoff,
+    create_error_from_response,
+    RateLimitError,
+    ProviderOverloadedError,
+)
 
 
 class ToolCall:
     """Represents a tool call from the LLM."""
+
     def __init__(self, name: str, arguments: dict):
         self.name = name
         self.arguments = arguments
@@ -23,7 +30,10 @@ class ToolCall:
 
 class Message:
     """Represents a message in the conversation."""
-    def __init__(self, role: str, content: Any, tool_calls: list[ToolCall] = None, tool_call_id: str = None):
+
+    def __init__(
+        self, role: str, content: Any, tool_calls: list[ToolCall] = None, tool_call_id: str = None
+    ):
         self.role = role
         self.content = content
         self.tool_calls = tool_calls or []
@@ -48,7 +58,9 @@ class Message:
         if tool_calls_data := data.get("tool_calls"):
             for tc in tool_calls_data:
                 func = tc.get("function", {})
-                tool_calls.append(ToolCall(func.get("name", ""), json.loads(func.get("arguments", "{}"))))
+                tool_calls.append(
+                    ToolCall(func.get("name", ""), json.loads(func.get("arguments", "{}")))
+                )
         return cls(
             role=data.get("role", "user"),
             content=data.get("content", ""),
@@ -59,6 +71,7 @@ class Message:
 
 class LLMResponse:
     """Standardized LLM response."""
+
     def __init__(self, content: str, tool_calls: list[ToolCall] = None, finish_reason: str = None):
         self.content = content
         self.tool_calls = tool_calls or []
@@ -72,7 +85,14 @@ class LLMResponse:
 class LLMBase(ABC):
     """Abstract base class for LLM providers."""
 
-    def __init__(self, api_key: str = None, base_url: str = None, model: str = None, retry_config: RetryConfig = None, **kwargs):
+    def __init__(
+        self,
+        api_key: str = None,
+        base_url: str = None,
+        model: str = None,
+        retry_config: RetryConfig = None,
+        **kwargs,
+    ):
         self.api_key = api_key or os.getenv("API_KEY")
         self.base_url = base_url
         self.model = model
@@ -85,7 +105,9 @@ class LLMBase(ABC):
         pass
 
     @abstractmethod
-    async def chat_stream(self, messages: list, tools: list[dict] = None, **kwargs) -> AsyncIterator[str]:
+    async def chat_stream(
+        self, messages: list, tools: list[dict] = None, **kwargs
+    ) -> AsyncIterator[str]:
         """Stream chat completion responses."""
         pass
 
@@ -111,6 +133,7 @@ class LLMBase(ABC):
         **kwargs,
     ) -> httpx.Response:
         """Make an HTTP request with retry logic."""
+
         async def make_request():
             async with httpx.AsyncClient() as client:
                 response = await client.request(
@@ -121,7 +144,7 @@ class LLMBase(ABC):
                     timeout=120.0,
                     **kwargs,
                 )
-                
+
                 if response.status_code == 429:
                     retry_after = response.headers.get("retry-after")
                     error = RateLimitError(
@@ -129,13 +152,19 @@ class LLMBase(ABC):
                         retry_after=float(retry_after) if retry_after else None,
                     )
                     raise error
-                
-                if response.status_code == 503 or "overloaded" in response.text.lower():
-                    raise ProviderOverloadedError(f"Provider overloaded: {response.text[:200]}")
-                
+
+                if (
+                    response.status_code == 500
+                    or response.status_code == 503
+                    or "overloaded" in response.text.lower()
+                ):
+                    raise ProviderOverloadedError(
+                        f"Provider overloaded ({response.status_code}): {response.text[:200]}"
+                    )
+
                 response.raise_for_status()
                 return response
-        
+
         if self.retry_config.max_retries > 0:
             return await retry_with_backoff(make_request, self.retry_config)
         else:
@@ -165,7 +194,7 @@ class OpenAILLM(LLMBase):
     async def chat(self, messages: list, tools: list[dict] = None, **kwargs) -> LLMResponse:
         """Send a chat completion request."""
         messages = self._normalize_messages(messages)
-        
+
         headers = {"Authorization": f"Bearer {self.api_key}"}
         if self.base_url and "openai" not in self.base_url:
             headers["Content-Type"] = "application/json"
@@ -194,10 +223,11 @@ class OpenAILLM(LLMBase):
         if tc_data := msg_data.get("tool_calls"):
             for tc in tc_data:
                 func = tc.get("function", {})
-                tool_calls.append(ToolCall(
-                    name=func.get("name", ""),
-                    arguments=json.loads(func.get("arguments", "{}"))
-                ))
+                tool_calls.append(
+                    ToolCall(
+                        name=func.get("name", ""), arguments=json.loads(func.get("arguments", "{}"))
+                    )
+                )
 
         return LLMResponse(
             content=msg_data.get("content", ""),
@@ -205,7 +235,9 @@ class OpenAILLM(LLMBase):
             finish_reason=choice.get("finish_reason"),
         )
 
-    async def chat_stream(self, messages: list[Message], tools: list[dict] = None, **kwargs) -> AsyncIterator[str]:
+    async def chat_stream(
+        self, messages: list[Message], tools: list[dict] = None, **kwargs
+    ) -> AsyncIterator[str]:
         """Stream chat completion responses."""
         headers = {"Authorization": f"Bearer {self.api_key}"}
         if self.base_url and "openai" not in self.base_url:
@@ -253,7 +285,7 @@ class AnthropicLLM(LLMBase):
     async def chat(self, messages: list, tools: list[dict] = None, **kwargs) -> LLMResponse:
         """Send a chat completion request."""
         messages = self._normalize_messages(messages)
-        
+
         headers = {
             "x-api-key": self.api_key,
             "anthropic-version": "2023-06-01",
@@ -292,20 +324,16 @@ class AnthropicLLM(LLMBase):
         tool_calls = []
         if tc_data := data.get("tool_calls", []):
             for tc in tc_data:
-                tool_calls.append(ToolCall(
-                    name=tc.get("name", ""),
-                    arguments=tc.get("input", {})
-                ))
+                tool_calls.append(ToolCall(name=tc.get("name", ""), arguments=tc.get("input", {})))
 
         content_parts = []
         for block in data.get("content", []):
             if block.get("type") == "text":
                 content_parts.append(block.get("text", ""))
             elif block.get("type") == "tool_use":
-                tool_calls.append(ToolCall(
-                    name=block.get("name", ""),
-                    arguments=block.get("input", {})
-                ))
+                tool_calls.append(
+                    ToolCall(name=block.get("name", ""), arguments=block.get("input", {}))
+                )
 
         return LLMResponse(
             content="\n".join(content_parts),
@@ -313,7 +341,9 @@ class AnthropicLLM(LLMBase):
             finish_reason=data.get("stop_reason"),
         )
 
-    async def chat_stream(self, messages: list[Message], tools: list[dict] = None, **kwargs) -> AsyncIterator[str]:
+    async def chat_stream(
+        self, messages: list[Message], tools: list[dict] = None, **kwargs
+    ) -> AsyncIterator[str]:
         """Stream is not fully supported for Claude with tools."""
         response = await self.chat(messages, tools, **kwargs)
         yield response.content
@@ -333,7 +363,7 @@ class OllamaLLM(LLMBase):
     async def chat(self, messages: list, tools: list[dict] = None, **kwargs) -> LLMResponse:
         """Send a chat completion request."""
         messages = self._normalize_messages(messages)
-        
+
         payload = {
             "model": self.model,
             "messages": [m.to_dict() for m in messages],
@@ -355,10 +385,12 @@ class OllamaLLM(LLMBase):
         tool_calls = []
         if tc_data := data.get("tool_calls"):
             for tc in tc_data:
-                tool_calls.append(ToolCall(
-                    name=tc.get("function", {}).get("name", ""),
-                    arguments=json.loads(tc.get("function", {}).get("arguments", "{}"))
-                ))
+                tool_calls.append(
+                    ToolCall(
+                        name=tc.get("function", {}).get("name", ""),
+                        arguments=json.loads(tc.get("function", {}).get("arguments", "{}")),
+                    )
+                )
 
         return LLMResponse(
             content=data.get("message", {}).get("content", ""),
@@ -366,7 +398,9 @@ class OllamaLLM(LLMBase):
             finish_reason=data.get("done"),
         )
 
-    async def chat_stream(self, messages: list[Message], tools: list[dict] = None, **kwargs) -> AsyncIterator[str]:
+    async def chat_stream(
+        self, messages: list[Message], tools: list[dict] = None, **kwargs
+    ) -> AsyncIterator[str]:
         """Stream chat completion responses."""
         payload = {
             "model": self.model,
@@ -404,10 +438,10 @@ def create_llm(provider: str, **config) -> LLMBase:
         "ollama": OllamaLLM,
         "lm-studio": OpenAILLM,
     }
-    
+
     if provider not in providers:
         raise ValueError(f"Unknown provider: {provider}. Available: {list(providers.keys())}")
-    
+
     return providers[provider](**config)
 
 
@@ -417,27 +451,27 @@ async def create_llm_from_model_id(
     explicit_providers: dict[str, dict] = None,
 ) -> tuple[LLMBase, "ProviderConfig"]:
     """Create an LLM from a model ID using the provider router.
-    
+
     Supports "provider/model" format (e.g., "openai/gpt-4o", "anthropic/claude-sonnet-4-5").
-    
+
     Args:
         model_id: Model identifier in "provider/model" format or just model name
         default_provider: Fallback provider if not inferrable
         explicit_providers: Optional explicit provider configs
-        
+
     Returns:
         Tuple of (LLM instance, ProviderConfig)
     """
     from agent.llm.router import ProviderRouter, get_router, ProviderConfig
-    
+
     router = get_router()
-    
+
     if explicit_providers:
         for provider, config in explicit_providers.items():
             router.add_explicit_provider(provider, config)
-    
+
     provider_config = router.get_provider_config(model_id, default_provider)
-    
+
     if provider_config.provider == "anthropic":
         llm = AnthropicLLM(
             api_key=provider_config.api_key,
@@ -460,5 +494,5 @@ async def create_llm_from_model_id(
             api_key=provider_config.api_key or "dummy",
             model=provider_config.model,
         )
-    
+
     return llm, provider_config
