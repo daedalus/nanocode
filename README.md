@@ -2,6 +2,8 @@
 
 A fully autonomous AI agent for console with advanced tool use, multi-provider LLM support, planning capabilities, and efficient context management.
 
+Experimental. It might be buggy.
+
 ## Features
 
 ### Multi-Provider LLM Support
@@ -22,6 +24,7 @@ A fully autonomous AI agent for console with advanced tool use, multi-provider L
 - Built-in tools: `bash`, `read`, `write`, `edit`, `glob`, `grep`, `ls`, `webfetch`, `websearch`, `todo`
 - Tool result validation and error handling
 - Parallel tool execution support
+- MCP tool integration
 
 ### Multi-Agent System
 - Build, Plan, General, and Explore agents with different permission levels
@@ -54,13 +57,34 @@ A fully autonomous AI agent for console with advanced tool use, multi-provider L
 ### Retry Logic
 - Exponential backoff for API calls
 - Respects `retry-after` headers
+- Handles HTTP 500, 503, and rate limit errors
 - Context overflow errors are NOT retried
 - Configurable via RetryConfig
 
 ### MCP (Model Context Protocol)
 - Full MCP protocol client
+- Two connection types: **stdio** and **SSE** (HTTP)
 - Built-in servers: Filesystem, Git
 - Connect to any MCP server
+
+```yaml
+mcp:
+  servers:
+    # Stdio-based server (local)
+    filesystem:
+      type: stdio
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
+      env:
+        NODE_ENV: production
+    
+    # SSE-based server (remote)
+    remote:
+      type: sse
+      url: http://localhost:8080/mcp
+      headers:
+        Authorization: Bearer token
+```
 
 ### LSP (Language Server Protocol)
 - Out-of-the-box LSP support for code intelligence
