@@ -19,6 +19,8 @@ try:
 except ImportError:
     READLINE_AVAILABLE = False
 
+HISTORY_FILE = os.path.expanduser("~/.config/agent_smith/history")
+
 
 class PromptHandler:
     """Simple prompt handler to mimic @clack/prompts functionality."""
@@ -141,6 +143,29 @@ class ConsoleUI:
             readline.parse_and_bind("tab: complete")
             if hasattr(readline, "set_history_length"):
                 readline.set_history_length(100)
+            self._load_history()
+        except Exception:
+            pass
+
+    def _load_history(self):
+        """Load history from file."""
+        if not READLINE_AVAILABLE:
+            return
+        try:
+            history_path = os.environ.get("AGENT_SMITH_HISTORY", HISTORY_FILE)
+            if os.path.exists(history_path):
+                readline.read_history_file(history_path)
+        except Exception:
+            pass
+
+    def save_history(self):
+        """Save history to file."""
+        if not READLINE_AVAILABLE:
+            return
+        try:
+            history_path = os.environ.get("AGENT_SMITH_HISTORY", HISTORY_FILE)
+            os.makedirs(os.path.dirname(history_path), exist_ok=True)
+            readline.write_history_file(history_path)
         except Exception:
             pass
 
@@ -352,6 +377,7 @@ class InteractiveCLI:
                 if user_input.startswith("/"):
                     command = user_input.lower()
                     if command in ("/exit", "/quit", "/q"):
+                        self.ui.save_history()
                         print(self.ui.color("green", "Goodbye!"))
                         break
 
@@ -422,6 +448,7 @@ class InteractiveCLI:
                     await self._process_input(user_input)
 
             except KeyboardInterrupt:
+                self.ui.save_history()
                 print("\n" + self.ui.color("yellow", "Use 'exit' to quit"))
             except Exception as e:
                 self.last_error_trace = traceback.format_exc()

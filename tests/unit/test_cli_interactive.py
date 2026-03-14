@@ -386,6 +386,94 @@ class TestPromptHistoryNavigation:
         ui = ConsoleUI()
         ui.clear_history()
 
+    def test_save_history_method_exists(self):
+        """Test save_history method exists and is callable."""
+        ui = ConsoleUI()
+        ui.save_history()
+
+    def test_load_history_from_file(self):
+        """Test that history is loaded from file on initialization."""
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix="_history") as f:
+            f.write("command1\ncommand2\n")
+            temp_file = f.name
+
+        try:
+            with patch.dict(os.environ, {"AGENT_SMITH_HISTORY": temp_file}):
+                ui = ConsoleUI()
+                ui._load_history()
+        finally:
+            os.unlink(temp_file)
+
+    def test_save_history_to_file(self):
+        """Test that history is saved to file."""
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix="_history") as f:
+            temp_file = f.name
+
+        try:
+            with patch.dict(os.environ, {"AGENT_SMITH_HISTORY": temp_file}):
+                ui = ConsoleUI()
+                ui.add_to_history("test command")
+                ui.save_history()
+
+                with open(temp_file) as f:
+                    content = f.read()
+                    assert "test command" in content
+        finally:
+            if os.path.exists(temp_file):
+                os.unlink(temp_file)
+
+    def test_history_persistence_across_sessions(self):
+        """Test that history persists across CLI sessions."""
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix="_history") as f:
+            temp_file = f.name
+
+        try:
+            with patch.dict(os.environ, {"AGENT_SMITH_HISTORY": temp_file}):
+                ui1 = ConsoleUI()
+                ui1.add_to_history("command from session 1")
+                ui1.save_history()
+
+                ui2 = ConsoleUI()
+                ui2._load_history()
+                ui2.add_to_history("command from session 2")
+                ui2.save_history()
+
+                with open(temp_file) as f:
+                    content = f.read()
+                    assert "command from session 1" in content
+                    assert "command from session 2" in content
+        finally:
+            if os.path.exists(temp_file):
+                os.unlink(temp_file)
+
+    def test_history_file_creation(self):
+        """Test that history file is created if it doesn't exist."""
+        import tempfile
+        import os
+
+        temp_dir = tempfile.mkdtemp()
+        history_file = os.path.join(temp_dir, "new_history")
+
+        try:
+            with patch.dict(os.environ, {"AGENT_SMITH_HISTORY": history_file}):
+                ui = ConsoleUI()
+                ui.save_history()
+
+                assert os.path.exists(history_file)
+        finally:
+            if os.path.exists(history_file):
+                os.unlink(history_file)
+            os.rmdir(temp_dir)
+
     def test_print_prompt_returns_input(self):
         """Test that print_prompt returns user input."""
         ui = ConsoleUI(use_colors=False)
