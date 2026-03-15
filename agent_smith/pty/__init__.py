@@ -10,6 +10,7 @@ import struct
 import uuid
 import asyncio
 import threading
+import warnings
 from typing import Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -82,7 +83,9 @@ class PtyManager:
         master_fd, slave_fd = pty.openpty()
 
         # Fork process
-        pid = os.fork()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            pid = os.fork()
 
         if pid == 0:
             # Child process

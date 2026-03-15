@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
+from agent_smith.cli.commands import get_command_help, find_command
+
 try:
     import readline
 
@@ -291,26 +293,11 @@ class ConsoleUI:
 
     def print_help(self):
         """Print help message."""
-        help_text = """
+        help_text = f"""
 ╔═════════════════════════════════════════════════════════════╗
 ║                      Commands                              ║
 ╠══════════════════════════════════════════════════════════════╣
-║  /help         - Show this help message                   ║
-║  /exit/quit    - Exit the agent                           ║
-║  /clear        - Clear the terminal                        ║
-║  /history      - Show command history                     ║
-║  /plan <task>  - Create and execute a plan                 ║
-║  /provider     - Select AI provider and model              ║
-║  /checkpoint   - List saved checkpoints                    ║
-║  /resume <id>  - Resume from a checkpoint                  ║
-║  /tools        - List available tools                      ║
-║  /skills       - List available skills                     ║
-║  /snapshot     - Create a new snapshot                     ║
-║  /snapshots    - List available snapshots                  ║
-║  /revert <hash> - Revert to a snapshot (hash or 'latest')║
-║  /trace        - Show last error trace                     ║
-║  /debug        - Toggle HTTP debug logging                 ║
-║  /compact      - Compact context (summarize old messages)  ║
+{get_command_help()}
 ╚══════════════════════════════════════════════════════════════╝
 
 NOTE: All commands MUST be prefixed with '/'. 
@@ -447,8 +434,19 @@ class InteractiveCLI:
                         await self._compact_context()
                         continue
 
-                    # If it starts with "/" but doesn't match any known command, treat as regular input
-                    await self._process_input(user_input)
+                    if command == "/show_thinking":
+                        self.show_thinking = not self.show_thinking
+                        self.ui.print_info(
+                            f"Show thinking: {'enabled' if self.show_thinking else 'disabled'}"
+                        )
+                        continue
+
+                    # If it starts with "/" but doesn't match any known command, show error
+                    cmd = find_command(user_input)
+                    if cmd is None:
+                        self.ui.print_error(
+                            f"Unknown command: {user_input}. Type /help for available commands."
+                        )
                 else:
                     # Treat ALL non-slash-prefixed input as regular agent input
                     # Do NOT convert "help" to "/help" or treat any plain text as commands

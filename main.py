@@ -58,9 +58,9 @@ def parse_args():
     parser.add_argument(
         "--gui",
         "-g",
-        choices=["ncurses", "cli"],
+        choices=["ncurses", "cli", "text"],
         default="cli",
-        help="UI mode (default: cli)",
+        help="UI mode: cli (default), ncurses, text (modern terminal UI)",
     )
     parser.add_argument(
         "--acp",
@@ -165,6 +165,13 @@ def run_ncurses(agent):
         return False
 
 
+def run_text(agent):
+    """Run the text-based terminal interface."""
+    from agent_smith.cli.textgui import run_text as run_text_gui
+
+    run_text_gui(agent)
+
+
 async def main():
     """Main entry point."""
     args = parse_args()
@@ -244,6 +251,8 @@ async def main():
         if not success:
             print("Using CLI mode instead...")
             await run_cli(agent, show_thinking=show_thinking)
+    elif args.gui == "text":
+        run_text(agent)
     else:
         await run_cli(agent, show_thinking=show_thinking)
 

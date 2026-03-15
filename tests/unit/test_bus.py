@@ -274,7 +274,14 @@ def test_async_publish():
         results.append(event)
 
     bus.subscribe("async.event", async_handler)
-    bus.publish(Event(type="async.event"))
+
+    # The publish method doesn't await async handlers, so we expect no results
+    # We use publish_sync for async handlers or ignore the warning
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        bus.publish(Event(type="async.event"))
 
     # Callbacks are not awaited in publish, use publish_sync for that
     assert len(results) == 0

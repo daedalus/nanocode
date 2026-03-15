@@ -6,6 +6,8 @@ from typing import Optional, Callable
 from dataclasses import dataclass
 from datetime import datetime
 
+from agent_smith.cli.commands import get_command_help, find_command
+
 
 @dataclass
 class GUIColors:
@@ -254,19 +256,15 @@ class InputPanel(Panel):
 
         self.win.clear()
 
-        self.draw_border(10)
-
         prompt = "➜ "
-        self.win.addstr(1, 1, prompt, curses.color_pair(3) | curses.A_BOLD)
+        self.win.addstr(0, 0, prompt, curses.color_pair(3) | curses.A_BOLD)
 
-        display_text = self.input_text[: self.width - len(prompt) - 3]
-        self.win.addstr(1, 1 + len(prompt), display_text, curses.color_pair(0))
+        display_text = self.input_text[: self.width - len(prompt) - 2]
+        self.win.addstr(0, len(prompt), display_text, curses.color_pair(0))
 
-        cursor_y = 1
-        cursor_x = 1 + len(prompt) + min(self.cursor_pos, len(display_text))
-        self.win.move(cursor_y, cursor_x)
-
-        self.refresh()
+        cursor_x = len(prompt) + min(self.cursor_pos, len(display_text))
+        self.win.move(0, cursor_x)
+        self.win.refresh()
 
     def handle_input(self, key: int) -> Optional[str]:
         """Handle keyboard input."""
@@ -385,6 +383,7 @@ class NcursesGUI:
         self.panels = {}
         self.active_panel = "chat"
         self.running = False
+        self.show_thinking = False
 
     def init_panels(self, stdscr):
         """Initialize all panels."""
@@ -408,8 +407,8 @@ class NcursesGUI:
         chat.create()
         self.panels["chat"] = chat
 
-        input_height = 3
-        input_panel = InputPanel(stdscr, height - 1 - input_height, 0, input_height, width - 1)
+        input_height = 1
+        input_panel = InputPanel(stdscr, height - 2, 0, input_height, width - 1)
         input_panel.create()
         self.panels["input"] = input_panel
 
@@ -536,15 +535,16 @@ class NcursesGUI:
                     result = self.panels["input"].handle_input(key)
 
                 if result and self.active_panel == "input" and result.strip():
-                    self.add_chat_message("user", result)
                     self.panels["input"].add_to_history(result)
 
                     if result.startswith("/"):
                         response = self._handle_command(result)
                         if response:
                             self.add_chat_message("system", response)
-                    elif self.on_message:
-                        asyncio.ensure_future(self._handle_message(result))
+                    else:
+                        self.add_chat_message("user", result)
+                        if self.on_message:
+                            asyncio.ensure_future(self._handle_message(result))
 
                     self.panels["input"].input_text = ""
                     self.panels["input"].cursor_pos = 0
@@ -567,22 +567,12 @@ class NcursesGUI:
         parts = command.split()
         cmd = parts[0].lower()
 
+        if cmd in ("/exit", "/quit", "/q"):
+            self.running = False
+            return "Goodbye!"
+
         if cmd in ("/help", "/h"):
-            return (
-                "Available commands:\n"
-                "  /help, /h     - Show this help\n"
-                "  /clear, /c   - Clear chat\n"
-                "  /history     - Show command history\n"
-                "  /tools       - List available tools\n"
-                "  /provider    - Show current provider\n"
-                "  /checkpoint  - List checkpoints\n"
-                "  /skills      - List skills\n"
-                "  /snapshot    - Create snapshot\n"
-                "  /snapshots   - List snapshots\n"
-                "  /trace       - Show last error trace\n"
-                "  /debug       - Toggle debug logging\n"
-                "  /compact     - Compact context"
-            )
+            return get_command_help()
 
         elif cmd in ("/clear", "/c"):
             self.panels["chat"].messages = []
@@ -649,6 +639,10 @@ class NcursesGUI:
                 return "Debug logging toggled."
             return "Debug not available."
 
+        elif cmd == "/show_thinking":
+            self.show_thinking = not self.show_thinking
+            return f"Show thinking: {'enabled' if self.show_thinking else 'disabled'}"
+
         elif cmd == "/compact":
             if hasattr(self.agent, "context_manager") and hasattr(
                 self.agent.context_manager, "compact"
@@ -656,6 +650,23 @@ class NcursesGUI:
                 return "Compacting context..."
             return "Compact not available."
 
+        elif cmd.startswith("/plan "):
+            task = command[6:]
+            asyncio.ensure_future(self._execute_task(task))
+            return f"Planning: {task[:50]}..."
+
+        elif cmd.startswith("/resume "):
+            checkpoint_id = command[8:]
+            asyncio.ensure_future(self._resume_checkpoint(checkpoint_id))
+            return f"Resuming checkpoint: {checkpoint_id}"
+
+        elif cmd.startswith("/revert "):
+            snapshot_hash = command[8:].strip()
+            asyncio.ensure_future(self._revert_snapshot(snapshot_hash))
+            return f"Reverting to snapshot: {snapshot_hash[:8]}..."
+
+        if find_command(command) is None:
+            return f"Unknown command: {cmd}. Type /help for available commands."
         return f"Unknown command: {cmd}"
 
     async def _handle_message(self, message: str):
@@ -663,14 +674,69 @@ class NcursesGUI:
         try:
             self.panels["title"].state = "EXECUTING"
 
-            response = await self.agent.process_input(message)
+            response = await self.agent.process_input(message, show_thinking=self.show_thinking)
 
             self.add_chat_message("assistant", response)
             self.panels["title"].state = "COMPLETE"
 
+            await self._check_and_compact_context()
+
         except Exception as e:
             self.add_chat_message("system", f"Error: {str(e)}")
             self.panels["title"].state = "ERROR"
+
+    async def _check_and_compact_context(self):
+        """Check and compact context if needed."""
+        if hasattr(self.agent, "context_manager"):
+            ctx = self.agent.context_manager
+            usage = ctx.get_token_usage()
+            pct = usage.get("context_usage_percent", 0)
+            threshold = (
+                ctx.config.get("auto_compact_threshold", 85) if hasattr(ctx, "config") else 85
+            )
+            if pct >= threshold and hasattr(ctx, "compact"):
+                self.add_chat_message("system", f"Auto-compacting context ({pct:.1f}% usage)...")
+                await ctx.compact()
+
+    async def _execute_task(self, task: str):
+        """Execute a task with planning."""
+        self.add_chat_message("system", f"Planning: {task[:50]}...")
+        try:
+            result = await self.agent.execute_task(task)
+            if result.get("success"):
+                self.add_chat_message(
+                    "assistant", f"Task completed: {result.get('summary', 'Done')}"
+                )
+            else:
+                self.add_chat_message(
+                    "system", f"Task failed: {result.get('error', 'Unknown error')}"
+                )
+        except Exception as e:
+            self.add_chat_message("system", f"Error: {str(e)}")
+
+    async def _resume_checkpoint(self, checkpoint_id: str):
+        """Resume from a checkpoint."""
+        self.add_chat_message("system", f"Resuming checkpoint: {checkpoint_id}")
+        try:
+            result = await self.agent.resume_from_checkpoint(checkpoint_id)
+            if result.get("success"):
+                self.add_chat_message("system", "Checkpoint resumed successfully")
+            else:
+                self.add_chat_message("system", f"Failed: {result.get('error', 'Unknown error')}")
+        except Exception as e:
+            self.add_chat_message("system", f"Error: {str(e)}")
+
+    async def _revert_snapshot(self, snapshot_hash: str):
+        """Revert to a snapshot."""
+        self.add_chat_message("system", f"Reverting to snapshot: {snapshot_hash[:8]}...")
+        try:
+            if hasattr(self.agent, "snapshot"):
+                result = await self.agent.snapshot.revert(snapshot_hash)
+                self.add_chat_message("system", f"Reverted to {snapshot_hash[:8]}")
+            else:
+                self.add_chat_message("system", "Snapshot not available")
+        except Exception as e:
+            self.add_chat_message("system", f"Error: {str(e)}")
 
     def start(self):
         """Start the GUI."""
