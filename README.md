@@ -266,6 +266,28 @@ result = await tool_executor.execute("lsp", {
 python3 main.py
 ```
 
+Special Commands (prefix with '/'):
+- `/help` - Show help
+- `/exit`, `/quit`, `/q` - Exit the agent
+- `/clear`, `/c` - Clear terminal
+- `/history` - Show command history
+- `/tools` - List available tools
+- `/skills` - List available skills
+- `/provider` - Select AI provider and model
+- `/plan <task>` - Execute task with planning
+- `/checkpoint` - List saved checkpoints
+- `/resume <id>` - Resume from checkpoint
+- `/snapshot` - Create a new snapshot
+- `/snapshots` - List available snapshots
+- `/revert <hash>` - Revert to a snapshot
+- `/trace` - Show last error trace
+- `/debug` - Toggle HTTP debug logging
+- `/compact` - Compact context (summarize old messages)
+- `/show_thinking` - Toggle thinking display
+
+Regular Input:
+- Any text NOT starting with '/' is sent directly to the AI agent for processing
+
 ### HTTP Server Mode
 
 ```bash
@@ -328,39 +350,6 @@ Works with Zed's agent configuration:
   }
 }
 ```
-
-### NCurses GUI
-
-```bash
-python3 main.py --gui ncurses
-```
-
-Features:
-- Full-screen terminal interface
-- Sidebar with tools
-- Chat panel with scrollback
-- Real-time token usage
-- Keyboard navigation (Tab to switch panels)
-
-Controls:
-- `Tab` - Switch between panels
-- `↑/↓` - Navigate sidebar/chat
-- `Enter` - Send message
-- `Ctrl+C` - Quit
-- `Ctrl+L` - Clear screen
-
-Special Commands (require '/' prefix):
-- `/help` - Show help
-- `/exit/quit` - Exit the agent
-- `/clear` - Clear terminal
-- `/history` - Show command history
-- `/tools` - List available tools
-- `/plan <task>` - Execute task with planning
-- `/checkpoint` - List saved checkpoints
-- `/resume <id>` - Resume from checkpoint
-
-Regular Input:
-- Any text NOT starting with '/' is sent directly to the AI agent for processing
 
 ### Programmatic Usage
 
