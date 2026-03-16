@@ -23,6 +23,7 @@ from agent_smith.storage import get_storage
 @dataclass
 class UsageStats:
     """Usage statistics."""
+
     total_sessions: int = 0
     total_messages: int = 0
     total_tokens_in: int = 0
@@ -42,12 +43,13 @@ class AdminConsole:
         self.app = web.Application()
         self._web_module = None
         self._setup_routes()
-    
+
     @property
     def _web(self):
         """Lazy load web module."""
         if self._web_module is None:
             from agent_smith.admin import web_templates
+
             self._web_module = web_templates
         return self._web_module
 
@@ -81,7 +83,7 @@ class AdminConsole:
         try:
             storage = await get_storage()
             stats = await self._get_usage_stats()
-            
+
             recent_sessions = []
             if storage:
                 try:
@@ -114,7 +116,7 @@ class AdminConsole:
                     messages = await storage.get_messages(session_id)
                 except Exception:
                     pass
-        
+
         html = self._web.get_chat_html(session_id, messages)
         return web.Response(text=html, content_type="text/html")
 
@@ -132,7 +134,7 @@ class AdminConsole:
                 try:
                     all_sessions = await storage.list_sessions(limit=1000)
                     total = len(all_sessions)
-                    sessions = all_sessions[offset:offset + limit]
+                    sessions = all_sessions[offset : offset + limit]
                 except Exception:
                     pass
 
@@ -144,11 +146,11 @@ class AdminConsole:
     async def handle_session_detail(self, request):
         """Session detail view."""
         session_id = request.match_info["session_id"]
-        
+
         try:
             storage = await get_storage()
             session = None
-            
+
             if storage:
                 try:
                     session = await storage.get_session(session_id)
@@ -166,7 +168,7 @@ class AdminConsole:
     async def handle_delete_session(self, request):
         """Delete a session."""
         session_id = request.match_info["session_id"]
-        
+
         try:
             storage = await get_storage()
             if storage:
@@ -178,14 +180,14 @@ class AdminConsole:
     async def handle_files(self, request):
         """Files browser."""
         path = request.query.get("path", "")
-        
+
         try:
             root = Path.cwd()
             if path:
                 search_path = root / path
             else:
                 search_path = root
-            
+
             files = []
             if search_path.exists() and search_path.is_dir():
                 for item in sorted(search_path.iterdir()):
@@ -193,16 +195,22 @@ class AdminConsole:
                         continue
                     if item.name in ["node_modules", "__pycache__", ".git", "venv", ".venv"]:
                         continue
-                    
+
                     stat = item.stat()
-                    files.append({
-                        "name": item.name,
-                        "path": str(item.relative_to(root)),
-                        "is_dir": item.is_dir(),
-                        "size": f"{stat.st_size:,}" if stat.st_size < 1024*1024 else f"{stat.st_size//1024//1024}MB",
-                        "modified": stat.st_mtime,
-                    })
-            
+                    files.append(
+                        {
+                            "name": item.name,
+                            "path": str(item.relative_to(root)),
+                            "is_dir": item.is_dir(),
+                            "size": (
+                                f"{stat.st_size:,}"
+                                if stat.st_size < 1024 * 1024
+                                else f"{stat.st_size//1024//1024}MB"
+                            ),
+                            "modified": stat.st_mtime,
+                        }
+                    )
+
             html = self._web.get_files_html(files, path)
             return web.Response(text=html, content_type="text/html")
         except Exception as e:
@@ -211,7 +219,7 @@ class AdminConsole:
     async def handle_usage(self, request):
         """Usage analytics."""
         stats = await self._get_usage_stats()
-        
+
         html = self._web.get_usage_html(stats.__dict__)
         return web.Response(text=html, content_type="text/html")
 
@@ -226,10 +234,10 @@ class AdminConsole:
             data = await request.post()
             new_config = json.loads(data.get("config", "{}"))
             self.config._config = new_config
-            
+
             with open(self.config._config_path, "w") as f:
                 json.dump(new_config, f, indent=2)
-            
+
             return web.HTTPFound("/config")
         except Exception as e:
             return web.Response(text=f"Error: {str(e)}", status=500)
@@ -237,7 +245,7 @@ class AdminConsole:
     async def handle_keys(self, request):
         """API key management."""
         keys = self._get_api_keys()
-        
+
         html = self._web.get_keys_html(keys)
         return web.Response(text=html, content_type="text/html")
 
@@ -247,10 +255,10 @@ class AdminConsole:
             data = await request.post()
             name = data.get("name", "default")
             key = data.get("key", "")
-            
+
             if key:
                 self.config.set(f"llm.providers.{name}.api_key", key)
-            
+
             return web.HTTPFound("/keys")
         except Exception as e:
             return web.Response(text=f"Error: {str(e)}", status=500)
@@ -260,10 +268,10 @@ class AdminConsole:
         try:
             data = await request.post()
             name = data.get("name", "")
-            
+
             if name:
                 self.config.set(f"llm.providers.{name}.api_key", "")
-            
+
             return web.HTTPFound("/keys")
         except Exception as e:
             return web.Response(text=f"Error: {str(e)}", status=500)
@@ -278,21 +286,26 @@ class AdminConsole:
         tools = []
         try:
             from agent_smith.tools import ToolRegistry
+
             registry = ToolRegistry()
             for tool in registry.list_tools():
-                tools.append({
-                    "name": tool.name,
-                    "description": tool.description,
-                })
+                tools.append(
+                    {
+                        "name": tool.name,
+                        "description": tool.description,
+                    }
+                )
         except Exception:
             pass
-        
+
         html = self._web.get_tools_html(tools)
         return web.Response(text=html, content_type="text/html")
 
     async def handle_skills(self, request):
         """Skills page."""
-        html = self._web.get_tools_html([{"name": "skills", "description": "Custom skills loaded from .agent/skills"}])
+        html = self._web.get_tools_html(
+            [{"name": "skills", "description": "Custom skills loaded from .agent/skills"}]
+        )
         return web.Response(text=html, content_type="text/html")
 
     async def handle_api_chat(self, request):
@@ -300,45 +313,47 @@ class AdminConsole:
         try:
             data = await request.json()
             message = data.get("message", "")
-            
-            return web.json_response({
-                "message": "Chat API not fully implemented yet",
-                "echo": message,
-            })
+
+            return web.json_response(
+                {
+                    "message": "Chat API not fully implemented yet",
+                    "echo": message,
+                }
+            )
         except Exception as e:
             return web.json_response({"error": str(e)}, status=500)
 
     async def _get_usage_stats(self) -> UsageStats:
         """Get usage statistics."""
         stats = UsageStats()
-        
+
         try:
             storage = await get_storage()
             if storage:
                 sessions = await storage.list_sessions(limit=10000)
                 stats.total_sessions = len(sessions)
-                
+
                 for session in sessions:
                     stats.total_messages += session.get("message_count", 0)
-                    
+
                     messages = await storage.get_messages(session.get("id", ""))
                     for msg in messages:
                         if isinstance(msg, dict):
                             tokens_in = msg.get("tokens_in", 0)
                             tokens_out = msg.get("tokens_out", 0)
                             cost = msg.get("cost", 0.0)
-                            
+
                             stats.total_tokens_in += tokens_in
                             stats.total_tokens_out += tokens_out
                             stats.total_cost += cost
-                            
+
                             model = msg.get("model", "unknown")
                             if model not in stats.tokens_by_model:
                                 stats.tokens_by_model[model] = {"in": 0, "out": 0, "cost": 0.0}
                             stats.tokens_by_model[model]["in"] += tokens_in
                             stats.tokens_by_model[model]["out"] += tokens_out
                             stats.tokens_by_model[model]["cost"] += cost
-                            
+
                             created_at = msg.get("created_at", "")
                             if created_at:
                                 date = created_at[:10]
@@ -348,24 +363,26 @@ class AdminConsole:
                                 stats.sessions_by_date[date]["tokens"] += tokens_in + tokens_out
         except Exception:
             pass
-        
+
         return stats
 
     def _get_api_keys(self) -> list[dict]:
         """Get stored API keys (masked)."""
         keys = []
         providers = self.config.providers
-        
+
         for name, provider_config in providers.items():
             if isinstance(provider_config, dict):
                 api_key = provider_config.get("api_key", "")
                 if api_key and not api_key.startswith("${"):
-                    keys.append({
-                        "name": name,
-                        "key": api_key[:8] + "..." if len(api_key) > 8 else "***",
-                        "full_key": api_key,
-                    })
-        
+                    keys.append(
+                        {
+                            "name": name,
+                            "key": api_key[:8] + "..." if len(api_key) > 8 else "***",
+                            "full_key": api_key,
+                        }
+                    )
+
         return keys
 
     async def start(self):
@@ -400,7 +417,7 @@ async def start_admin_console(config: Config = None, host: str = None, port: int
     config = config or get_config()
     host = host or config.get("admin.host", "127.0.0.1")
     port = port or config.get("admin.port", 7890)
-    
+
     console = AdminConsole(config, host, port)
     runner = await console.start()
     return runner

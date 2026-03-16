@@ -69,10 +69,10 @@ class TestAdminConsole:
     def test_admin_console_routes(self, mock_config):
         """Test that routes are registered."""
         console = AdminConsole(mock_config)
-        
+
         routes = list(console.app.router.routes())
         paths = [str(r.resource) for r in routes]
-        
+
         assert any("/" in p for p in paths)
         assert any("/dashboard" in p for p in paths)
         assert any("/sessions" in p for p in paths)
@@ -85,12 +85,13 @@ class TestAdminConsole:
     async def test_health_endpoint(self, mock_config):
         """Test health check endpoint."""
         console = AdminConsole(mock_config)
-        
+
         request = Mock()
         response = await console.handle_health(request)
-        
+
         assert response.status == 200
         import json
+
         data = json.loads(response.text)
         assert data["status"] == "ok"
         assert data["service"] == "admin"
@@ -99,10 +100,10 @@ class TestAdminConsole:
     async def test_dashboard_endpoint(self, mock_config):
         """Test dashboard endpoint."""
         console = AdminConsole(mock_config)
-        
+
         request = Mock()
         response = await console.handle_dashboard(request)
-        
+
         assert response.status == 200
         assert b"Agent Smith" in response.body
 
@@ -110,23 +111,23 @@ class TestAdminConsole:
     async def test_sessions_endpoint(self, mock_config):
         """Test sessions endpoint."""
         console = AdminConsole(mock_config)
-        
+
         request = Mock()
         request.query = {}
-        
+
         response = await console.handle_sessions(request)
-        
+
         assert response.status == 200
 
     @pytest.mark.asyncio
     async def test_usage_endpoint(self, mock_config):
         """Test usage endpoint."""
         console = AdminConsole(mock_config)
-        
+
         request = Mock()
-        
+
         response = await console.handle_usage(request)
-        
+
         assert response.status == 200
         assert b"Usage" in response.body
 
@@ -134,11 +135,11 @@ class TestAdminConsole:
     async def test_config_endpoint(self, mock_config):
         """Test config endpoint."""
         console = AdminConsole(mock_config)
-        
+
         request = Mock()
-        
+
         response = await console.handle_config(request)
-        
+
         assert response.status == 200
         assert b"Configuration" in response.body
 
@@ -146,20 +147,20 @@ class TestAdminConsole:
     async def test_keys_endpoint(self, mock_config):
         """Test keys endpoint."""
         console = AdminConsole(mock_config)
-        
+
         request = Mock()
-        
+
         response = await console.handle_keys(request)
-        
+
         assert response.status == 200
         assert b"API Keys" in response.body
 
     def test_get_api_keys(self, mock_config):
         """Test getting API keys."""
         console = AdminConsole(mock_config)
-        
+
         keys = console._get_api_keys()
-        
+
         assert len(keys) == 1
         assert keys[0]["name"] == "openai"
         assert keys[0]["key"].startswith("sk-")  # Masked
@@ -178,37 +179,41 @@ class TestAdminConsole:
         config.providers = {
             "openai": {"api_key": "${OPENAI_API_KEY}"},
         }
-        
+
         console = AdminConsole(config)
         keys = console._get_api_keys()
-        
+
         assert len(keys) == 0  # Env var placeholders are not shown
 
     @pytest.mark.asyncio
     async def test_add_key(self, mock_config):
         """Test adding API key."""
         console = AdminConsole(mock_config)
-        
+
         request = Mock()
-        request.post = AsyncMock(return_value={
-            "name": "anthropic",
-            "key": "sk-ant-new",
-        })
-        
+        request.post = AsyncMock(
+            return_value={
+                "name": "anthropic",
+                "key": "sk-ant-new",
+            }
+        )
+
         await console.handle_add_key(request)
-        
+
         assert mock_config.set.called
 
     @pytest.mark.asyncio
     async def test_delete_key(self, mock_config):
         """Test deleting API key."""
         console = AdminConsole(mock_config)
-        
+
         request = Mock()
-        request.post = AsyncMock(return_value={
-            "name": "openai",
-        })
-        
+        request.post = AsyncMock(
+            return_value={
+                "name": "openai",
+            }
+        )
+
         await console.handle_delete_key(request)
 
 
@@ -227,17 +232,17 @@ class TestAdminConsoleRoutes:
     def test_session_detail_route(self, mock_config):
         """Test session detail route pattern."""
         console = AdminConsole(mock_config)
-        
+
         routes = list(console.app.router.routes())
         paths = [str(r.resource) for r in routes]
-        
+
         assert any("/sessions/" in p for p in paths)
 
     def test_delete_session_route(self, mock_config):
         """Test delete session route pattern."""
         console = AdminConsole(mock_config)
-        
+
         routes = list(console.app.router.routes())
         paths = [str(r.resource) for r in routes]
-        
+
         assert any("/sessions/" in p and "delete" in p for p in paths)

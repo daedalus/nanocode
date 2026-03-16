@@ -22,7 +22,7 @@ class Database:
             data_dir = os.path.join(home, ".agent_smith", "data")
             os.makedirs(data_dir, exist_ok=True)
             db_path = os.path.join(data_dir, "agent_smith.db")
-        
+
         self.db_path = db_path
         self._engine = None
         self._session_factory = None
@@ -61,7 +61,7 @@ class Database:
         """Get a database session."""
         if self._session_factory is None:
             raise RuntimeError("Database not connected. Call connect() first.")
-        
+
         async with self._session_factory() as session:
             try:
                 yield session

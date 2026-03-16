@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class FileWatcherEvent:
     """Event emitted when a file changes."""
+
     file: str
     event_type: str  # "add", "change", "unlink"
 
@@ -26,7 +27,9 @@ class FileWatcherEvent:
 class FileEventHandler(FileSystemEventHandler):
     """Handler for file system events."""
 
-    def __init__(self, callback: Callable[[FileWatcherEvent], None], ignore_patterns: list[str] = None):
+    def __init__(
+        self, callback: Callable[[FileWatcherEvent], None], ignore_patterns: list[str] = None
+    ):
         self.callback = callback
         self.ignore_patterns = ignore_patterns or []
 

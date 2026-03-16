@@ -12,6 +12,7 @@ import frontmatter
 @dataclass
 class Skill:
     """A skill definition."""
+
     name: str
     description: str
     content: str
@@ -20,16 +21,19 @@ class Skill:
 
 class SkillError(Exception):
     """Base exception for skill errors."""
+
     pass
 
 
 class SkillNotFoundError(SkillError):
     """Raised when a skill is not found."""
+
     pass
 
 
 class SkillInvalidError(SkillError):
     """Raised when a skill is invalid."""
+
     pass
 
 
@@ -47,12 +51,12 @@ class SkillsManager:
     def discover_skills(self) -> list[Skill]:
         """Discover skills in the configured directories."""
         discovered = []
-        
+
         for skill_dir in self.DEFAULT_SKILL_DIRS:
             full_path = os.path.join(self.base_dir, skill_dir)
             if not os.path.isdir(full_path):
                 continue
-            
+
             for root, dirs, files in os.walk(full_path):
                 if self.SKILL_FILE_NAME in files:
                     skill_path = os.path.join(root, self.SKILL_FILE_NAME)
@@ -62,7 +66,7 @@ class SkillsManager:
                             discovered.append(skill)
                     except Exception:
                         pass
-        
+
         return discovered
 
     def _parse_skill_file(self, path: str) -> Optional[Skill]:
@@ -70,20 +74,20 @@ class SkillsManager:
         try:
             with open(path, "r") as f:
                 content = f.read()
-            
+
             try:
                 metadata, body = frontmatter.parse(content)
             except Exception:
                 return None
-            
+
             name = metadata.get("name", "")
             description = metadata.get("description", "")
-            
+
             if not name:
                 name = os.path.basename(os.path.dirname(path))
             if not description:
                 description = body[:100] if body else ""
-            
+
             return Skill(
                 name=name,
                 description=description,
@@ -96,11 +100,11 @@ class SkillsManager:
     def load_skills(self) -> int:
         """Load all discovered skills."""
         self.skills.clear()
-        
+
         discovered = self.discover_skills()
         for skill in discovered:
             self.skills[skill.name] = skill
-        
+
         return len(self.skills)
 
     def get_skill(self, name: str) -> Skill:
@@ -130,13 +134,13 @@ class SkillsManager:
         skill = self.get_skill(name)
         args = args or {}
         context = context or {}
-        
+
         if name in self._handlers:
             handler = self._handlers[name]
             if asyncio.iscoroutinefunction(handler):
                 return await handler(skill, args, context)
             return handler(skill, args, context)
-        
+
         return {
             "success": True,
             "skill": skill.name,
@@ -147,26 +151,28 @@ class SkillsManager:
     def create_tools(self, agent) -> list[dict]:
         """Create tool definitions from skills."""
         tools = []
-        
+
         for name, skill in self.skills.items():
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": f"skill_{name.replace('-', '_')}",
-                    "description": skill.description,
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "input": {
-                                "type": "string",
-                                "description": "Input to pass to the skill",
-                            }
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": f"skill_{name.replace('-', '_')}",
+                        "description": skill.description,
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "input": {
+                                    "type": "string",
+                                    "description": "Input to pass to the skill",
+                                }
+                            },
+                            "required": ["input"],
                         },
-                        "required": ["input"],
                     },
-                },
-            })
-        
+                }
+            )
+
         return tools
 
 

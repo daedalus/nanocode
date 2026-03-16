@@ -89,15 +89,17 @@ class GitHubTool(Tool):
         prs = self.github_client.list_pull_requests(repo, state, head, base)
         results = []
         for pr in prs[:20]:
-            results.append({
-                "number": pr.number,
-                "title": pr.title,
-                "state": pr.state,
-                "author": pr.user.login if pr.user else "unknown",
-                "base": pr.base.ref,
-                "head": pr.head.ref,
-                "url": pr.html_url,
-            })
+            results.append(
+                {
+                    "number": pr.number,
+                    "title": pr.title,
+                    "state": pr.state,
+                    "author": pr.user.login if pr.user else "unknown",
+                    "base": pr.base.ref,
+                    "head": pr.head.ref,
+                    "url": pr.html_url,
+                }
+            )
         return ToolResult(
             success=True,
             content=results,
@@ -155,14 +157,16 @@ class GitHubTool(Tool):
         issues = self.github_client.list_issues(repo, state)
         results = []
         for issue in issues[:20]:
-            results.append({
-                "number": issue.number,
-                "title": issue.title,
-                "state": issue.state,
-                "author": issue.user.login if issue.user else "unknown",
-                "labels": [label.name for label in issue.labels],
-                "url": issue.html_url,
-            })
+            results.append(
+                {
+                    "number": issue.number,
+                    "title": issue.title,
+                    "state": issue.state,
+                    "author": issue.user.login if issue.user else "unknown",
+                    "labels": [label.name for label in issue.labels],
+                    "url": issue.html_url,
+                }
+            )
         return ToolResult(
             success=True,
             content=results,
@@ -185,9 +189,7 @@ class GitHubTool(Tool):
             },
         )
 
-    async def _create_issue(
-        self, repo: str, title: str, body: str
-    ) -> ToolResult:
+    async def _create_issue(self, repo: str, title: str, body: str) -> ToolResult:
         """Create an issue."""
         issue = self.github_client.create_issue(repo, title, body)
         return ToolResult(
@@ -199,9 +201,7 @@ class GitHubTool(Tool):
             },
         )
 
-    async def _add_comment(
-        self, repo: str, number: int, comment: str
-    ) -> ToolResult:
+    async def _add_comment(self, repo: str, number: int, comment: str) -> ToolResult:
         """Add a comment to an issue or PR."""
         self.github_client.add_issue_comment(repo, number, comment)
         return ToolResult(
@@ -248,9 +248,9 @@ def create_github_tool(config: dict = None) -> Optional[GitHubTool]:
     client = create_github_client(config)
     if client:
         return GitHubTool(github_client=client)
-    
+
     is_github, _ = GitHubGitOperations.is_github_repo()
     if is_github:
         return GitHubTool()
-    
+
     return None

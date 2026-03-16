@@ -1,6 +1,5 @@
 """Skill tool for executing custom commands."""
 
-
 from agent_smith.tools import Tool, ToolResult
 from agent_smith.skills import SkillsManager
 
@@ -33,17 +32,17 @@ class SkillTool(Tool):
         """Execute a skill by name."""
         if not name:
             return ToolResult(success=False, content=None, error="Skill name is required")
-        
+
         try:
             skill = self.skills_manager.get_skill(name)
-            
+
             context = {
                 "input": input or "",
                 "kwargs": kwargs,
             }
-            
+
             result = await self.skills_manager.execute_skill(name, {"input": input}, context)
-            
+
             return ToolResult(success=True, content=result)
         except Exception as e:
             return ToolResult(success=False, content=None, error=str(e))
@@ -72,11 +71,11 @@ class ListSkillsTool(Tool):
                     success=True,
                     content="No skills found. Create .agent/skills/<skill-name>/skill.md to define a skill.",
                 )
-            
+
             lines = ["Available skills:"]
             for s in skills:
                 lines.append(f"  - {s['name']}: {s['description']}")
-            
+
             return ToolResult(success=True, content="\n".join(lines))
         except Exception as e:
             return ToolResult(success=False, content=None, error=str(e))

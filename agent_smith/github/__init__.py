@@ -19,6 +19,7 @@ from github.PullRequest import PullRequest
 @dataclass
 class GitHubAuth:
     """GitHub authentication configuration."""
+
     token: Optional[str] = None
     app_id: Optional[str] = None
     app_private_key: Optional[str] = None
@@ -73,9 +74,7 @@ class GitHubClient:
             private_key=self._app_private_key,
         )
         integration = GithubIntegration(auth=auth)
-        self._installation_token = integration.get_access_token(
-            int(self._installation_id)
-        ).token
+        self._installation_token = integration.get_access_token(int(self._installation_id)).token
         return Github(auth=Auth.Token(self._installation_token))
 
     def authenticate_with_token(self, token: str) -> "GitHubClient":
@@ -157,9 +156,7 @@ class GitHubClient:
             return [i for i in issues if any(label.name in labels for label in i.labels)]
         return list(issues)
 
-    def create_issue(
-        self, repo: str, title: str, body: str, labels: Optional[list[str]] = None
-    ):
+    def create_issue(self, repo: str, title: str, body: str, labels: Optional[list[str]] = None):
         """Create a new issue."""
         repo_obj = self.get_repo(repo)
         return repo_obj.create_issue(title=title, body=body, labels=labels or [])

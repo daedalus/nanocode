@@ -11,6 +11,7 @@ from datetime import datetime
 
 class ContextStrategy(Enum):
     """Context management strategies."""
+
     SLIDING_WINDOW = "sliding_window"
     SUMMARY = "summary"
     IMPORTANCE = "importance"
@@ -19,6 +20,7 @@ class ContextStrategy(Enum):
 
 class MessageRole(Enum):
     """Message roles."""
+
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
@@ -27,6 +29,7 @@ class MessageRole(Enum):
 
 class MessagePartType(Enum):
     """Message part types."""
+
     TEXT = "text"
     REASONING = "reasoning"
     TOOL_CALL = "tool_call"
@@ -37,6 +40,7 @@ class MessagePartType(Enum):
 @dataclass
 class MessagePart:
     """A single part of a message."""
+
     part_type: MessagePartType
     content: str
     tool_name: Optional[str] = None
@@ -59,6 +63,7 @@ class MessagePart:
 @dataclass
 class Message:
     """A message with parts and metadata."""
+
     role: str
     parts: list[MessagePart] = field(default_factory=list)
     timestamp: datetime = field(default_factory=datetime.now)
@@ -83,46 +88,54 @@ class Message:
     def add_text(self, content: str):
         """Add text part."""
         tokens = TokenCounter.count_tokens(content)
-        self.parts.append(MessagePart(
-            part_type=MessagePartType.TEXT,
-            content=content,
-            tokens=tokens,
-        ))
+        self.parts.append(
+            MessagePart(
+                part_type=MessagePartType.TEXT,
+                content=content,
+                tokens=tokens,
+            )
+        )
         self.tokens += tokens
 
     def add_reasoning(self, content: str, provider_metadata: dict = None):
         """Add reasoning part."""
         tokens = TokenCounter.count_tokens(content)
-        self.parts.append(MessagePart(
-            part_type=MessagePartType.REASONING,
-            content=content,
-            provider_metadata=provider_metadata,
-            tokens=tokens,
-        ))
+        self.parts.append(
+            MessagePart(
+                part_type=MessagePartType.REASONING,
+                content=content,
+                provider_metadata=provider_metadata,
+                tokens=tokens,
+            )
+        )
         self.tokens += tokens
 
     def add_tool_call(self, tool_name: str, tool_call_id: str, args: str):
         """Add tool call part."""
         tokens = TokenCounter.count_tokens(args)
-        self.parts.append(MessagePart(
-            part_type=MessagePartType.TOOL_CALL,
-            content=args,
-            tool_name=tool_name,
-            tool_call_id=tool_call_id,
-            tokens=tokens,
-        ))
+        self.parts.append(
+            MessagePart(
+                part_type=MessagePartType.TOOL_CALL,
+                content=args,
+                tool_name=tool_name,
+                tool_call_id=tool_call_id,
+                tokens=tokens,
+            )
+        )
         self.tokens += tokens
 
     def add_tool_result(self, tool_name: str, tool_call_id: str, content: str):
         """Add tool result part."""
         tokens = TokenCounter.count_tokens(content)
-        self.parts.append(MessagePart(
-            part_type=MessagePartType.TOOL_RESULT,
-            content=content,
-            tool_name=tool_name,
-            tool_call_id=tool_call_id,
-            tokens=tokens,
-        ))
+        self.parts.append(
+            MessagePart(
+                part_type=MessagePartType.TOOL_RESULT,
+                content=content,
+                tool_name=tool_name,
+                tool_call_id=tool_call_id,
+                tokens=tokens,
+            )
+        )
         self.tokens += tokens
 
     def get_text_content(self) -> str:
@@ -140,18 +153,19 @@ class Message:
     def to_dict(self) -> dict:
         """Convert to dict for LLM API."""
         result = {"role": self.role}
-        
+
         if len(self.parts) == 1 and self.parts[0].part_type == MessagePartType.TEXT:
             result["content"] = self.parts[0].content
         else:
             result["content"] = [p.to_dict() for p in self.parts]
-        
+
         return result
 
 
-@dataclass 
+@dataclass
 class MessageToken:
     """Legacy message with token count (backward compatibility)."""
+
     role: str
     content: str
     tool_call_id: Optional[str] = None
@@ -169,7 +183,7 @@ class MessageToken:
 
 class ModelLimits:
     """Model-specific context limits."""
-    
+
     DEFAULT_LIMITS = {
         "gpt-4o": {"context": 128000, "output": 16384},
         "gpt-4o-mini": {"context": 128000, "output": 16384},
@@ -191,6 +205,7 @@ class ModelLimits:
         if cls._registry is None:
             try:
                 from agent_smith.llm.registry import get_registry
+
                 cls._registry = get_registry()
             except ImportError:
                 pass
@@ -209,12 +224,12 @@ class ModelLimits:
     @classmethod
     def get_limits(cls, model: str) -> dict:
         """Get context and output limits for a model.
-        
+
         First tries to get limits from models.dev registry,
         then falls back to built-in defaults.
         """
         registry = cls._get_registry()
-        
+
         if registry and registry._providers:
             full_id = model
             if "/" in full_id:
@@ -223,7 +238,7 @@ class ModelLimits:
                     context_limit = model_info.context_limit
                     output_limit = min(context_limit // 8, 16384)
                     return {"context": context_limit, "output": output_limit}
-        
+
         model_lower = model.lower()
         for key, limits in cls.DEFAULT_LIMITS.items():
             if key in model_lower:
@@ -234,7 +249,7 @@ class ModelLimits:
     def get_limits_sync(cls, model: str) -> dict:
         """Synchronous version of get_limits (uses cache only)."""
         registry = cls._get_registry()
-        
+
         if registry and registry._providers:
             full_id = model
             if "/" in full_id:
@@ -243,7 +258,7 @@ class ModelLimits:
                     context_limit = model_info.context_limit
                     output_limit = min(context_limit // 8, 16384)
                     return {"context": context_limit, "output": output_limit}
-        
+
         model_lower = model.lower()
         for key, limits in cls.DEFAULT_LIMITS.items():
             if key in model_lower:
@@ -257,7 +272,7 @@ class TokenCounter:
     @staticmethod
     def count_tokens(text: str) -> int:
         """Count tokens using approximation.
-        
+
         Uses: ~4 chars per token for English, adjusts for other languages.
         """
         if not text:
@@ -281,9 +296,7 @@ class TokenCounter:
             content_tokens = TokenCounter.count_tokens(content)
         elif isinstance(content, list):
             content_tokens = sum(
-                TokenCounter.count_tokens(c.get("text", ""))
-                for c in content
-                if isinstance(c, dict)
+                TokenCounter.count_tokens(c.get("text", "")) for c in content if isinstance(c, dict)
             )
         else:
             content_tokens = TokenCounter.count_tokens(str(content))
@@ -301,14 +314,14 @@ class ScrapManager:
         """Save content to scrap file and return path."""
         import hashlib
         import uuid
-        
+
         content_hash = hashlib.md5(content.encode()).hexdigest()[:8]
         filename = f"scrap_{uuid.uuid4().hex[:8]}_{content_hash}.{extension}"
         filepath = os.path.join(self.scrap_dir, filename)
-        
+
         with open(filepath, "w") as f:
             f.write(content)
-        
+
         return filepath
 
     def read(self, filepath: str) -> str:
@@ -348,12 +361,12 @@ class ContextManager:
         self.storage = storage
         self.model = model
         self.compaction_enabled = compaction_enabled
-        
+
         self._system_parts: list[MessagePart] = []
         self._messages: list[Message] = []
         self._token_buffer = max_tokens // 10
         self._scrap_manager = ScrapManager()
-        
+
         model_limits = ModelLimits.get_limits_sync(model)
         self._context_limit = model_limits["context"]
         self._output_limit = model_limits["output"]
@@ -370,24 +383,28 @@ class ContextManager:
     def set_system_prompt(self, content: str):
         """Set the system prompt as text part."""
         self._system_parts.clear()
-        self._system_parts.append(MessagePart(
-            part_type=MessagePartType.TEXT,
-            content=content,
-            tokens=TokenCounter.count_tokens(content),
-        ))
+        self._system_parts.append(
+            MessagePart(
+                part_type=MessagePartType.TEXT,
+                content=content,
+                tokens=TokenCounter.count_tokens(content),
+            )
+        )
 
     def add_system_prompt(self, content: str):
         """Add a system prompt part (supports multi-part prompts)."""
-        self._system_parts.append(MessagePart(
-            part_type=MessagePartType.TEXT,
-            content=content,
-            tokens=TokenCounter.count_tokens(content),
-        ))
+        self._system_parts.append(
+            MessagePart(
+                part_type=MessagePartType.TEXT,
+                content=content,
+                tokens=TokenCounter.count_tokens(content),
+            )
+        )
 
     def add_message(self, role: str, content: Any = None, tool_call_id: str = None):
         """Add a message to context."""
         msg = Message(role=role)
-        
+
         if content:
             if isinstance(content, str):
                 msg.add_text(content)
@@ -409,22 +426,24 @@ class ContextManager:
                                 c.get("text", ""),
                                 c.get("provider_metadata"),
                             )
-        
+
         msg.importance = self._calculate_importance(role, msg.get_text_content())
         self._messages.append(msg)
 
         if self.storage and self.session_id:
             self._persist_message(msg)
 
-    def add_tool_result(self, tool_name: str, tool_call_id: str, content: str, max_scrap_size: int = 10000):
+    def add_tool_result(
+        self, tool_name: str, tool_call_id: str, content: str, max_scrap_size: int = 10000
+    ):
         """Add a tool result message, using scrap for large content."""
         tokens = TokenCounter.count_tokens(content)
-        
+
         if tokens > max_scrap_size // 4:
             scrap_path = self._scrap_manager.save(content)
             truncated = f"[Output truncated. Full output saved to: {scrap_path}]\n\nUse the Read tool to access the full content."
             content = truncated
-        
+
         msg = Message(role="tool")
         msg.add_tool_result(tool_name, tool_call_id, content)
         self._messages.append(msg)
@@ -465,7 +484,7 @@ class ContextManager:
         """Load messages from persistent storage."""
         if not self.storage or not self.session_id:
             return
-        
+
         try:
             messages = await self.storage.get_messages(self.session_id)
             for msg in messages:
@@ -481,7 +500,7 @@ class ContextManager:
         """Save all messages to persistent storage."""
         if not self.storage or not self.session_id:
             return
-        
+
         try:
             await self.storage.clear_messages(self.session_id)
             for msg in self._messages:
@@ -499,7 +518,7 @@ class ContextManager:
     def _calculate_importance(self, role: str, content: str) -> float:
         """Calculate message importance score."""
         base = 0.5
-        
+
         if role == "system":
             return 1.0
         elif role == "user":
@@ -508,32 +527,34 @@ class ContextManager:
             base = 0.6
         elif role == "tool":
             base = 0.4
-        
+
         if len(content) > 5000:
             base *= 0.8
-        
+
         return base
 
     def _get_messages_for_llm(self) -> list[dict]:
         """Get messages in format for LLM API."""
         result = []
-        
+
         if self._system_parts and self.preserve_system:
-            result.append({
-                "role": "system",
-                "content": " ".join(p.content for p in self._system_parts),
-            })
-        
+            result.append(
+                {
+                    "role": "system",
+                    "content": " ".join(p.content for p in self._system_parts),
+                }
+            )
+
         for msg in self._messages:
             result.append(msg.to_dict())
-        
+
         return result
 
     def prepare_messages(self) -> list[dict]:
         """Prepare messages for LLM call, applying strategy."""
         if self.compaction_enabled and self.strategy == ContextStrategy.COMPACTION:
             self._maybe_compact()
-        
+
         if self.strategy == ContextStrategy.SLIDING_WINDOW:
             return self._sliding_window()
         elif self.strategy == ContextStrategy.SUMMARY:
@@ -542,14 +563,14 @@ class ContextManager:
             return self._importance_strategy()
         elif self.strategy == ContextStrategy.COMPACTION:
             return self._compaction_strategy()
-        
+
         return self._get_messages_for_llm()
 
     def _maybe_compact(self):
         """Check if compaction is needed and trigger if so."""
         total = TokenCounter.count_messages_tokens(self._messages)
         usable_context = self._context_limit - self._reserved_tokens
-        
+
         if total >= usable_context:
             self._compact()
 
@@ -557,8 +578,9 @@ class ContextManager:
         """Compact messages by summarizing old ones."""
         if not self.llm:
             return
-        
+
         import asyncio
+
         loop = asyncio.get_event_loop()
         try:
             loop.run_until_complete(self._compact_async())
@@ -569,22 +591,22 @@ class ContextManager:
         """Async compaction - summarize old messages."""
         if len(self._messages) < 4:
             return
-        
-        recent = self._messages[-self.preserve_last_n:]
-        older = self._messages[:-self.preserve_last_n]
-        
+
+        recent = self._messages[-self.preserve_last_n :]
+        older = self._messages[: -self.preserve_last_n]
+
         if not older:
             return
-        
+
         summary_text = await self._create_summary(older)
-        
+
         summary_msg = Message(role="system")
         summary_msg.add_text(f"[Previous conversation summary]\n{summary_text}")
-        
+
         compacted_msg = Message(role="assistant")
         compacted_msg.add_text("[Conversation compacted - see summary above]")
         compacted_msg.summary = summary_text
-        
+
         self._messages = [compacted_msg] + recent
 
     def _compaction_strategy(self) -> list[dict]:
@@ -595,63 +617,77 @@ class ContextManager:
     def _sliding_window(self) -> list[dict]:
         """Apply sliding window strategy."""
         messages = []
-        
+
         if self._system_parts and self.preserve_system:
             system_tokens = sum(p.tokens for p in self._system_parts)
         else:
             system_tokens = 0
-        
-        recent_messages = self._messages[-self.preserve_last_n:] if self._messages else []
-        
+
+        recent_messages = self._messages[-self.preserve_last_n :] if self._messages else []
+
         result_messages = []
         current_tokens = system_tokens
-        
+
         for msg in reversed(recent_messages):
             if current_tokens + msg.tokens > self.max_tokens - self._token_buffer:
                 break
             result_messages.insert(0, msg)
             current_tokens += msg.tokens
-        
-        older = [m for m in self._messages[:-self.preserve_last_n]] if self.preserve_last_n > 0 else self._messages
-        
+
+        older = (
+            [m for m in self._messages[: -self.preserve_last_n]]
+            if self.preserve_last_n > 0
+            else self._messages
+        )
+
         for msg in reversed(older):
             if current_tokens + msg.tokens > self.max_tokens - self._token_buffer:
                 continue
-            result_messages.insert(len([m for m in result_messages if m.role == "system"]) + 1 if self._system_parts and self.preserve_system else 1, msg)
+            result_messages.insert(
+                (
+                    len([m for m in result_messages if m.role == "system"]) + 1
+                    if self._system_parts and self.preserve_system
+                    else 1
+                ),
+                msg,
+            )
             current_tokens += msg.tokens
-        
+
         return self._messages_to_dict(result_messages)
 
     def _messages_to_dict(self, messages: list[Message]) -> list[dict]:
         """Convert messages to dict format."""
         result = []
-        
+
         if self._system_parts and self.preserve_system:
-            result.append({
-                "role": "system",
-                "content": " ".join(p.content for p in self._system_parts),
-            })
-        
+            result.append(
+                {
+                    "role": "system",
+                    "content": " ".join(p.content for p in self._system_parts),
+                }
+            )
+
         for msg in messages:
             result.append(msg.to_dict())
-        
+
         return result
 
     def _summary_strategy(self) -> list[dict]:
         """Apply summary strategy (requires LLM)."""
         if not self.llm:
             return self._sliding_window()
-        
+
         total = TokenCounter.count_messages_tokens(self._messages)
-        
+
         if total < self.max_tokens * 0.7:
             return self._get_messages_for_llm()
-        
-        recent = self._messages[-self.preserve_last_n:]
-        older = self._messages[:-self.preserve_last_n]
-        
+
+        recent = self._messages[-self.preserve_last_n :]
+        older = self._messages[: -self.preserve_last_n]
+
         if older:
             import asyncio
+
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
@@ -660,36 +696,37 @@ class ContextManager:
                     summary_text = loop.run_until_complete(self._create_summary(older))
             except:
                 summary_text = f"[{len(older)} messages from earlier in the conversation]"
-            
+
             summary_msg = Message(role="system")
             summary_msg.add_text(f"[Previous conversation summary]\n{summary_text}")
-            
+
             messages = []
             if self._system_parts and self.preserve_system:
-                messages.append({
-                    "role": "system",
-                    "content": " ".join(p.content for p in self._system_parts),
-                })
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": " ".join(p.content for p in self._system_parts),
+                    }
+                )
             messages.append(summary_msg.to_dict())
             messages.extend([m.to_dict() for m in recent])
             return messages
-        
+
         return self._get_messages_for_llm()
 
     async def _create_summary(self, messages: list[Message]) -> str:
         """Create summary of older messages using LLM."""
-        conversation = "\n".join(
-            f"{m.role}: {m.get_text_content()[:500]}" for m in messages
-        )
-        
+        conversation = "\n".join(f"{m.role}: {m.get_text_content()[:500]}" for m in messages)
+
         prompt = f"""Summarize this conversation concisely, preserving key information:
         
 {conversation}
 
 Summary:"""
-        
+
         try:
             from agent_smith.llm import Message as LLMMessage
+
             response = await self.llm.chat([LLMMessage("user", prompt)])
             return response.content[:1500]
         except:
@@ -698,38 +735,42 @@ Summary:"""
     def _importance_strategy(self) -> list[dict]:
         """Apply importance-based strategy."""
         scored = []
-        
+
         for i, msg in enumerate(self._messages):
             recency_boost = 1.0 - (len(self._messages) - i) * 0.01
             score = msg.importance * recency_boost
             scored.append((score, msg))
-        
+
         scored.sort(key=lambda x: x[0], reverse=True)
-        
+
         result_messages = []
-        current_tokens = sum(p.tokens for p in self._system_parts) if self._system_parts and self.preserve_system else 0
-        
+        current_tokens = (
+            sum(p.tokens for p in self._system_parts)
+            if self._system_parts and self.preserve_system
+            else 0
+        )
+
         for _, msg in scored:
             if current_tokens + msg.tokens > self.max_tokens - self._token_buffer:
                 continue
             result_messages.append(msg)
             current_tokens += msg.tokens
-        
+
         result_messages.sort(key=lambda m: m.timestamp)
-        
+
         return self._messages_to_dict(result_messages)
 
     def truncate_tool_result(self, content: str, max_tokens: int = 500) -> str:
         """Truncate long tool results intelligently."""
         tokens = TokenCounter.count_tokens(content)
-        
+
         if tokens <= max_tokens:
             return content
-        
+
         lines = content.split("\n")
         result_lines = []
         current_tokens = 0
-        
+
         for line in lines:
             line_tokens = TokenCounter.count_tokens(line)
             if current_tokens + line_tokens > max_tokens - 50:
@@ -737,7 +778,7 @@ Summary:"""
                 break
             result_lines.append(line)
             current_tokens += line_tokens
-        
+
         return "\n".join(result_lines)
 
     def get_token_usage(self) -> dict:
@@ -745,9 +786,9 @@ Summary:"""
         total = TokenCounter.count_messages_tokens(self._messages)
         if self._system_parts:
             total += sum(p.tokens for p in self._system_parts)
-        
+
         usable = self._context_limit - self._reserved_tokens
-        
+
         return {
             "current_tokens": total,
             "max_tokens": self.max_tokens,
@@ -767,7 +808,9 @@ Summary:"""
     def save_to_file(self, path: str):
         """Save context to file."""
         data = {
-            "system": " ".join(p.content for p in self._system_parts) if self._system_parts else None,
+            "system": (
+                " ".join(p.content for p in self._system_parts) if self._system_parts else None
+            ),
             "messages": [
                 {
                     "role": m.role,
@@ -791,20 +834,20 @@ Summary:"""
         """Load context from file."""
         if not os.path.exists(path):
             return
-        
+
         with open(path) as f:
             data = json.load(f)
-        
+
         if data.get("system"):
             self.set_system_prompt(data["system"])
-        
+
         if data.get("model"):
             self.model = data["model"]
             limits = ModelLimits.get_limits(self.model)
             self._context_limit = limits["context"]
             self._output_limit = limits["output"]
             self._reserved_tokens = min(2000, self._output_limit // 4)
-        
+
         self._messages.clear()
         for m in data.get("messages", []):
             msg = Message(role=m["role"])

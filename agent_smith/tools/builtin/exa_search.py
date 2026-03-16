@@ -7,7 +7,7 @@ from agent_smith.tools import Tool, ToolResult
 
 class ExaSearchTool(Tool):
     """Web search using Exa.ai API.
-    
+
     Exa is a neural search engine designed for AI applications.
     Supports auto, neural, keyword, and deep search types.
     """
@@ -27,6 +27,7 @@ class ExaSearchTool(Tool):
         if self._client is None:
             try:
                 from exa_py import Exa
+
                 self._client = Exa(api_key=self.api_key)
             except ImportError:
                 raise ImportError("exa-py package not installed. Run: pip install exa-py")
@@ -41,7 +42,7 @@ class ExaSearchTool(Tool):
         answer: bool = False,
     ) -> ToolResult:
         """Execute Exa search.
-        
+
         Args:
             query: Search query
             search_type: 'auto', 'neural', 'keyword', or 'deep'
@@ -53,7 +54,7 @@ class ExaSearchTool(Tool):
             return ToolResult(
                 success=False,
                 content=None,
-                error="EXA_API_KEY not set. Get one at https://exa.ai/dashboard"
+                error="EXA_API_KEY not set. Get one at https://exa.ai/dashboard",
             )
 
         try:
@@ -61,7 +62,7 @@ class ExaSearchTool(Tool):
 
             if answer:
                 return await self._execute_answer(query, num_results)
-            
+
             return await self._execute_search(query, search_type, num_results, highlights)
 
         except Exception as e:
@@ -76,13 +77,13 @@ class ExaSearchTool(Tool):
     ) -> ToolResult:
         """Execute search request."""
         import asyncio
-        
+
         loop = asyncio.get_event_loop()
-        
+
         contents = None
         if highlights:
             contents = {"highlights": {"num_chars": 500, "max_num": 5}}
-        
+
         result = await loop.run_in_executor(
             None,
             lambda: self.client.search(
@@ -90,9 +91,9 @@ class ExaSearchTool(Tool):
                 type=search_type,
                 num_results=num_results,
                 contents=contents,
-            )
+            ),
         )
-        
+
         results = []
         for item in result.results:
             entry = {
@@ -103,7 +104,7 @@ class ExaSearchTool(Tool):
             if highlights and hasattr(item, "highlights") and item.highlights:
                 entry["highlights"] = item.highlights
             results.append(entry)
-        
+
         return ToolResult(
             success=True,
             content=results,
@@ -117,25 +118,22 @@ class ExaSearchTool(Tool):
     async def _execute_answer(self, query: str, num_results: int) -> ToolResult:
         """Execute answer request for direct answers."""
         import asyncio
-        
+
         loop = asyncio.get_event_loop()
-        
+
         result = await loop.run_in_executor(
             None,
             lambda: self.client.answer(
                 query,
                 num_results=num_results,
-            )
+            ),
         )
-        
+
         return ToolResult(
             success=True,
             content={
                 "answer": result.answer,
-                "results": [
-                    {"title": r.title, "url": r.url}
-                    for r in result.results
-                ],
+                "results": [{"title": r.title, "url": r.url} for r in result.results],
             },
             metadata={"query": query},
         )
@@ -158,6 +156,7 @@ class ExaFetchTool(Tool):
         if self._client is None:
             try:
                 from exa_py import Exa
+
                 self._client = Exa(api_key=self.api_key)
             except ImportError:
                 raise ImportError("exa-py package not installed. Run: pip install exa-py")
@@ -170,7 +169,7 @@ class ExaFetchTool(Tool):
         highlights: bool = True,
     ) -> ToolResult:
         """Fetch content from URLs.
-        
+
         Args:
             urls: List of URLs to fetch
             text: Include text content
@@ -180,25 +179,24 @@ class ExaFetchTool(Tool):
             return ToolResult(
                 success=False,
                 content=None,
-                error="EXA_API_KEY not set. Get one at https://exa.ai/dashboard"
+                error="EXA_API_KEY not set. Get one at https://exa.ai/dashboard",
             )
 
         try:
             import asyncio
-            
+
             loop = asyncio.get_event_loop()
-            
+
             contents = {}
             if text:
                 contents["text"] = True
             if highlights:
                 contents["highlights"] = {"num_chars": 1000, "max_num": 3}
-            
+
             result = await loop.run_in_executor(
-                None,
-                lambda: self.client.get_contents(urls, **contents)
+                None, lambda: self.client.get_contents(urls, **contents)
             )
-            
+
             fetched = []
             for item in result.results:
                 entry = {
@@ -209,7 +207,7 @@ class ExaFetchTool(Tool):
                 if highlights and hasattr(item, "highlights") and item.highlights:
                     entry["highlights"] = item.highlights
                 fetched.append(entry)
-            
+
             return ToolResult(
                 success=True,
                 content=fetched,

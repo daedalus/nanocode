@@ -48,7 +48,7 @@ class TestLSPServerInfo:
         """Test configuring a server."""
         manager = LSPServerManager()
         manager.configure_server("pyright", command=["pyright", "--langserver"])
-        
+
         server = LSPServerInfo(
             id="pyright",
             name="Pyright",
@@ -72,10 +72,10 @@ class TestLSPClientBasics:
     def test_lsp_client_set_notification_handler(self):
         """Test setting notification handler."""
         client = LSPClient(None)
-        
+
         async def handler(msg):
             pass
-        
+
         client.set_notification_handler(handler)
         assert client._notification_handler is not None
 
@@ -194,16 +194,16 @@ class TestLSPToolIntegration:
     def test_lsp_manager_finds_server_for_file(self, temp_dir):
         """Test that LSP manager can find servers by extension."""
         manager = LSPServerManager()
-        
+
         py_file = os.path.join(temp_dir, "test.py")
         Path(py_file).touch()
-        
+
         ts_file = os.path.join(temp_dir, "test.ts")
         Path(ts_file).touch()
-        
+
         result = manager.get_server_for_file(py_file)
         assert result is None
-        
+
         result = manager.get_server_for_file(ts_file)
         assert result is None
 

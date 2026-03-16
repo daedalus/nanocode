@@ -164,12 +164,12 @@ class TestGitHubTool:
         """Test getting current repo."""
         mock_git_ops = Mock()
         mock_git_ops.is_github_repo.return_value = (True, "owner/repo")
-        
+
         mock_client = Mock()
-        
+
         tool = GitHubTool(github_client=mock_client)
         tool.git_ops = mock_git_ops
-        
+
         result = await tool.execute(operation="get_current_repo")
         assert result.success is True
 
@@ -179,12 +179,12 @@ class TestGitHubTool:
         """Test getting current branch."""
         mock_git_ops = Mock()
         mock_git_ops.get_current_branch.return_value = "feature-branch"
-        
+
         mock_client = Mock()
-        
+
         tool = GitHubTool(github_client=mock_client)
         tool.git_ops = mock_git_ops
-        
+
         result = await tool.execute(operation="get_current_branch")
         assert result.success is True
         assert "feature-branch" in str(result.content)
@@ -205,12 +205,12 @@ class TestGitHubToolOperations:
         mock_pr.base = Mock(ref="main")
         mock_pr.head = Mock(ref="feature")
         mock_pr.html_url = "https://github.com/owner/repo/pull/1"
-        
+
         mock_client = Mock()
         mock_client.list_pull_requests.return_value = [mock_pr]
-        
+
         tool = GitHubTool(github_client=mock_client)
-        
+
         result = await tool.execute(operation="list_prs", repo="owner/repo")
         assert result.success is True
 
@@ -220,7 +220,7 @@ class TestGitHubToolOperations:
         """Test unknown operation."""
         mock_github_client = Mock()
         tool = GitHubTool(github_client=mock_github_client)
-        
+
         result = await tool.execute(operation="unknown_op")
         assert result.success is False
         assert result.error is not None

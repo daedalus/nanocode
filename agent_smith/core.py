@@ -452,9 +452,9 @@ class AutonomousAgent:
             messages.append(
                 {
                     "role": msg.role,
-                    "content": msg.get_text_content()
-                    if hasattr(msg, "get_text_content")
-                    else str(msg),
+                    "content": (
+                        msg.get_text_content() if hasattr(msg, "get_text_content") else str(msg)
+                    ),
                 }
             )
 

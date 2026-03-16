@@ -7,7 +7,7 @@ from agent_smith.tools import Tool, ToolResult
 
 class FreeExaSearchTool(Tool):
     """Free web search using Exa's hosted MCP API (no API key required).
-    
+
     This uses Exa's free MCP endpoint which has rate limits but doesn't require
     an API key. For higher limits, use the paid exa tool with an API key.
     """
@@ -19,16 +19,11 @@ class FreeExaSearchTool(Tool):
         )
         self.base_url = "https://mcp.exa.ai/mcp"
 
-    async def execute(
-        self,
-        query: str,
-        num_results: int = 5,
-        **kwargs
-    ) -> ToolResult:
+    async def execute(self, query: str, num_results: int = 5, **kwargs) -> ToolResult:
         """Execute free Exa search."""
         try:
             import httpx
-            
+
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     self.base_url,
@@ -44,36 +39,36 @@ class FreeExaSearchTool(Tool):
                     },
                     timeout=30.0,
                 )
-                
+
                 if response.status_code == 402:
                     return ToolResult(
                         success=False,
                         content=None,
                         error="Exa rate limit reached. Try again later or use 'exa' tool with API key.",
                     )
-                
+
                 data = response.json()
-                
+
                 if "result" in data:
                     return ToolResult(
                         success=True,
                         content=data["result"],
                         metadata={"query": query, "count": num_results},
                     )
-                
+
                 return ToolResult(
                     success=False,
                     content=None,
                     error=f"Unexpected response: {data}",
                 )
-                
+
         except Exception as e:
             return ToolResult(success=False, content=None, error=str(e))
 
 
 class OpenWebSearchTool(Tool):
     """Free web search using Open WebSearch MCP API.
-    
+
     Supports multiple search engines: Bing, DuckDuckGo, Brave, Exa, Baidu, CSDN, etc.
     No API key required.
     """
@@ -93,13 +88,13 @@ class OpenWebSearchTool(Tool):
     ) -> ToolResult:
         """Execute free web search."""
         valid_engines = ["bing", "duckduckgo", "brave", "exa", "baidu", "juejin", "google"]
-        
+
         if engine not in valid_engines:
             engine = "duckduckgo"
-        
+
         try:
             import httpx
-            
+
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     self.base_url,
@@ -118,29 +113,29 @@ class OpenWebSearchTool(Tool):
                     },
                     timeout=30.0,
                 )
-                
+
                 data = response.json()
-                
+
                 if "result" in data:
                     return ToolResult(
                         success=True,
                         content=data["result"],
                         metadata={"query": query, "engine": engine},
                     )
-                
+
                 return ToolResult(
                     success=False,
                     content=None,
                     error=f"Unexpected response: {data}",
                 )
-                
+
         except Exception as e:
             return ToolResult(success=False, content=None, error=str(e))
 
 
 class BraveSearchTool(Tool):
     """Free web search using Brave's API.
-    
+
     Note: Requires Brave API key for production use.
     Free tier has limited requests.
     """
@@ -164,10 +159,10 @@ class BraveSearchTool(Tool):
                 content=None,
                 error="BRAVE_API_KEY not set. Get one at https://brave.com/search/api/",
             )
-        
+
         try:
             import httpx
-            
+
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     "https://api.brave.com/res/v1/web/search",
@@ -178,22 +173,24 @@ class BraveSearchTool(Tool):
                     headers={"Accept-Encoding": "gzip", "X-Subscription-Token": self.api_key},
                     timeout=30.0,
                 )
-                
+
                 data = response.json()
-                
+
                 results = []
                 for item in data.get("web", {}).get("results", []):
-                    results.append({
-                        "title": item.get("title"),
-                        "url": item.get("url"),
-                        "description": item.get("description"),
-                    })
-                
+                    results.append(
+                        {
+                            "title": item.get("title"),
+                            "url": item.get("url"),
+                            "description": item.get("description"),
+                        }
+                    )
+
                 return ToolResult(
                     success=True,
                     content=results,
                     metadata={"query": query, "count": len(results)},
                 )
-                
+
         except Exception as e:
             return ToolResult(success=False, content=None, error=str(e))

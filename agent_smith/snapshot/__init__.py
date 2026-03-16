@@ -13,23 +13,26 @@ from datetime import datetime, timedelta
 @dataclass
 class Patch:
     """Represents changes between snapshots."""
+
     hash: str
     files: list[str]
 
 
 class SnapshotError(Exception):
     """Base exception for snapshot errors."""
+
     pass
 
 
 class SnapshotNotFoundError(SnapshotError):
     """Raised when a snapshot is not found."""
+
     pass
 
 
 class SnapshotManager:
     """Manages snapshots for capturing and reverting changes using Git.
-    
+
     Uses a separate git repository to track file states, similar to opencode.
     """
 
@@ -47,13 +50,11 @@ class SnapshotManager:
 
     def _git_args(self, cmd: list[str]) -> list[str]:
         """Wrap git command with git-dir and work-tree args."""
-        return [
-            "--git-dir", str(self._git_dir()),
-            "--work-tree", str(self.base_dir),
-            *cmd
-        ]
+        return ["--git-dir", str(self._git_dir()), "--work-tree", str(self.base_dir), *cmd]
 
-    def _run_git(self, cmd: list[str], cwd: Path = None, check: bool = True) -> subprocess.CompletedProcess:
+    def _run_git(
+        self, cmd: list[str], cwd: Path = None, check: bool = True
+    ) -> subprocess.CompletedProcess:
         """Run a git command."""
         full_cmd = ["git"] + self._git_args(cmd)
         return subprocess.run(
@@ -80,14 +81,14 @@ class SnapshotManager:
         """Initialize the snapshot repository if needed."""
         if not self.enabled:
             return
-        
+
         git_dir = self._git_dir()
-        
+
         if git_dir.exists():
             return
-        
+
         git_dir.mkdir(parents=True, exist_ok=True)
-        
+
         try:
             subprocess.run(
                 ["git", "init"],
@@ -96,7 +97,7 @@ class SnapshotManager:
                 check=True,
                 env={**os.environ, "GIT_DIR": str(git_dir), "GIT_WORK_TREE": str(self.base_dir)},
             )
-            
+
             subprocess.run(
                 ["git", "--git-dir", str(git_dir), "config", "core.autocrlf", "false"],
                 capture_output=True,
@@ -118,16 +119,16 @@ class SnapshotManager:
 
     async def track(self) -> Optional[str]:
         """Capture current state of files and return snapshot hash.
-        
+
         Uses git write-tree to capture the current state.
         """
         if not self.enabled:
             return None
-        
+
         await self.init()
-        
+
         git_dir = self._git_dir()
-        
+
         try:
             subprocess.run(
                 ["git", "add", "-A"],
@@ -136,7 +137,7 @@ class SnapshotManager:
                 check=True,
                 env={**os.environ, "GIT_DIR": str(git_dir), "GIT_WORK_TREE": str(self.base_dir)},
             )
-            
+
             result = subprocess.run(
                 ["git", *self._git_args(["write-tree"])],
                 cwd=self.base_dir,
@@ -144,23 +145,23 @@ class SnapshotManager:
                 text=True,
                 check=True,
             )
-            
+
             return result.stdout.strip()
         except subprocess.CalledProcessError:
             return None
 
     async def patch(self, snapshot_hash: str) -> Patch:
         """Get the diff/patch between current state and a snapshot.
-        
+
         Returns a Patch object with the hash and list of changed files.
         """
         if not self.enabled:
             return Patch(hash=snapshot_hash, files=[])
-        
+
         await self.init()
-        
+
         git_dir = self._git_dir()
-        
+
         try:
             subprocess.run(
                 ["git", "add", "-A"],
@@ -169,21 +170,27 @@ class SnapshotManager:
                 check=True,
                 env={**os.environ, "GIT_DIR": str(git_dir), "GIT_WORK_TREE": str(self.base_dir)},
             )
-            
+
             result = subprocess.run(
                 [
                     "git",
-                    "-c", "core.autocrlf=false",
-                    "-c", "core.longpaths=true",
-                    "-c", "core.symlinks=true",
-                    "-c", "core.quotepath=false",
-                    *self._git_args(["diff", "--no-ext-diff", "--name-only", snapshot_hash, "--", "."]),
+                    "-c",
+                    "core.autocrlf=false",
+                    "-c",
+                    "core.longpaths=true",
+                    "-c",
+                    "core.symlinks=true",
+                    "-c",
+                    "core.quotepath=false",
+                    *self._git_args(
+                        ["diff", "--no-ext-diff", "--name-only", snapshot_hash, "--", "."]
+                    ),
                 ],
                 cwd=self.base_dir,
                 capture_output=True,
                 text=True,
             )
-            
+
             files = []
             if result.returncode == 0 and result.stdout:
                 files = [
@@ -191,63 +198,67 @@ class SnapshotManager:
                     for f in result.stdout.strip().split("\n")
                     if f.strip()
                 ]
-            
+
             return Patch(hash=snapshot_hash, files=files)
         except subprocess.CalledProcessError:
             return Patch(hash=snapshot_hash, files=[])
 
     async def restore(self, snapshot_hash: str) -> bool:
         """Restore files to a previous snapshot state.
-        
+
         Uses git read-tree to restore the index, then checkout-index to restore files.
         """
         if not self.enabled:
             return False
-        
+
         git_dir = self._git_dir()
-        
+
         try:
             subprocess.run(
                 [
                     "git",
-                    "-c", "core.longpaths=true",
-                    "-c", "core.symlinks=true",
+                    "-c",
+                    "core.longpaths=true",
+                    "-c",
+                    "core.symlinks=true",
                     *self._git_args(["read-tree", snapshot_hash]),
                 ],
                 cwd=self.base_dir,
                 capture_output=True,
                 check=True,
             )
-            
+
             subprocess.run(
                 [
                     "git",
-                    "-c", "core.longpaths=true",
-                    "-c", "core.symlinks=true",
+                    "-c",
+                    "core.longpaths=true",
+                    "-c",
+                    "core.symlinks=true",
                     *self._git_args(["checkout-index", "-a", "-f"]),
                 ],
                 cwd=self.base_dir,
                 capture_output=True,
                 check=True,
             )
-            
+
             return True
         except subprocess.CalledProcessError:
             return False
 
     async def list_snapshots(self) -> list[dict]:
         """List all available snapshots.
-        
+
         Returns a list of snapshot info with hash and timestamp.
         """
         if not self.enabled:
             return []
-        
+
         git_dir = self._git_dir()
-        
+
         if not git_dir.exists():
             return []
-        
+
         try:
             result = subprocess.run(
                 ["git", *self._git_args(["log", "--format=%H %ci", "-n", "20"])],
@@ -255,21 +266,23 @@ class SnapshotManager:
                 capture_output=True,
                 text=True,
             )
-            
+
             snapshots = []
             if result.returncode == 0 and result.stdout:
                 for line in result.stdout.strip().split("\n"):
                     if line:
                         parts = line.split(" ", 1)
                         if len(parts) == 2:
-                            snapshots.append({
-                                "hash": parts[0],
-                                "timestamp": parts[1],
-                            })
-            
+                            snapshots.append(
+                                {
+                                    "hash": parts[0],
+                                    "timestamp": parts[1],
+                                }
+                            )
+
             if not snapshots:
                 snapshots = self._list_from_objects()
-            
+
             return snapshots
         except subprocess.CalledProcessError:
             return []
@@ -278,35 +291,37 @@ class SnapshotManager:
         """List snapshots from objects directory (for write-tree snapshots)."""
         git_dir = self._git_dir()
         objects_dir = git_dir / "objects"
-        
+
         if not objects_dir.exists():
             return []
-        
+
         snapshots = []
         try:
             for obj_dir in objects_dir.iterdir():
                 if obj_dir.is_dir() and len(obj_dir.name) == 2:
                     for obj_file in obj_dir.iterdir():
                         if obj_file.is_file():
-                            snapshots.append({
-                                "hash": obj_dir.name + obj_file.name,
-                                "timestamp": "unknown",
-                            })
+                            snapshots.append(
+                                {
+                                    "hash": obj_dir.name + obj_file.name,
+                                    "timestamp": "unknown",
+                                }
+                            )
         except Exception:
             pass
-        
+
         return snapshots[:20]
 
     async def get_snapshot_info(self, snapshot_hash: str) -> Optional[dict]:
         """Get information about a specific snapshot."""
         if not self.enabled:
             return None
-        
+
         git_dir = self._git_dir()
-        
+
         if not git_dir.exists():
             return None
-        
+
         try:
             result = subprocess.run(
                 ["git", *self._git_args(["show", "-s", "--format=%H %ci", snapshot_hash])],
@@ -314,7 +329,7 @@ class SnapshotManager:
                 capture_output=True,
                 text=True,
             )
-            
+
             if result.returncode == 0 and result.stdout:
                 parts = result.stdout.strip().split(" ", 1)
                 if len(parts) == 2:
@@ -324,25 +339,25 @@ class SnapshotManager:
                     }
         except subprocess.CalledProcessError:
             pass
-        
+
         return None
 
     async def cleanup(self, days: int = None):
         """Clean up old snapshots (garbage collection).
-        
+
         Removes unreachable objects older than specified days.
         """
         if not self.enabled:
             return
-        
+
         days = days or self.DEFAULT_PRUNE_AGE_DAYS
         prune_date = f"{days}.days"
-        
+
         git_dir = self._git_dir()
-        
+
         if not git_dir.exists():
             return
-        
+
         try:
             subprocess.run(
                 ["git", *self._git_args(["gc", f"--prune={prune_date}"])],

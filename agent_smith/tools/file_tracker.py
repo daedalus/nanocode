@@ -10,6 +10,7 @@ from datetime import datetime
 @dataclass
 class FileCacheEntry:
     """Cached file content with metadata."""
+
     path: str
     content: str
     mtime: float
@@ -26,7 +27,7 @@ class FileTracker:
         self._cache_dir = cache_dir
         self._file_watcher = file_watcher
         self._ensure_cache_dir()
-        
+
         if self._file_watcher:
             self._file_watcher.add_callback(self._on_file_change)
 
@@ -62,7 +63,7 @@ class FileTracker:
         """Check if file has been modified since cached."""
         if path not in self._cache:
             return True
-        
+
         try:
             current_stat = os.stat(path)
             cached = self._cache[path]
@@ -77,6 +78,7 @@ class FileTracker:
     def invalidate_pattern(self, pattern: str):
         """Invalidate cached files matching pattern."""
         import fnmatch
+
         to_remove = [p for p in self._cache if fnmatch.fnmatch(p, pattern)]
         for p in to_remove:
             self._cache.pop(p, None)
@@ -90,20 +92,20 @@ class FileTracker:
 
     def get_or_read(self, path: str, force_refresh: bool = False) -> tuple[str, bool]:
         """Get file content, re-reading if modified.
-        
+
         Returns (content, was_refreshed).
         """
         path = str(Path(path).resolve())
-        
+
         if force_refresh:
             self.invalidate(path)
-        
+
         if not self.is_modified(path):
             cached = self._cache.get(path)
             if cached:
                 cached.access_count += 1
                 return cached.content, False
-        
+
         try:
             content = Path(path).read_text()
             self.set(path, content)
@@ -139,6 +141,7 @@ class FileTracker:
         """Save cache index to file."""
         path = path or os.path.join(self._cache_dir, "file_index.json")
         import json
+
         data = {
             path: {
                 "mtime": entry.mtime,
@@ -155,12 +158,13 @@ class FileTracker:
         path = path or os.path.join(self._cache_dir, "file_index.json")
         if not os.path.exists(path):
             return False
-        
+
         import json
+
         try:
             with open(path) as f:
                 data = json.load(f)
-            
+
             for path_str, info in data.items():
                 if os.path.exists(path_str):
                     current_mtime = os.stat(path_str).st_mtime

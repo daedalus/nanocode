@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 @dataclass
 class ToolResult:
     """Result from tool execution."""
+
     success: bool
     content: Any
     error: Optional[str] = None
@@ -65,7 +66,7 @@ class FuncTool(Tool):
         self.func = func
         self.name = name or func.__name__
         self.description = description or func.__doc__ or f"Execute {self.name}"
-        
+
         sig = inspect.signature(func)
         properties = {}
         required = []
@@ -84,7 +85,7 @@ class FuncTool(Tool):
                     param_type = "array"
                 elif param.annotation == dict:
                     param_type = "object"
-            
+
             prop = {"type": param_type}
             if param.default != inspect.Parameter.empty:
                 prop["default"] = param.default
@@ -108,7 +109,7 @@ class FuncTool(Tool):
             valid, error = self.validate_args(kwargs)
             if not valid:
                 return ToolResult(success=False, content=None, error=error)
-            
+
             result = await self.func(**kwargs)
             return ToolResult(success=True, content=result)
         except Exception as e:
@@ -124,7 +125,7 @@ class SyncFuncTool(FuncTool):
             valid, error = self.validate_args(kwargs)
             if not valid:
                 return ToolResult(success=False, content=None, error=error)
-            
+
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(None, lambda: self.func(**kwargs))
             return ToolResult(success=True, content=result)
@@ -186,7 +187,7 @@ class ToolExecutor:
     async def execute(self, tool_name: str, arguments: dict) -> ToolResult:
         """Execute a tool by name with arguments."""
         tool = self.registry.get(tool_name)
-        
+
         if not tool:
             if handler := self.registry._handlers.get(tool_name):
                 try:
@@ -197,13 +198,15 @@ class ToolExecutor:
             return ToolResult(success=False, content=None, error=f"Unknown tool: {tool_name}")
 
         result = await tool.execute(**arguments)
-        
-        self.execution_history.append({
-            "tool": tool_name,
-            "arguments": arguments,
-            "result": result.to_dict(),
-        })
-        
+
+        self.execution_history.append(
+            {
+                "tool": tool_name,
+                "arguments": arguments,
+                "result": result.to_dict(),
+            }
+        )
+
         return result
 
     async def execute_multiple(self, tool_calls: list[tuple[str, dict]]) -> list[ToolResult]:

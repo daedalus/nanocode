@@ -24,9 +24,13 @@ class Config:
     def _apply_env_overrides(self):
         """Apply environment variable overrides."""
         if api_key := os.getenv("OPENAI_API_KEY"):
-            self.setdefault("llm", {}).setdefault("providers", {}).setdefault("openai", {})["api_key"] = api_key
+            self.setdefault("llm", {}).setdefault("providers", {}).setdefault("openai", {})[
+                "api_key"
+            ] = api_key
         if base_url := os.getenv("OPENAI_BASE_URL"):
-            self.setdefault("llm", {}).setdefault("providers", {}).setdefault("openai", {})["base_url"] = base_url
+            self.setdefault("llm", {}).setdefault("providers", {}).setdefault("openai", {})[
+                "base_url"
+            ] = base_url
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a configuration value using dot notation."""

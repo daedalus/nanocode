@@ -9,6 +9,7 @@ from dataclasses import dataclass
 @dataclass
 class ImageContent:
     """Image content for multimodal input."""
+
     url: Optional[str] = None
     base64: Optional[str] = None
     mime_type: str = "image/png"
@@ -24,10 +25,11 @@ class VisionProcessor:
         """Get a description of an image."""
         with open(image_path, "rb") as f:
             image_data = base64.b64encode(f.read()).decode()
-        
+
         prompt = prompt or "Describe this image in detail."
-        
+
         from agent_smith.llm import Message
+
         content = [
             {"type": "text", "text": prompt},
             {
@@ -35,7 +37,7 @@ class VisionProcessor:
                 "image_url": {"url": f"data:image/png;base64,{image_data}"},
             },
         ]
-        
+
         response = await self.llm.chat([Message("user", content)])
         return response.content
 
@@ -47,15 +49,17 @@ class VisionProcessor:
     def create_multimodal_message(self, text: str, images: list[str] = None) -> list[dict]:
         """Create a multimodal message content."""
         content = [{"type": "text", "text": text}]
-        
+
         if images:
             for img_path in images:
                 b64 = self.encode_image(img_path)
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{b64}"},
-                })
-        
+                content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{b64}"},
+                    }
+                )
+
         return content
 
 
@@ -78,7 +82,7 @@ class AudioProcessor:
         """Play audio data."""
         import io
         import subprocess
-        
+
         try:
             process = subprocess.Popen(
                 ["paplay", "--version"],
@@ -86,7 +90,7 @@ class AudioProcessor:
                 stderr=subprocess.PIPE,
             )
             process.wait(timeout=5)
-            
+
             cmd = ["paplay"]
             process = subprocess.Popen(
                 cmd,
@@ -105,8 +109,9 @@ class DocumentProcessor:
     async def extract_text(self, file_path: str) -> str:
         """Extract text from a document."""
         import pathlib
+
         ext = pathlib.Path(file_path).suffix.lower()
-        
+
         if ext == ".pdf":
             return await self._extract_pdf(file_path)
         elif ext in (".docx", ".doc"):
@@ -121,6 +126,7 @@ class DocumentProcessor:
         """Extract text from PDF."""
         try:
             import PyPDF2
+
             with open(file_path, "rb") as f:
                 reader = PyPDF2.PdfReader(f)
                 text = ""
@@ -136,6 +142,7 @@ class DocumentProcessor:
         """Extract text from DOCX."""
         try:
             import docx
+
             doc = docx.Document(file_path)
             return "\n".join([p.text for p in doc.paragraphs])
         except ImportError:
@@ -164,7 +171,7 @@ class MultimodalManager:
     async def process_input(self, input_data: Any) -> str:
         """Process various input types."""
         import pathlib
-        
+
         if isinstance(input_data, str):
             path = pathlib.Path(input_data)
             if path.exists() and path.is_file():
@@ -176,5 +183,5 @@ class MultimodalManager:
                 else:
                     return await self.document.extract_text(input_data)
             return input_data
-        
+
         return str(input_data)

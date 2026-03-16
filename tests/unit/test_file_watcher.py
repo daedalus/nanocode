@@ -45,9 +45,7 @@ class TestFileEventHandler:
 
         handler = FileEventHandler(callback, ignore_patterns=["*.pyc", "__pycache__"])
 
-        handler.on_created(
-            type("MockEvent", (), {"src_path": "/test.py", "is_directory": False})()
-        )
+        handler.on_created(type("MockEvent", (), {"src_path": "/test.py", "is_directory": False})())
         assert len(events) == 1
 
         events.clear()

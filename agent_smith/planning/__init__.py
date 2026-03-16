@@ -12,6 +12,7 @@ from agent_smith.state import TaskStep, ExecutionPlan, AgentState
 
 class PlanStrategy(Enum):
     """Planning strategies."""
+
     LINEAR = "linear"
     PARALLEL = "parallel"
     ADAPTIVE = "adaptive"
@@ -20,6 +21,7 @@ class PlanStrategy(Enum):
 @dataclass
 class PlanningContext:
     """Context for planning."""
+
     task: str
     tools: list[dict]
     history: list[dict]
@@ -39,7 +41,7 @@ class TaskPlanner:
     async def create_plan(self, context: PlanningContext) -> ExecutionPlan:
         """Create an execution plan for a task."""
         goal = context.task
-        
+
         prompt = f"""You are a task planning system. Break down the following task into specific, executable steps.
 
 Available tools:
@@ -65,8 +67,9 @@ Respond with a JSON plan in this format:
 }}"""
 
         from agent_smith.llm import Message
+
         response = await self.llm.chat([Message("user", prompt)])
-        
+
         try:
             plan_data = json.loads(response.content)
         except:
@@ -105,7 +108,7 @@ Respond with a JSON plan in this format:
         """Update step execution result."""
         if not self._current_plan:
             return
-        
+
         for step in self._current_plan.steps:
             if step.id == step_id:
                 step.result = result
@@ -121,7 +124,7 @@ Respond with a JSON plan in this format:
         """Mark a step as running."""
         if not self._current_plan:
             return
-        
+
         for step in self._current_plan.steps:
             if step.id == step_id:
                 step.status = "running"
@@ -147,12 +150,12 @@ class PlanExecutor:
     ) -> dict:
         """Execute a plan step by step."""
         results = []
-        
+
         for i, step in enumerate(plan.steps):
             self._current_step = i
             plan.current_step = i
             self.planner.mark_step_running(step.id)
-            
+
             if checkpoint_enabled:
                 self._save_checkpoint(plan)
 
@@ -188,15 +191,16 @@ class PlanExecutor:
         """Execute a step that requires LLM reasoning."""
         from agent_smith.llm import Message
         from agent_smith.tools import ToolResult
-        
+
         prompt = f"Execute this step: {description}"
         response = await self.planner.llm.chat([Message("user", prompt)])
-        
+
         return ToolResult(success=True, content=response.content)
 
     def _save_checkpoint(self, plan: ExecutionPlan):
         """Save execution checkpoint."""
         import os
+
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         path = os.path.join(self.checkpoint_dir, f"checkpoint_{plan.id}.json")
         plan.save_checkpoint(plan.checkpoint_file or path)
@@ -204,9 +208,11 @@ class PlanExecutor:
     def load_checkpoint(self, plan_id: str) -> Optional[ExecutionPlan]:
         """Load a checkpoint."""
         import os
+
         path = os.path.join(self.checkpoint_dir, f"checkpoint_{plan_id}.json")
         if os.path.exists(path):
             from pathlib import Path
+
             return ExecutionPlan.load_checkpoint(Path(path))
         return None
 
@@ -220,7 +226,7 @@ class PlanMonitor:
     async def evaluate_progress(self, plan: ExecutionPlan, recent_results: list[dict]) -> dict:
         """Evaluate execution progress and determine if replanning is needed."""
         from agent_smith.llm import Message
-        
+
         prompt = f"""Evaluate the progress of this plan execution:
 
 Goal: {plan.goal}
@@ -244,16 +250,18 @@ Respond with:
 }}"""
 
         response = await self.llm.chat([Message("user", prompt)])
-        
+
         try:
             return json.loads(response.content)
         except:
             return {"status": "unknown", "reason": response.content}
 
-    async def create_replan(self, original_plan: ExecutionPlan, failed_step_id: str, error: str) -> ExecutionPlan:
+    async def create_replan(
+        self, original_plan: ExecutionPlan, failed_step_id: str, error: str
+    ) -> ExecutionPlan:
         """Create a revised plan after a failure."""
         from agent_smith.llm import Message
-        
+
         prompt = f"""A plan failed. Create a revised plan.
 
 Original Goal: {original_plan.goal}
@@ -272,7 +280,7 @@ Create a revised plan that:
 Respond in the same JSON format as before."""
 
         response = await self.llm.chat([Message("user", prompt)])
-        
+
         try:
             plan_data = json.loads(response.content)
         except:

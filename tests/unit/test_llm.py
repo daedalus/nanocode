@@ -71,7 +71,7 @@ class TestModelRegistry:
     def test_registry_initialization(self, temp_cache_dir):
         """Test registry initialization."""
         registry = ModelRegistry(cache_dir=temp_cache_dir)
-        
+
         assert registry.cache_dir == temp_cache_dir
         assert registry.cache_file.endswith("models_registry.json")
 
@@ -79,7 +79,7 @@ class TestModelRegistry:
         """Test parsing models from data."""
         registry = ModelRegistry(cache_dir=temp_cache_dir)
         registry._parse_models(mock_registry_data)
-        
+
         providers = registry.list_providers()
         assert "openai" in providers
         assert "anthropic" in providers
@@ -89,9 +89,9 @@ class TestModelRegistry:
         """Test getting provider info."""
         registry = ModelRegistry(cache_dir=temp_cache_dir)
         registry._parse_models(mock_registry_data)
-        
+
         provider = registry.get_provider("openai")
-        
+
         assert provider is not None
         assert provider.name == "OpenAI"
         assert provider.api_base == "https://api.openai.com/v1"
@@ -100,9 +100,9 @@ class TestModelRegistry:
         """Test getting model info."""
         registry = ModelRegistry(cache_dir=temp_cache_dir)
         registry._parse_models(mock_registry_data)
-        
+
         model = registry.get_model("openai", "gpt-4o")
-        
+
         assert model is not None
         assert model.name == "GPT-4o"
         assert model.input_cost == 0.005
@@ -114,9 +114,9 @@ class TestModelRegistry:
         """Test getting model by full ID."""
         registry = ModelRegistry(cache_dir=temp_cache_dir)
         registry._parse_models(mock_registry_data)
-        
+
         model = registry.get_model_by_full_id("openai/gpt-4o")
-        
+
         assert model is not None
         assert model.id == "openai/gpt-4o"
 
@@ -124,9 +124,9 @@ class TestModelRegistry:
         """Test getting free models."""
         registry = ModelRegistry(cache_dir=temp_cache_dir)
         registry._parse_models(mock_registry_data)
-        
+
         free_models = registry.get_free_models()
-        
+
         assert len(free_models) == 1
         assert free_models[0].provider_id == "free-provider"
 
@@ -135,10 +135,10 @@ class TestModelRegistry:
         registry1 = ModelRegistry(cache_dir=temp_cache_dir)
         registry1._parse_models(mock_registry_data)
         registry1._save_to_cache()
-        
+
         registry2 = ModelRegistry(cache_dir=temp_cache_dir)
         cached = registry2._load_from_cache()
-        
+
         assert cached is not None
         assert "openai" in cached
 
@@ -154,44 +154,47 @@ class TestProviderRouter:
     def test_parse_model_id_with_provider(self, router):
         """Test parsing model ID with explicit provider."""
         parsed = router.parse_model_id("openai/gpt-4o")
-        
+
         assert parsed.provider == "openai"
         assert parsed.model == "gpt-4o"
 
     def test_parse_model_id_without_provider(self, router):
         """Test parsing model ID without provider."""
         parsed = router.parse_model_id("gpt-4o")
-        
+
         assert parsed.provider == "openai"
         assert parsed.model == "gpt-4o"
 
     def test_infer_provider_claude(self, router):
         """Test inferring anthropic provider."""
         parsed = router.parse_model_id("claude-3-5-sonnet")
-        
+
         assert parsed.provider == "anthropic"
 
     def test_infer_provider_gemini(self, router):
         """Test inferring google provider."""
         parsed = router.parse_model_id("gemini-pro")
-        
+
         assert parsed.provider == "google"
 
     def test_infer_provider_llama(self, router):
         """Test inferring ollama provider."""
         parsed = router.parse_model_id("llama-3")
-        
+
         assert parsed.provider == "ollama"
 
     def test_add_explicit_provider(self, router):
         """Test adding explicit provider config."""
-        router.add_explicit_provider("custom", {
-            "base_url": "https://custom.api.com/v1",
-            "api_key": "custom-key",
-        })
-        
+        router.add_explicit_provider(
+            "custom",
+            {
+                "base_url": "https://custom.api.com/v1",
+                "api_key": "custom-key",
+            },
+        )
+
         config = router.get_provider_config("custom/model")
-        
+
         assert config.provider == "custom"
         assert config.base_url == "https://custom.api.com/v1"
         assert config.api_key == "custom-key"
@@ -199,7 +202,7 @@ class TestProviderRouter:
     def test_get_provider_config_defaults(self, router):
         """Test getting provider config with defaults."""
         config = router.get_provider_config("gpt-4o")
-        
+
         assert config.provider == "openai"
         assert config.model == "gpt-4o"
         assert "api.openai.com" in config.base_url
@@ -207,7 +210,7 @@ class TestProviderRouter:
     def test_get_provider_config_openai(self, router):
         """Test getting OpenAI provider config."""
         config = router.get_provider_config("openai/gpt-4o")
-        
+
         assert config.provider == "openai"
         assert config.model == "gpt-4o"
         assert "api.openai.com" in config.base_url
@@ -215,7 +218,7 @@ class TestProviderRouter:
     def test_get_provider_config_anthropic(self, router):
         """Test getting Anthropic provider config."""
         config = router.get_provider_config("anthropic/claude-3-5-sonnet")
-        
+
         assert config.provider == "anthropic"
         assert config.model == "claude-3-5-sonnet"
         assert "api.anthropic.com" in config.base_url
@@ -223,7 +226,7 @@ class TestProviderRouter:
     def test_get_provider_config_ollama(self, router):
         """Test getting Ollama provider config."""
         config = router.get_provider_config("ollama/llama3")
-        
+
         assert config.provider == "ollama"
         assert config.model == "llama3"
         assert "localhost:11434" in config.base_url
@@ -231,30 +234,30 @@ class TestProviderRouter:
     def test_opencode_provider_special_handling(self, router):
         """Test special handling for opencode provider."""
         config = router.get_provider_config("opencode/gpt-5-nano")
-        
+
         assert config.provider == "opencode"
         assert config.base_url == "https://opencode.ai/zen/v1"
 
     def test_is_provider_available_with_key(self, router):
         """Test availability check with API key."""
         os.environ["OPENAI_API_KEY"] = "test-key"
-        
+
         available = router.is_provider_available("gpt-4o")
-        
+
         assert available is True
-        
+
         del os.environ["OPENAI_API_KEY"]
 
     def test_is_provider_available_local(self, router):
         """Test availability check for local providers."""
         available = router.is_provider_available("ollama/llama3")
-        
+
         assert available is True
 
     def test_is_provider_available_public(self, router):
         """Test availability check with public key."""
         router.add_explicit_provider("opencode", {"api_key": "public"})
-        
+
         available = router.is_provider_available("opencode/model")
-        
+
         assert available is True

@@ -1,6 +1,5 @@
 """Snapshot tools for capturing and reverting changes."""
 
-
 from agent_smith.tools import Tool, ToolResult
 from agent_smith.snapshot import SnapshotManager
 
@@ -28,14 +27,14 @@ class SnapshotTrackTool(Tool):
         """Capture current state as a snapshot."""
         try:
             snapshot_hash = await self.snapshot_manager.track()
-            
+
             if snapshot_hash is None:
                 return ToolResult(
                     success=False,
                     content=None,
                     error="Failed to create snapshot",
                 )
-            
+
             return ToolResult(
                 success=True,
                 content=f"Snapshot created: {snapshot_hash[:8]}",
@@ -74,7 +73,7 @@ class SnapshotRevertTool(Tool):
                     content=None,
                     error="Snapshot hash is required",
                 )
-            
+
             if snapshot == "latest":
                 snapshots = await self.snapshot_manager.list_snapshots()
                 if not snapshots:
@@ -84,9 +83,9 @@ class SnapshotRevertTool(Tool):
                         error="No snapshots available",
                     )
                 snapshot = snapshots[0]["hash"]
-            
+
             success = await self.snapshot_manager.restore(snapshot)
-            
+
             if success:
                 return ToolResult(
                     success=True,
@@ -121,17 +120,17 @@ class SnapshotListTool(Tool):
         """List available snapshots."""
         try:
             snapshots = await self.snapshot_manager.list_snapshots()
-            
+
             if not snapshots:
                 return ToolResult(
                     success=True,
                     content="No snapshots available. Use the 'snapshot' tool to create one.",
                 )
-            
+
             lines = ["Available snapshots:"]
             for s in snapshots:
                 lines.append(f"  - {s['hash'][:8]} ({s['timestamp']})")
-            
+
             return ToolResult(success=True, content="\n".join(lines))
         except Exception as e:
             return ToolResult(success=False, content=None, error=str(e))
@@ -166,7 +165,7 @@ class SnapshotDiffTool(Tool):
                     content=None,
                     error="Snapshot hash is required",
                 )
-            
+
             if snapshot == "latest":
                 snapshots = await self.snapshot_manager.list_snapshots()
                 if not snapshots:
@@ -176,19 +175,19 @@ class SnapshotDiffTool(Tool):
                         error="No snapshots available",
                     )
                 snapshot = snapshots[0]["hash"]
-            
+
             patch = await self.snapshot_manager.patch(snapshot)
-            
+
             if not patch.files:
                 return ToolResult(
                     success=True,
                     content="No changes since this snapshot",
                 )
-            
+
             lines = [f"Changed files since {snapshot[:8]}:"]
             for f in patch.files:
                 lines.append(f"  - {f}")
-            
+
             return ToolResult(
                 success=True,
                 content="\n".join(lines),
