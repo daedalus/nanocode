@@ -1,32 +1,26 @@
 """Core agent implementation."""
 
-import asyncio
 import json
 import logging
-import os
 import traceback
-from typing import Any, Optional
+from typing import Optional
 
-from agent_smith.llm import LLMBase, Message, create_llm
+from agent_smith.llm import create_llm
 from agent_smith.tools import ToolRegistry, ToolExecutor
 from agent_smith.tools.builtin import register_builtin_tools
 from agent_smith.tools.file_tracker import FileTracker
-from agent_smith.state import AgentState, AgentStateData, ExecutionPlan
+from agent_smith.state import AgentState, AgentStateData
 from agent_smith.planning import TaskPlanner, PlanExecutor, PlanMonitor, PlanningContext
-from agent_smith.mcp import MCPManager, FilesystemMCPServer, GitMCPServer
+from agent_smith.mcp import MCPManager
 from agent_smith.multimodal import MultimodalManager
 from agent_smith.lsp import LSPServerManager
 from agent_smith.context import ContextManager, ContextStrategy
-from agent_smith.config import Config, get_config
-from agent_smith.agents import AgentRegistry, AgentInfo, get_agent_registry, PermissionAction
+from agent_smith.config import get_config
+from agent_smith.agents import AgentInfo, get_agent_registry, PermissionAction
 from agent_smith.agents.permission import (
     PermissionHandler,
-    PermissionRequest,
-    PermissionReply,
-    PermissionReplyType,
 )
 from agent_smith.session_summary import SessionSummaryGenerator
-from agent_smith.doom_loop import DoomLoopHandler
 
 tool_logger = logging.getLogger("agent_smith.tools")
 
@@ -118,7 +112,7 @@ class AutonomousAgent:
         user_agent = self.config.get("llm.user_agent", "agent_smith/1.0")
 
         if use_registry and default_model:
-            from agent_smith.llm.router import ProviderRouter, get_router
+            from agent_smith.llm.router import get_router
 
             providers = self.config.get("llm.providers", {})
             router = get_router()
@@ -337,7 +331,7 @@ class AutonomousAgent:
             )
 
             if self.debug:
-                print(f"\n\033[96m[DEBUG] LLM Response:\033[0m")
+                print("\n\033[96m[DEBUG] LLM Response:\033[0m")
                 if response.thinking:
                     print(f"  \033[93mThinking: {response.thinking[:200]}...\033[0m")
                 if response.has_tool_calls:

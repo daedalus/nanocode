@@ -1,6 +1,5 @@
 """Tests for effect system functionality."""
 
-import pytest
 import asyncio
 import time
 from agent_smith.effect import (
@@ -8,8 +7,6 @@ from agent_smith.effect import (
     Trigger,
     Ref,
     Observable,
-    Computed,
-    Effect,
     Lazy,
     Deferred,
     Resource,

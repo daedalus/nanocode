@@ -1,7 +1,6 @@
 """Exa.ai web search tool."""
 
 import os
-from typing import Optional
 
 from agent_smith.tools import Tool, ToolResult
 

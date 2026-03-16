@@ -1,9 +1,7 @@
 """Telegram messaging platform integration."""
 
 import os
-import asyncio
 import logging
-from typing import Any
 
 from agent_smith.messaging import MessagingPlatform, Message
 

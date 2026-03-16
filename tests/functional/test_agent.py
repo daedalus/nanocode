@@ -1,7 +1,7 @@
 """Tests for agent core functionality."""
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, patch
 
 from agent_smith.core import AutonomousAgent
 from agent_smith.state import AgentState, ExecutionPlan, TaskStep
@@ -150,7 +150,6 @@ class TestAutonomousAgentAsync:
     @pytest.fixture
     def agent_with_mock_llm(self):
         """Create agent with mock LLM."""
-        from agent_smith.config import Config
 
         with patch("agent_smith.llm.OpenAILLM") as MockOpenAI:
             mock_instance = MockLLM("Test response")

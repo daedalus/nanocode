@@ -1,6 +1,5 @@
 """Tests for event bus functionality."""
 
-import pytest
 from agent_smith.bus import (
     EventBus,
     Event,
@@ -8,7 +7,6 @@ from agent_smith.bus import (
     get_event_bus,
     subscribe,
     publish,
-    once,
     define_event,
 )
 

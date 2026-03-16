@@ -60,7 +60,7 @@ class SkillsManager:
                         skill = self._parse_skill_file(skill_path)
                         if skill:
                             discovered.append(skill)
-                    except Exception as e:
+                    except Exception:
                         pass
         
         return discovered

@@ -1,6 +1,5 @@
 """Tests for doom loop detection."""
 
-import pytest
 from agent_smith.doom_loop import (
     DoomLoopDetection,
     DoomLoopHandler,

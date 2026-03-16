@@ -1,7 +1,6 @@
 """Tests for storage module."""
 
 import pytest
-import asyncio
 import tempfile
 import os
 

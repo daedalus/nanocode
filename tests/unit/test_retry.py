@@ -1,7 +1,6 @@
 """Tests for retry logic."""
 
 import pytest
-import asyncio
 
 from agent_smith.retry import (
     RetryConfig,

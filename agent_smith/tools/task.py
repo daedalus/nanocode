@@ -1,6 +1,6 @@
 """Task tool for launching subagents."""
 
-from typing import Any, Optional
+from typing import Optional
 import uuid
 from dataclasses import dataclass, field
 
@@ -10,11 +10,8 @@ from agent_smith.agents import (
     AgentInfo,
     AgentMode,
     PermissionAction,
-    PermissionRule,
-    get_agent_registry,
 )
 from agent_smith.agents.permission import PermissionHandler
-from agent_smith.llm import Message
 
 
 TASK_DESCRIPTION = """Launch a new agent to handle complex, multistep tasks autonomously.

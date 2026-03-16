@@ -1,7 +1,6 @@
 """File tracking for auto-reload on modification."""
 
 import os
-import time
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass, field
@@ -109,7 +108,7 @@ class FileTracker:
             content = Path(path).read_text()
             self.set(path, content)
             return content, True
-        except Exception as e:
+        except Exception:
             cached = self._cache.get(path)
             if cached:
                 return cached.content, False

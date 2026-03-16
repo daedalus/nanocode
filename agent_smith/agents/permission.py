@@ -1,6 +1,6 @@
 """Permission system for tool execution control."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Awaitable, Optional
 from enum import Enum
 import uuid

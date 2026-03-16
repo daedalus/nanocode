@@ -3,16 +3,9 @@
 import pytest
 import os
 import subprocess
-import tempfile
-import shutil
-from pathlib import Path
 from agent_smith.worktree import (
     WorktreeInfo,
-    WorktreeError,
     NotGitError,
-    CreateFailedError,
-    RemoveFailedError,
-    ResetFailedError,
     generate_name,
     list_worktrees,
     get_worktree_root,

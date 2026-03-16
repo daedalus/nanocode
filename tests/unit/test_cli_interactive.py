@@ -1,6 +1,5 @@
 """Tests for InteractiveCLI command processing."""
 
-import pytest
 from unittest.mock import Mock, AsyncMock, patch
 import sys
 import os
@@ -629,7 +628,6 @@ class TestAgentDebug:
 
     def test_agent_debug_attribute_in_class(self):
         """Test that AutonomousAgent class has debug in __init__."""
-        import ast
         import inspect
         from agent_smith.core import AutonomousAgent
 

@@ -1,12 +1,9 @@
 """WhatsApp messaging platform integration."""
 
 import os
-import asyncio
 import logging
 import hashlib
 import hmac
-import time
-from typing import Any
 from aiohttp import web
 
 from agent_smith.messaging import MessagingPlatform, Message

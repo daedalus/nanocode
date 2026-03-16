@@ -11,7 +11,6 @@ from agent_smith.patch import (
     generate_unified_diff,
     PatchType,
     ParseError,
-    ComputeReplacementsError,
 )
 
 
@@ -110,7 +109,6 @@ def test_generate_unified_diff():
 @pytest.mark.asyncio
 async def test_apply_patch_add():
     """Test applying an add file patch."""
-    import asyncio
 
     with tempfile.TemporaryDirectory() as tmpdir:
         test_file = os.path.join(tmpdir, "new_file.py")

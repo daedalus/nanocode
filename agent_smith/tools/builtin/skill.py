@@ -1,6 +1,5 @@
 """Skill tool for executing custom commands."""
 
-from typing import Any
 
 from agent_smith.tools import Tool, ToolResult
 from agent_smith.skills import SkillsManager

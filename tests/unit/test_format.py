@@ -1,8 +1,6 @@
 """Tests for format functionality."""
 
 import pytest
-import os
-from pathlib import Path
 from agent_smith.format import (
     FormatterInfo,
     get_formatter_for_file,

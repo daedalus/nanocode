@@ -3,15 +3,12 @@
 import pytest
 
 from agent_smith.acp import (
-    ACPError,
     ACPParseError,
     ACPInvalidRequest,
     ACPMethodNotFound,
     ACPInvalidParams,
     ACPInternalError,
     ACPProtocolVersion,
-    ACPCapabilities,
-    ACPVersion,
     ACPContentBlock,
     ACPMessage,
     ACPToolUse,

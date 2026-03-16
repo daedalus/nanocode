@@ -1,9 +1,8 @@
 """Snapshot tools for capturing and reverting changes."""
 
-from typing import Optional
 
 from agent_smith.tools import Tool, ToolResult
-from agent_smith.snapshot import SnapshotManager, SnapshotNotFoundError
+from agent_smith.snapshot import SnapshotManager
 
 
 class SnapshotTrackTool(Tool):

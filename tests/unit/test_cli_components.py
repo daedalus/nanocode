@@ -1,7 +1,6 @@
 """Tests for CLI functionality."""
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import sys
 import os
 

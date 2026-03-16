@@ -669,7 +669,7 @@ class InteractiveCLI:
         """Fetch models for a specific provider."""
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(f"https://models.dev/api.json", timeout=10.0)
+                response = await client.get("https://models.dev/api.json", timeout=10.0)
                 if response.status_code == 200:
                     data = response.json()
                     provider_data = data.get(provider_id, {})

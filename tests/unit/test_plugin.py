@@ -2,20 +2,16 @@
 
 import pytest
 import asyncio
-import os
 import tempfile
-from pathlib import Path
 from agent_smith.plugin import (
     Plugin,
     PluginMetadata,
     PluginContext,
-    PluginManager,
     PluginHookType,
     get_plugin_manager,
     register_plugin,
     unregister_plugin,
     list_plugins,
-    trigger_hook,
 )
 
 

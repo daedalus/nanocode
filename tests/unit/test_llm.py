@@ -3,10 +3,9 @@
 import pytest
 import tempfile
 import os
-import json
 
-from agent_smith.llm.registry import ModelRegistry, ModelInfo, ProviderInfo
-from agent_smith.llm.router import ProviderRouter, ParsedModelID, ProviderConfig
+from agent_smith.llm.registry import ModelRegistry
+from agent_smith.llm.router import ProviderRouter
 
 
 class TestModelRegistry:

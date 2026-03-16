@@ -96,7 +96,7 @@ class EventBus:
         """
         if event_type == "*":
             self._wildcard_subscriptions.append(callback)
-            logger.debug(f"Subscribed to wildcard events")
+            logger.debug("Subscribed to wildcard events")
         else:
             if event_type not in self._subscriptions:
                 self._subscriptions[event_type] = []
@@ -230,7 +230,7 @@ class EventBus:
             logger.debug("Unsubscribed from all events")
         elif event_type == "*":
             self._wildcard_subscriptions.clear()
-            logger.debug(f"Unsubscribed from wildcard events")
+            logger.debug("Unsubscribed from wildcard events")
         else:
             self._subscriptions.pop(event_type, None)
             logger.debug(f"Unsubscribed from event: {event_type}")

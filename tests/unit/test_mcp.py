@@ -1,9 +1,7 @@
 """Tests for MCP (Model Context Protocol) module."""
 
 import pytest
-import asyncio
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from agent_smith.mcp import (
     MCPProtocol,

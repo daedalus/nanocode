@@ -1,8 +1,6 @@
 """Tests for CLI commands module."""
 
-import pytest
 from agent_smith.cli.commands import (
-    Command,
     COMMANDS,
     get_command_help,
     find_command,

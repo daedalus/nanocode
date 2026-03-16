@@ -1,7 +1,6 @@
 """Free web search tools using various free APIs."""
 
 import os
-from typing import Optional
 
 from agent_smith.tools import Tool, ToolResult
 

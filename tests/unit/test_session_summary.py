@@ -2,9 +2,6 @@
 
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
-from pathlib import Path
-import tempfile
-import os
 
 from agent_smith.session_summary import (
     SessionSummaryGenerator,

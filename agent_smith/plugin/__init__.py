@@ -204,7 +204,7 @@ class PluginManager:
                 if asyncio.iscoroutine(result):
                     result = await result
                 results.append(result)
-            except Exception as e:
+            except Exception:
                 pass
 
         return results

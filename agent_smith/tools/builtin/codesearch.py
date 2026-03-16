@@ -3,7 +3,6 @@
 import os
 import json
 import asyncio
-from typing import Optional
 
 from agent_smith.tools import Tool, ToolResult
 

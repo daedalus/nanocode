@@ -1,7 +1,6 @@
 """Configuration management for the autonomous agent."""
 
 import os
-import json
 from pathlib import Path
 from typing import Any, Optional
 import yaml

@@ -1,11 +1,8 @@
 """Session summary generation - creates PR-like summaries of agent work."""
 
-import asyncio
 import os
 import subprocess
 from dataclasses import dataclass, field
-from typing import Optional
-from pathlib import Path
 
 
 SUMMARY_PROMPT = """Summarize what was done in this conversation. Write like a pull request description.

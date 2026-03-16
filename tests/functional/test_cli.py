@@ -2,7 +2,6 @@
 
 import pytest
 from unittest.mock import Mock, patch, AsyncMock
-import asyncio
 from agent_smith.cli import ConsoleUI, InteractiveCLI
 from agent_smith.core import AutonomousAgent
 

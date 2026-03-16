@@ -3,7 +3,6 @@
 import pytest
 
 from agent_smith.server import (
-    HTTPError,
     NotFoundError,
     BadRequestError,
     UnauthorizedError,

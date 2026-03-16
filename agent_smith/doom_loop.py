@@ -1,7 +1,7 @@
 """Doom loop detection - detects repeated tool calls that may indicate infinite loops."""
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Optional
 from collections import defaultdict
 import json
 

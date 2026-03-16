@@ -1,0 +1,99 @@
+admin:
+  enabled: true
+  host: 127.0.0.1
+  port: 7890
+context:
+  max_tokens: 8000
+  preserve_last_n: 3
+  preserve_system: true
+  strategy: sliding_window
+  summarize_threshold: 0.8
+exa:
+  api_key: ${EXA_API_KEY}
+  default_type: auto
+  num_results: 10
+file_tracker:
+  cache_dir: .agent/cache
+  enabled: true
+file_watcher:
+  enabled: true
+  ignore:
+  - .git
+  - __pycache__
+  - '*.pyc'
+  - .pytest_cache
+  - node_modules
+  - .DS_Store
+  - '*.swp'
+  - '*.tmp'
+  - .venv
+  - venv
+github: null
+llm:
+  default_model: opencode/bigpickle
+  default_provider: opencode
+  providers:
+    anthropic:
+      api_key: ${ANTHROPIC_API_KEY}
+      model: claude-3-5-sonnet-20241022
+    groq:
+      api_key: ${GROQ_API_KEY}
+    lm-studio:
+      base_url: http://localhost:1234/v1
+      model: local-model
+    ollama:
+      base_url: http://localhost:11434
+      model: llama3
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      base_url: https://api.openai.com/v1
+      model: gpt-4o
+    opencode:
+      api_key: public
+      base_url: https://opencode.ai/zen/v1
+      model: bigpickle
+  use_model_registry: true
+mcp:
+  servers:
+    exa:
+      enabled: false
+      url: https://mcp.exa.ai/mcp?tools=web_search_exa,deep_search_exa,get_code_context_exa
+    filesystem:
+      enabled: false
+      url: http://localhost:3000
+    git:
+      enabled: false
+      url: http://localhost:3001
+    openwebsearch:
+      enabled: false
+      url: https://open-web-search.vercel.app/mcp
+planning:
+  checkpoint_enabled: true
+  max_retries: 3
+  max_steps: 20
+skills:
+  directories:
+  - .agent/skills
+  - .agent/commands
+snapshot:
+  enabled: true
+  prune_days: 7
+storage:
+  db_path: ~/.agent_smith/data/agent_smith.db
+  enabled: true
+tools:
+  enabled:
+  - bash
+  - read
+  - write
+  - edit
+  - glob
+  - grep
+  - ls
+  - webfetch
+  - websearch
+  - exa
+  - exa_fetch
+  - free_exa
+  - openwebsearch
+  - todo

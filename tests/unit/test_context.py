@@ -6,7 +6,6 @@ from agent_smith.context import (
     ContextStrategy,
     TokenCounter,
     Message,
-    MessagePart,
     MessagePartType,
     ModelLimits,
     ScrapManager,

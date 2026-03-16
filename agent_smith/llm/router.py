@@ -4,7 +4,7 @@ Supports model ID format: provider/model (e.g., "openai/gpt-4o", "anthropic/clau
 """
 
 import os
-from typing import Any, Optional
+from typing import Optional
 from dataclasses import dataclass
 
 from agent_smith.llm.registry import ModelRegistry, get_registry
