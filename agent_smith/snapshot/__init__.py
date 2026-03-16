@@ -146,9 +146,32 @@ class SnapshotManager:
                 check=True,
             )
 
-            return result.stdout.strip()
+            snapshot_hash = result.stdout.strip()
+
+            self._save_snapshot_timestamp(snapshot_hash)
+
+            return snapshot_hash
         except subprocess.CalledProcessError:
             return None
+
+    def _save_snapshot_timestamp(self, snapshot_hash: str):
+        """Save timestamp for a snapshot."""
+        timestamps_file = self.snapshot_dir / "timestamps.json"
+        timestamps = {}
+        if timestamps_file.exists():
+            try:
+                with open(timestamps_file) as f:
+                    timestamps = json.load(f)
+            except Exception:
+                pass
+
+        timestamps[snapshot_hash] = datetime.now().isoformat()
+
+        try:
+            with open(timestamps_file, "w") as f:
+                json.dump(timestamps, f)
+        except Exception:
+            pass
 
     async def patch(self, snapshot_hash: str) -> Patch:
         """Get the diff/patch between current state and a snapshot.
@@ -214,7 +237,7 @@ class SnapshotManager:
         git_dir = self._git_dir()
 
         try:
-            subprocess.run(
+            result = subprocess.run(
                 [
                     "git",
                     "-c",
@@ -225,6 +248,7 @@ class SnapshotManager:
                 ],
                 cwd=self.base_dir,
                 capture_output=True,
+                text=True,
                 check=True,
             )
 
@@ -243,7 +267,7 @@ class SnapshotManager:
             )
 
             return True
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as e:
             return False
 
     async def list_snapshots(self) -> list[dict]:
@@ -295,21 +319,38 @@ class SnapshotManager:
         if not objects_dir.exists():
             return []
 
+        timestamps_file = self.snapshot_dir / "timestamps.json"
+        timestamps = {}
+        if timestamps_file.exists():
+            try:
+                with open(timestamps_file) as f:
+                    timestamps = json.load(f)
+            except Exception:
+                pass
+
         snapshots = []
         try:
             for obj_dir in objects_dir.iterdir():
                 if obj_dir.is_dir() and len(obj_dir.name) == 2:
                     for obj_file in obj_dir.iterdir():
                         if obj_file.is_file():
+                            snapshot_hash = obj_dir.name + obj_file.name
                             snapshots.append(
                                 {
-                                    "hash": obj_dir.name + obj_file.name,
-                                    "timestamp": "unknown",
+                                    "hash": snapshot_hash,
+                                    "timestamp": timestamps.get(snapshot_hash, "unknown"),
                                 }
                             )
         except Exception:
             pass
 
+        def sort_key(s):
+            ts = s.get("timestamp", "unknown")
+            if ts == "unknown":
+                return ""
+            return ts
+
+        snapshots.sort(key=sort_key, reverse=True)
         return snapshots[:20]
 
     async def get_snapshot_info(self, snapshot_hash: str) -> Optional[dict]:
