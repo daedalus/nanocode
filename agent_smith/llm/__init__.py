@@ -98,6 +98,7 @@ class LLMBase(ABC):
         base_url: str = None,
         model: str = None,
         retry_config: RetryConfig = None,
+        user_agent: str = None,
         **kwargs,
     ):
         self.api_key = api_key or os.getenv("API_KEY")
@@ -105,6 +106,7 @@ class LLMBase(ABC):
         self.model = model
         self.extra_kwargs = kwargs
         self.retry_config = retry_config or RetryConfig.default()
+        self.user_agent = user_agent or "agent_smith/1.0"
 
     @abstractmethod
     async def chat(self, messages: list, tools: list[dict] = None, **kwargs) -> LLMResponse:
@@ -141,6 +143,11 @@ class LLMBase(ABC):
         **kwargs,
     ) -> httpx.Response:
         """Make an HTTP request with retry logic."""
+
+        if headers is None:
+            headers = {}
+        if "User-Agent" not in headers:
+            headers["User-Agent"] = self.user_agent
 
         async def make_request():
             async with httpx.AsyncClient() as client:

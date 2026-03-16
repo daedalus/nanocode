@@ -115,6 +115,7 @@ class AutonomousAgent:
         """Initialize LLM provider."""
         use_registry = self.config.get("llm.use_model_registry", False)
         default_model = self.config.get("llm.default_model")
+        user_agent = self.config.get("llm.user_agent", "agent_smith/1.0")
 
         if use_registry and default_model:
             from agent_smith.llm.router import ProviderRouter, get_router
@@ -133,17 +134,20 @@ class AutonomousAgent:
                 self.llm = AnthropicLLM(
                     api_key=provider_config.api_key,
                     model=provider_config.model,
+                    user_agent=user_agent,
                 )
             elif provider_config.provider == "ollama":
                 self.llm = OllamaLLM(
                     base_url=provider_config.base_url,
                     model=provider_config.model,
+                    user_agent=user_agent,
                 )
             else:
                 self.llm = OpenAILLM(
                     base_url=provider_config.base_url,
                     api_key=provider_config.api_key or "dummy",
                     model=provider_config.model,
+                    user_agent=user_agent,
                 )
         else:
             providers = self.config.providers
@@ -151,9 +155,11 @@ class AutonomousAgent:
 
             if default in providers:
                 provider_config = providers[default]
-                self.llm = create_llm(default, **provider_config)
+                self.llm = create_llm(default, **provider_config, user_agent=user_agent)
             else:
-                self.llm = create_llm("openai", api_key="dummy", model="gpt-4")
+                self.llm = create_llm(
+                    "openai", api_key="dummy", model="gpt-4", user_agent=user_agent
+                )
 
     def _init_tools(self):
         """Initialize tool system."""
