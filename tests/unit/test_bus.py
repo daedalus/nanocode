@@ -1,6 +1,6 @@
 """Tests for event bus functionality."""
 
-from agent_smith.bus import (
+from nanocode.bus import (
     EventBus,
     Event,
     EventType,

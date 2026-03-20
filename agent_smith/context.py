@@ -204,7 +204,7 @@ class ModelLimits:
         """Get the model registry."""
         if cls._registry is None:
             try:
-                from agent_smith.llm.registry import get_registry
+                from nanocode.llm.registry import get_registry
 
                 cls._registry = get_registry()
             except ImportError:
@@ -307,7 +307,7 @@ class ScrapManager:
     """Manages scrap files for large tool outputs."""
 
     def __init__(self, scrap_dir: str = None):
-        self.scrap_dir = scrap_dir or os.path.join(tempfile.gettempdir(), "agent_smith", "scrap")
+        self.scrap_dir = scrap_dir or os.path.join(tempfile.gettempdir(), "nanocode", "scrap")
         os.makedirs(self.scrap_dir, exist_ok=True)
 
     def save(self, content: str, extension: str = "txt") -> str:
@@ -725,7 +725,7 @@ class ContextManager:
 Summary:"""
 
         try:
-            from agent_smith.llm import Message as LLMMessage
+            from nanocode.llm import Message as LLMMessage
 
             response = await self.llm.chat([LLMMessage("user", prompt)])
             return response.content[:1500]

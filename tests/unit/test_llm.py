@@ -4,8 +4,8 @@ import pytest
 import tempfile
 import os
 
-from agent_smith.llm.registry import ModelRegistry
-from agent_smith.llm.router import ProviderRouter
+from nanocode.llm.registry import ModelRegistry
+from nanocode.llm.router import ProviderRouter
 
 
 class TestModelRegistry:

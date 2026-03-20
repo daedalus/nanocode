@@ -36,7 +36,7 @@ class SnapshotManager:
     Uses a separate git repository to track file states, similar to opencode.
     """
 
-    SNAPSHOT_DIR = ".agent_smith/snapshots"
+    SNAPSHOT_DIR = ".nanocode/snapshots"
     DEFAULT_PRUNE_AGE_DAYS = 7
 
     def __init__(self, base_dir: str = None):

@@ -28,7 +28,7 @@ class VisionProcessor:
 
         prompt = prompt or "Describe this image in detail."
 
-        from agent_smith.llm import Message
+        from nanocode.llm import Message
 
         content = [
             {"type": "text", "text": prompt},

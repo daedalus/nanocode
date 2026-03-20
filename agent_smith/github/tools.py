@@ -1,8 +1,8 @@
 """GitHub tools for the agent."""
 
 from typing import Optional
-from agent_smith.tools import Tool, ToolResult
-from agent_smith.github import GitHubClient, GitHubGitOperations, create_github_client
+from nanocode.tools import Tool, ToolResult
+from nanocode.github import GitHubClient, GitHubGitOperations, create_github_client
 
 
 class GitHubTool(Tool):

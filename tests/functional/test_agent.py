@@ -3,9 +3,9 @@
 import pytest
 from unittest.mock import Mock, patch
 
-from agent_smith.core import AutonomousAgent
-from agent_smith.state import AgentState, ExecutionPlan, TaskStep
-from agent_smith.llm import Message, LLMResponse, ToolCall
+from nanocode.core import AutonomousAgent
+from nanocode.state import AgentState, ExecutionPlan, TaskStep
+from nanocode.llm import Message, LLMResponse, ToolCall
 
 
 class TestAgentState:
@@ -88,7 +88,7 @@ class MockToolExecutor:
         pass
 
     async def execute(self, tool_name: str, args: dict):
-        from agent_smith.tools import ToolResult
+        from nanocode.tools import ToolResult
 
         return ToolResult(success=True, content=f"Executed {tool_name}")
 
@@ -117,7 +117,7 @@ class TestAutonomousAgent:
 
     def test_agent_initialization(self, mock_config):
         """Test agent initialization."""
-        with patch("agent_smith.core.create_llm") as mock_create:
+        with patch("nanocode.core.create_llm") as mock_create:
             mock_create.return_value = MockLLM()
 
             agent = AutonomousAgent(mock_config)
@@ -127,7 +127,7 @@ class TestAutonomousAgent:
 
     def test_agent_has_tool_registry(self, mock_config):
         """Test agent has tool registry."""
-        with patch("agent_smith.core.create_llm") as mock_create:
+        with patch("nanocode.core.create_llm") as mock_create:
             mock_create.return_value = MockLLM()
 
             agent = AutonomousAgent(mock_config)
@@ -136,7 +136,7 @@ class TestAutonomousAgent:
 
     def test_agent_has_file_tracker(self, mock_config):
         """Test agent has file tracker."""
-        with patch("agent_smith.core.create_llm") as mock_create:
+        with patch("nanocode.core.create_llm") as mock_create:
             mock_create.return_value = MockLLM()
 
             agent = AutonomousAgent(mock_config)
@@ -151,12 +151,12 @@ class TestAutonomousAgentAsync:
     def agent_with_mock_llm(self):
         """Create agent with mock LLM."""
 
-        with patch("agent_smith.llm.OpenAILLM") as MockOpenAI:
+        with patch("nanocode.llm.OpenAILLM") as MockOpenAI:
             mock_instance = MockLLM("Test response")
             MockOpenAI.return_value = mock_instance
-            with patch("agent_smith.llm.AnthropicLLM") as MockAnthropic:
+            with patch("nanocode.llm.AnthropicLLM") as MockAnthropic:
                 MockAnthropic.return_value = mock_instance
-                with patch("agent_smith.llm.OllamaLLM") as MockOllama:
+                with patch("nanocode.llm.OllamaLLM") as MockOllama:
                     MockOllama.return_value = mock_instance
                     agent = AutonomousAgent()
                     yield agent
@@ -175,7 +175,7 @@ class TestConfig:
 
     def test_config_get(self):
         """Test config get method."""
-        from agent_smith.config import Config
+        from nanocode.config import Config
 
         config = Config()
 
@@ -184,7 +184,7 @@ class TestConfig:
 
     def test_config_set(self):
         """Test config set method."""
-        from agent_smith.config import Config
+        from nanocode.config import Config
 
         config = Config()
         config.set("test.value", "hello")

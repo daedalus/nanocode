@@ -159,7 +159,7 @@ class MCPStdioConnection(MCPConnection):
                 "params": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
-                    "clientInfo": {"name": "agent_smith", "version": "0.1.0"},
+                    "clientInfo": {"name": "nanocode", "version": "0.1.0"},
                 },
             }
         )
@@ -206,7 +206,7 @@ class MCPSSEConnection(MCPConnection):
                 "params": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
-                    "clientInfo": {"name": "agent_smith", "version": "0.1.0"},
+                    "clientInfo": {"name": "nanocode", "version": "0.1.0"},
                 },
             }
         )

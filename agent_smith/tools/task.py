@@ -4,14 +4,14 @@ from typing import Optional
 import uuid
 from dataclasses import dataclass, field
 
-from agent_smith.tools import Tool, ToolResult
-from agent_smith.agents import (
+from nanocode.tools import Tool, ToolResult
+from nanocode.agents import (
     AgentRegistry,
     AgentInfo,
     AgentMode,
     PermissionAction,
 )
-from agent_smith.agents.permission import PermissionHandler
+from nanocode.agents.permission import PermissionHandler
 
 
 TASK_DESCRIPTION = """Launch a new agent to handle complex, multistep tasks autonomously.

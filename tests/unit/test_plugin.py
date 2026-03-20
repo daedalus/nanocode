@@ -3,7 +3,7 @@
 import pytest
 import asyncio
 import tempfile
-from agent_smith.plugin import (
+from nanocode.plugin import (
     Plugin,
     PluginMetadata,
     PluginContext,

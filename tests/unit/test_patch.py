@@ -4,7 +4,7 @@ import pytest
 import tempfile
 import os
 from pathlib import Path
-from agent_smith.patch import (
+from nanocode.patch import (
     parse_patch,
     apply_patch,
     derive_new_contents,
@@ -79,7 +79,7 @@ def test_derive_new_contents():
         temp_path = f.name
 
     try:
-        from agent_smith.patch import UpdateFileChunk
+        from nanocode.patch import UpdateFileChunk
 
         chunks = [
             UpdateFileChunk(
@@ -169,7 +169,7 @@ async def test_apply_patch_delete():
 
 def test_strip_heredoc():
     """Test stripping heredoc syntax."""
-    from agent_smith.patch import strip_heredoc
+    from nanocode.patch import strip_heredoc
 
     input_text = """cat <<'EOF'
 content here
@@ -443,7 +443,7 @@ async def test_apply_patch_delete_nonexistent_file():
 
 def test_seek_sequence_edge_cases():
     """Test seek_sequence with various edge cases."""
-    from agent_smith.patch import seek_sequence
+    from nanocode.patch import seek_sequence
 
     lines = ["a", "b", "c", "d", "e"]
 
@@ -458,7 +458,7 @@ def test_seek_sequence_edge_cases():
 
 def test_seek_sequence_with_trailing_whitespace():
     """Test seek_sequence handles trailing whitespace."""
-    from agent_smith.patch import seek_sequence
+    from nanocode.patch import seek_sequence
 
     lines = ["content  ", "  spaced"]
 
@@ -468,7 +468,7 @@ def test_seek_sequence_with_trailing_whitespace():
 
 def test_normalize_unicode_edge_cases():
     """Test Unicode normalization handles edge cases."""
-    from agent_smith.patch import normalize_unicode
+    from nanocode.patch import normalize_unicode
 
     assert normalize_unicode("hello") == "hello"
     assert normalize_unicode("") == ""
@@ -479,7 +479,7 @@ def test_normalize_unicode_edge_cases():
 
 def test_compute_replacements_no_context():
     """Test compute_replacements without context line."""
-    from agent_smith.patch import compute_replacements, UpdateFileChunk
+    from nanocode.patch import compute_replacements, UpdateFileChunk
 
     lines = ["line1", "line2", "line3"]
     chunks = [
@@ -498,7 +498,7 @@ def test_compute_replacements_no_context():
 
 def test_apply_replacements_order():
     """Test applying replacements in reverse order."""
-    from agent_smith.patch import apply_replacements
+    from nanocode.patch import apply_replacements
 
     lines = ["a", "b", "c", "d", "e"]
     replacements = [

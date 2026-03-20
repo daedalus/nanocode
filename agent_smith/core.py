@@ -5,24 +5,24 @@ import logging
 import traceback
 from typing import Optional
 
-from agent_smith.llm import create_llm
-from agent_smith.tools import ToolRegistry, ToolExecutor
-from agent_smith.tools.builtin import register_builtin_tools
-from agent_smith.tools.file_tracker import FileTracker
-from agent_smith.state import AgentState, AgentStateData
-from agent_smith.planning import TaskPlanner, PlanExecutor, PlanMonitor, PlanningContext
-from agent_smith.mcp import MCPManager
-from agent_smith.multimodal import MultimodalManager
-from agent_smith.lsp import LSPServerManager
-from agent_smith.context import ContextManager, ContextStrategy
-from agent_smith.config import get_config
-from agent_smith.agents import AgentInfo, get_agent_registry, PermissionAction
-from agent_smith.agents.permission import (
+from nanocode.llm import create_llm
+from nanocode.tools import ToolRegistry, ToolExecutor
+from nanocode.tools.builtin import register_builtin_tools
+from nanocode.tools.file_tracker import FileTracker
+from nanocode.state import AgentState, AgentStateData
+from nanocode.planning import TaskPlanner, PlanExecutor, PlanMonitor, PlanningContext
+from nanocode.mcp import MCPManager
+from nanocode.multimodal import MultimodalManager
+from nanocode.lsp import LSPServerManager
+from nanocode.context import ContextManager, ContextStrategy
+from nanocode.config import get_config
+from nanocode.agents import AgentInfo, get_agent_registry, PermissionAction
+from nanocode.agents.permission import (
     PermissionHandler,
 )
-from agent_smith.session_summary import SessionSummaryGenerator
+from nanocode.session_summary import SessionSummaryGenerator
 
-tool_logger = logging.getLogger("agent_smith.tools")
+tool_logger = logging.getLogger("nanocode.tools")
 
 
 class AutonomousAgent:
@@ -86,7 +86,7 @@ class AutonomousAgent:
 
     def get_disabled_tools(self) -> set:
         """Get tools disabled for the current agent."""
-        from agent_smith.agents import get_disabled_tools
+        from nanocode.agents import get_disabled_tools
 
         tools = [t.name for t in self.tool_registry.list_tools()]
         if self.current_agent is None:
@@ -109,10 +109,10 @@ class AutonomousAgent:
         """Initialize LLM provider."""
         use_registry = self.config.get("llm.use_model_registry", False)
         default_model = self.config.get("llm.default_model")
-        user_agent = self.config.get("llm.user_agent", "agent_smith/1.0")
+        user_agent = self.config.get("llm.user_agent", "nanocode/1.0")
 
         if use_registry and default_model:
-            from agent_smith.llm.router import get_router
+            from nanocode.llm.router import get_router
 
             providers = self.config.get("llm.providers", {})
             router = get_router()
@@ -122,7 +122,7 @@ class AutonomousAgent:
 
             provider_config = router.get_provider_config(default_model)
 
-            from agent_smith.llm import OpenAILLM, AnthropicLLM, OllamaLLM
+            from nanocode.llm import OpenAILLM, AnthropicLLM, OllamaLLM
 
             if provider_config.provider == "anthropic":
                 self.llm = AnthropicLLM(
@@ -157,8 +157,8 @@ class AutonomousAgent:
 
     def _init_tools(self):
         """Initialize tool system."""
-        from agent_smith.tools.task import create_task_tool
-        from agent_smith.doom_loop import create_doom_loop_handler
+        from nanocode.tools.task import create_task_tool
+        from nanocode.doom_loop import create_doom_loop_handler
 
         self.tool_registry = ToolRegistry()
         self.tool_executor = ToolExecutor(self.tool_registry)

@@ -242,7 +242,7 @@ Conversation:
 Summary:"""
 
         try:
-            from agent_smith.llm import Message as LLMMessage
+            from nanocode.llm import Message as LLMMessage
 
             response = await self.llm.chat([LLMMessage(role="user", content=prompt)])
             return response.content.strip() if response.content else ""

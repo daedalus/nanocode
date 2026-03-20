@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from agent_smith.mcp import (
+from nanocode.mcp import (
     MCPProtocol,
     MCPResource,
     MCPTool,

@@ -9,7 +9,7 @@ import logging
 # Add the agent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent_smith.cli import InteractiveCLI, ConsoleUI
+from nanocode.cli import InteractiveCLI, ConsoleUI
 
 
 class TestInteractiveCLI:
@@ -366,7 +366,7 @@ class TestPromptHistoryNavigation:
 
     def test_readline_available_flag_exists(self):
         """Test that READLINE_AVAILABLE flag is defined."""
-        from agent_smith.cli import READLINE_AVAILABLE
+        from nanocode.cli import READLINE_AVAILABLE
 
         assert isinstance(READLINE_AVAILABLE, bool)
 
@@ -629,7 +629,7 @@ class TestAgentDebug:
     def test_agent_debug_attribute_in_class(self):
         """Test that AutonomousAgent class has debug in __init__."""
         import inspect
-        from agent_smith.core import AutonomousAgent
+        from nanocode.core import AutonomousAgent
 
         source = inspect.getsource(AutonomousAgent.__init__)
         assert "self.debug = False" in source
@@ -640,7 +640,7 @@ class TestAgentDebug:
         mock_agent.debug = False
         mock_agent.debug = True
         assert mock_agent.debug is True
-        from agent_smith import core
+        from nanocode import core
 
         assert hasattr(core, "tool_logger")
-        assert core.tool_logger.name == "agent_smith.tools"
+        assert core.tool_logger.name == "nanocode.tools"

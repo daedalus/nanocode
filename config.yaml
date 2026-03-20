@@ -2,7 +2,7 @@ llm:
   default_provider: opencode
   use_model_registry: true  # Use models.dev for model discovery
   default_model: "opencode/minimax-m2.5-free"  # Free model via OpenCode Zen
-  user_agent: "agent_smith/1.0"  # Custom User-Agent for HTTP requests  
+  user_agent: "nanocode/1.0"  # Custom User-Agent for HTTP requests  
   providers:
     opencode:
       api_key: public  # Use "public" for free models
@@ -100,7 +100,7 @@ exa:
 
 storage:
   enabled: true
-  db_path: ~/.agent_smith/data/agent_smith.db
+  db_path: ~/.nanocode/data/nanocode.db
 
 skills:
   directories:

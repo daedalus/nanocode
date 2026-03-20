@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_smith.server import (
+from nanocode.server import (
     NotFoundError,
     BadRequestError,
     UnauthorizedError,

@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_smith.acp import (
+from nanocode.acp import (
     ACPParseError,
     ACPInvalidRequest,
     ACPMethodNotFound,

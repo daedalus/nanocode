@@ -1,7 +1,7 @@
 """Skill tool for executing custom commands."""
 
-from agent_smith.tools import Tool, ToolResult
-from agent_smith.skills import SkillsManager
+from nanocode.tools import Tool, ToolResult
+from nanocode.skills import SkillsManager
 
 
 class SkillTool(Tool):

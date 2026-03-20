@@ -1,4 +1,4 @@
-"""PTY (Pseudo-Terminal) support for agent_smith."""
+"""PTY (Pseudo-Terminal) support for nanocode."""
 
 import os
 import pty

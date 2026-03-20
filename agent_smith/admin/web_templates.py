@@ -820,7 +820,7 @@ def get_settings_html() -> str:
             <div class="card-body">
                 <p><strong>Agent Smith</strong> - Autonomous AI Agent</p>
                 <p class="text-muted">Version 0.1.0</p>
-                <a href="https://github.com/daedalus/agent_smith" class="btn btn-outline-secondary btn-sm">
+                <a href="https://github.com/daedalus/nanocode" class="btn btn-outline-secondary btn-sm">
                     <i class="bi bi-github"></i> GitHub
                 </a>
             </div>

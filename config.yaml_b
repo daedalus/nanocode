@@ -79,7 +79,7 @@ snapshot:
   enabled: true
   prune_days: 7
 storage:
-  db_path: ~/.agent_smith/data/agent_smith.db
+  db_path: ~/.nanocode/data/nanocode.db
   enabled: true
 tools:
   enabled:

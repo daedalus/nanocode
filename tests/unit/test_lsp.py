@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import os
 
-from agent_smith.lsp import (
+from nanocode.lsp import (
     LSPServerManager,
     LSPServerInfo,
     LSPClient,

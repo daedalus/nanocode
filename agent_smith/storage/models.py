@@ -1,4 +1,4 @@
-"""Database models for agent_smith."""
+"""Database models for nanocode."""
 
 from datetime import datetime
 from typing import Optional

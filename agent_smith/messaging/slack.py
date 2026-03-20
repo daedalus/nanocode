@@ -5,7 +5,7 @@ import asyncio
 import logging
 from typing import Any
 
-from agent_smith.messaging import MessagingPlatform, Message
+from nanocode.messaging import MessagingPlatform, Message
 
 logger = logging.getLogger(__name__)
 

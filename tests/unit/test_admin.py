@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import Mock, AsyncMock
 
-from agent_smith.admin import AdminConsole, UsageStats
+from nanocode.admin import AdminConsole, UsageStats
 
 
 class TestUsageStats:

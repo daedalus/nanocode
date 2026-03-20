@@ -16,8 +16,8 @@ from dataclasses import dataclass, field
 
 from aiohttp import web
 
-from agent_smith.config import Config, get_config
-from agent_smith.storage import get_storage
+from nanocode.config import Config, get_config
+from nanocode.storage import get_storage
 
 
 @dataclass
@@ -48,7 +48,7 @@ class AdminConsole:
     def _web(self):
         """Lazy load web module."""
         if self._web_module is None:
-            from agent_smith.admin import web_templates
+            from nanocode.admin import web_templates
 
             self._web_module = web_templates
         return self._web_module
@@ -285,7 +285,7 @@ class AdminConsole:
         """Tools page."""
         tools = []
         try:
-            from agent_smith.tools import ToolRegistry
+            from nanocode.tools import ToolRegistry
 
             registry = ToolRegistry()
             for tool in registry.list_tools():

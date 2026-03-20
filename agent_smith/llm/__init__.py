@@ -7,7 +7,7 @@ import os
 
 import httpx
 
-from agent_smith.retry import (
+from nanocode.retry import (
     RetryConfig,
     retry_with_backoff,
     create_error_from_response,
@@ -106,7 +106,7 @@ class LLMBase(ABC):
         self.model = model
         self.extra_kwargs = kwargs
         self.retry_config = retry_config or RetryConfig.default()
-        self.user_agent = user_agent or "agent_smith/1.0"
+        self.user_agent = user_agent or "nanocode/1.0"
 
     @abstractmethod
     async def chat(self, messages: list, tools: list[dict] = None, **kwargs) -> LLMResponse:

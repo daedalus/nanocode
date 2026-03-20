@@ -1,7 +1,7 @@
 """Snapshot tools for capturing and reverting changes."""
 
-from agent_smith.tools import Tool, ToolResult
-from agent_smith.snapshot import SnapshotManager
+from nanocode.tools import Tool, ToolResult
+from nanocode.snapshot import SnapshotManager
 
 
 class SnapshotTrackTool(Tool):

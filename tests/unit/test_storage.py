@@ -4,7 +4,7 @@ import pytest
 import tempfile
 import os
 
-from agent_smith.storage import Database, SessionStorage
+from nanocode.storage import Database, SessionStorage
 
 
 class TestDatabase:

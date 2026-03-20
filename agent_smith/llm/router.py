@@ -7,7 +7,7 @@ import os
 from typing import Optional
 from dataclasses import dataclass
 
-from agent_smith.llm.registry import ModelRegistry, get_registry
+from nanocode.llm.registry import ModelRegistry, get_registry
 
 
 PROVIDER_DEFAULTS = {

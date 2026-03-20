@@ -4,7 +4,7 @@ import os
 import json
 import asyncio
 
-from agent_smith.tools import Tool, ToolResult
+from nanocode.tools import Tool, ToolResult
 
 
 class CodeSearchTool(Tool):

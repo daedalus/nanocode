@@ -2,7 +2,7 @@
 
 import pytest
 import asyncio
-from agent_smith.pty import PtyManager, PtyStatus
+from nanocode.pty import PtyManager, PtyStatus
 
 
 @pytest.mark.asyncio

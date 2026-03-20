@@ -19,9 +19,9 @@ class Database:
     def __init__(self, db_path: str = None):
         if db_path is None:
             home = os.path.expanduser("~")
-            data_dir = os.path.join(home, ".agent_smith", "data")
+            data_dir = os.path.join(home, ".nanocode", "data")
             os.makedirs(data_dir, exist_ok=True)
-            db_path = os.path.join(data_dir, "agent_smith.db")
+            db_path = os.path.join(data_dir, "nanocode.db")
 
         self.db_path = db_path
         self._engine = None

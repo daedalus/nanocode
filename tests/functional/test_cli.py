@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import Mock, patch, AsyncMock
-from agent_smith.cli import ConsoleUI, InteractiveCLI
-from agent_smith.core import AutonomousAgent
+from nanocode.cli import ConsoleUI, InteractiveCLI
+from nanocode.core import AutonomousAgent
 
 
 class TestConsoleUI:
@@ -38,7 +38,7 @@ class TestInteractiveCLI:
     @pytest.fixture
     def mock_agent(self):
         """Create a mock agent."""
-        from agent_smith.state import AgentStateData, AgentState
+        from nanocode.state import AgentStateData, AgentState
 
         agent = Mock(spec=AutonomousAgent)
         agent.state = AgentStateData()
@@ -90,7 +90,7 @@ class TestInteractiveCLI:
         # Mock input to return clear command then exit
         with patch("builtins.input", side_effect=["/clear", "/exit"]):
             with patch.object(cli.ui, "print_welcome"):
-                with patch("agent_smith.cli.os.system") as mock_system:
+                with patch("nanocode.cli.os.system") as mock_system:
                     with patch.object(cli.ui, "print_message"):
                         try:
                             await cli.run()

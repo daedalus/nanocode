@@ -3,7 +3,7 @@
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
-from agent_smith.share import (
+from nanocode.share import (
     ShareInfo,
     get_share_manager,
     create_share,

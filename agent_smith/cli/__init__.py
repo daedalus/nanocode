@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
-from agent_smith.cli.commands import get_command_help, find_command
+from nanocode.cli.commands import get_command_help, find_command
 
 try:
     import readline
@@ -21,7 +21,7 @@ try:
 except ImportError:
     READLINE_AVAILABLE = False
 
-HISTORY_FILE = os.path.expanduser("~/.config/agent_smith/history")
+HISTORY_FILE = os.path.expanduser("~/.config/nanocode/history")
 
 
 class PromptHandler:
@@ -841,7 +841,7 @@ class InteractiveCLI:
     def _list_skills(self):
         """List available skills."""
         try:
-            from agent_smith.skills import create_skills_manager
+            from nanocode.skills import create_skills_manager
 
             manager = create_skills_manager()
             skills = manager.list_skills()
@@ -862,7 +862,7 @@ class InteractiveCLI:
     async def _create_snapshot(self):
         """Create a new snapshot."""
         try:
-            from agent_smith.snapshot import create_snapshot_manager
+            from nanocode.snapshot import create_snapshot_manager
 
             manager = create_snapshot_manager()
             snapshot_hash = await manager.track()
@@ -881,7 +881,7 @@ class InteractiveCLI:
             return
 
         try:
-            from agent_smith.snapshot import create_snapshot_manager
+            from nanocode.snapshot import create_snapshot_manager
 
             manager = create_snapshot_manager()
 
@@ -904,7 +904,7 @@ class InteractiveCLI:
     async def _list_snapshots(self):
         """List available snapshots."""
         try:
-            from agent_smith.snapshot import create_snapshot_manager
+            from nanocode.snapshot import create_snapshot_manager
 
             manager = create_snapshot_manager()
             snapshots = await manager.list_snapshots()
@@ -940,11 +940,11 @@ class InteractiveCLI:
 
         if self.debug:
             logging.getLogger("httpx").setLevel(logging.DEBUG)
-            logging.getLogger("agent_smith.tools").setLevel(logging.DEBUG)
+            logging.getLogger("nanocode.tools").setLevel(logging.DEBUG)
             self.ui.print_info("Debug mode enabled - HTTP requests and tool calls will be logged")
         else:
             logging.getLogger("httpx").setLevel(logging.WARNING)
-            logging.getLogger("agent_smith.tools").setLevel(logging.WARNING)
+            logging.getLogger("nanocode.tools").setLevel(logging.WARNING)
             self.ui.print_info("Debug mode disabled")
 
     async def _compact_context(self):

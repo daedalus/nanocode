@@ -6,7 +6,7 @@ import os
 import time
 from pathlib import Path
 
-from agent_smith.tools.file_tracker import FileTracker
+from nanocode.tools.file_tracker import FileTracker
 
 
 class TestFileTracker:

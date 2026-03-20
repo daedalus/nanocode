@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_smith.agents import (
+from nanocode.agents import (
     AgentMode,
     PermissionAction,
     PermissionRule,

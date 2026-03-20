@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_smith.mdns import (
+from nanocode.mdns import (
     DiscoveredService,
     MDNSService,
     MDNSManager,

@@ -1,5 +1,5 @@
 [project]
-name = "agent_smith"
+name = "nanocode"
 version = "0.1.0.1"
 description = "Autonomous AI agent for console with advanced tool use made by another agent"
 readme = "README.md"
@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-agent-smith-install-skills = "agent_smith.skills:install_skills"
+agent-smith-install-skills = "nanocode.skills:install_skills"
 
 [project.optional-dependencies]
 test = [
@@ -34,7 +34,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["agent_smith*", "sdks*", "web*"]
+include = ["nanocode*", "sdks*", "web*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

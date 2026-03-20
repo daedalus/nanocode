@@ -6,7 +6,7 @@ import os
 import subprocess
 import shutil
 
-from agent_smith.snapshot import SnapshotManager, Patch
+from nanocode.snapshot import SnapshotManager, Patch
 
 
 class TestSnapshotManager:
@@ -185,8 +185,8 @@ class TestSnapshotTools:
     @pytest.mark.asyncio
     async def test_snapshot_tool(self, temp_git_dir):
         """Test snapshot tool creates snapshot."""
-        from agent_smith.snapshot import SnapshotManager
-        from agent_smith.tools.builtin.snapshot import SnapshotTrackTool
+        from nanocode.snapshot import SnapshotManager
+        from nanocode.tools.builtin.snapshot import SnapshotTrackTool
 
         manager = SnapshotManager(temp_git_dir)
         tool = SnapshotTrackTool(manager)
@@ -198,8 +198,8 @@ class TestSnapshotTools:
     @pytest.mark.asyncio
     async def test_revert_tool(self, temp_git_dir):
         """Test revert tool restores files."""
-        from agent_smith.snapshot import SnapshotManager
-        from agent_smith.tools.builtin.snapshot import SnapshotRevertTool
+        from nanocode.snapshot import SnapshotManager
+        from nanocode.tools.builtin.snapshot import SnapshotRevertTool
 
         manager = SnapshotManager(temp_git_dir)
 
@@ -219,8 +219,8 @@ class TestSnapshotTools:
     @pytest.mark.asyncio
     async def test_diff_tool(self, temp_git_dir):
         """Test snapshot_diff tool shows changes."""
-        from agent_smith.snapshot import SnapshotManager
-        from agent_smith.tools.builtin.snapshot import SnapshotDiffTool
+        from nanocode.snapshot import SnapshotManager
+        from nanocode.tools.builtin.snapshot import SnapshotDiffTool
 
         manager = SnapshotManager(temp_git_dir)
 
@@ -240,8 +240,8 @@ class TestSnapshotTools:
     @pytest.mark.asyncio
     async def test_revert_tool(self, temp_git_dir):
         """Test revert tool restores files."""
-        from agent_smith.snapshot import SnapshotManager
-        from agent_smith.tools.builtin.snapshot import SnapshotTrackTool, SnapshotRevertTool
+        from nanocode.snapshot import SnapshotManager
+        from nanocode.tools.builtin.snapshot import SnapshotTrackTool, SnapshotRevertTool
 
         manager = SnapshotManager(temp_git_dir)
 
@@ -266,8 +266,8 @@ class TestSnapshotTools:
     @pytest.mark.asyncio
     async def test_list_snapshots_tool(self, temp_git_dir):
         """Test snapshots tool lists snapshots."""
-        from agent_smith.snapshot import SnapshotManager
-        from agent_smith.tools.builtin.snapshot import SnapshotListTool
+        from nanocode.snapshot import SnapshotManager
+        from nanocode.tools.builtin.snapshot import SnapshotListTool
 
         manager = SnapshotManager(temp_git_dir)
 
@@ -279,8 +279,8 @@ class TestSnapshotTools:
     @pytest.mark.asyncio
     async def test_diff_tool(self, temp_git_dir):
         """Test snapshot_diff tool shows changes."""
-        from agent_smith.snapshot import SnapshotManager
-        from agent_smith.tools.builtin.snapshot import SnapshotTrackTool, SnapshotDiffTool
+        from nanocode.snapshot import SnapshotManager
+        from nanocode.tools.builtin.snapshot import SnapshotTrackTool, SnapshotDiffTool
 
         manager = SnapshotManager(temp_git_dir)
 

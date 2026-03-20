@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_smith.file_watcher import (
+from nanocode.file_watcher import (
     FileWatcher,
     FileWatcherEvent,
     FileEventHandler,

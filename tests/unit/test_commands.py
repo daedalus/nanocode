@@ -1,6 +1,6 @@
 """Tests for CLI commands module."""
 
-from agent_smith.cli.commands import (
+from nanocode.cli.commands import (
     COMMANDS,
     get_command_help,
     find_command,

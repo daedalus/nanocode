@@ -5,7 +5,7 @@ import tempfile
 import os
 from pathlib import Path
 
-from agent_smith.tools import Tool, ToolResult, ToolRegistry, ToolExecutor, FuncTool, SyncFuncTool
+from nanocode.tools import Tool, ToolResult, ToolRegistry, ToolExecutor, FuncTool, SyncFuncTool
 
 
 class TestToolResult:
@@ -213,7 +213,7 @@ class TestBuiltinTools:
     @pytest.mark.asyncio
     async def test_read_file(self, temp_dir):
         """Test read file tool."""
-        from agent_smith.tools.builtin import ReadFileTool
+        from nanocode.tools.builtin import ReadFileTool
 
         test_file = os.path.join(temp_dir, "test.txt")
         Path(test_file).write_text("Hello, World!")
@@ -227,7 +227,7 @@ class TestBuiltinTools:
     @pytest.mark.asyncio
     async def test_write_file(self, temp_dir):
         """Test write file tool."""
-        from agent_smith.tools.builtin import WriteFileTool
+        from nanocode.tools.builtin import WriteFileTool
 
         tool = WriteFileTool(root_dir=temp_dir)
         result = await tool.execute(path="output.txt", content="Test content")
@@ -240,7 +240,7 @@ class TestBuiltinTools:
     @pytest.mark.asyncio
     async def test_glob(self, temp_dir):
         """Test glob tool."""
-        from agent_smith.tools.builtin import GlobTool
+        from nanocode.tools.builtin import GlobTool
 
         Path(os.path.join(temp_dir, "file1.py")).touch()
         Path(os.path.join(temp_dir, "file2.txt")).touch()
@@ -255,7 +255,7 @@ class TestBuiltinTools:
     @pytest.mark.asyncio
     async def test_ls(self, temp_dir):
         """Test ls tool."""
-        from agent_smith.tools.builtin import ListDirTool
+        from nanocode.tools.builtin import ListDirTool
 
         Path(os.path.join(temp_dir, "file1.txt")).touch()
         Path(os.path.join(temp_dir, "file2.txt")).touch()
@@ -279,8 +279,8 @@ class TestNewTools:
     @pytest.mark.asyncio
     async def test_batch_tool(self):
         """Test batch tool executes multiple tools."""
-        from agent_smith.tools.builtin import BatchTool
-        from agent_smith.tools import ToolRegistry, ToolExecutor
+        from nanocode.tools.builtin import BatchTool
+        from nanocode.tools import ToolRegistry, ToolExecutor
 
         registry = ToolRegistry()
         executor = ToolExecutor(registry)
@@ -294,8 +294,8 @@ class TestNewTools:
     @pytest.mark.asyncio
     async def test_batch_tool_with_calls(self, temp_dir):
         """Test batch tool with actual tool calls."""
-        from agent_smith.tools.builtin import BatchTool, ReadFileTool
-        from agent_smith.tools import ToolRegistry, ToolExecutor
+        from nanocode.tools.builtin import BatchTool, ReadFileTool
+        from nanocode.tools import ToolRegistry, ToolExecutor
 
         registry = ToolRegistry()
         registry.register(ReadFileTool(root_dir=temp_dir))
@@ -316,8 +316,8 @@ class TestNewTools:
     @pytest.mark.asyncio
     async def test_batch_tool_disallowed(self):
         """Test batch tool blocks disallowed tools."""
-        from agent_smith.tools.builtin import BatchTool
-        from agent_smith.tools import ToolRegistry, ToolExecutor
+        from nanocode.tools.builtin import BatchTool
+        from nanocode.tools import ToolRegistry, ToolExecutor
 
         registry = ToolRegistry()
         executor = ToolExecutor(registry)
@@ -331,8 +331,8 @@ class TestNewTools:
     @pytest.mark.asyncio
     async def test_batch_tool_max_limit(self):
         """Test batch tool enforces max limit."""
-        from agent_smith.tools.builtin import BatchTool
-        from agent_smith.tools import ToolRegistry, ToolExecutor
+        from nanocode.tools.builtin import BatchTool
+        from nanocode.tools import ToolRegistry, ToolExecutor
 
         registry = ToolRegistry()
         executor = ToolExecutor(registry)
@@ -347,7 +347,7 @@ class TestNewTools:
     @pytest.mark.asyncio
     async def test_multiedit_tool(self, temp_dir):
         """Test multiedit tool."""
-        from agent_smith.tools.builtin import MultiEditTool
+        from nanocode.tools.builtin import MultiEditTool
 
         test_file = os.path.join(temp_dir, "test.txt")
         Path(test_file).write_text("Hello World\nGoodbye World")
@@ -367,7 +367,7 @@ class TestNewTools:
     @pytest.mark.asyncio
     async def test_apply_patch_tool(self, temp_dir):
         """Test apply_patch tool."""
-        from agent_smith.tools.builtin import ApplyPatchTool
+        from nanocode.tools.builtin import ApplyPatchTool
 
         test_file = os.path.join(temp_dir, "test.txt")
         Path(test_file).write_text("Hello World")
@@ -389,7 +389,7 @@ class TestNewTools:
     @pytest.mark.asyncio
     async def test_question_tool(self):
         """Test question tool."""
-        from agent_smith.tools.builtin import QuestionTool
+        from nanocode.tools.builtin import QuestionTool
 
         tool = QuestionTool()
         result = await tool.execute(questions=[{"question": "What is your name?"}])
@@ -400,7 +400,7 @@ class TestNewTools:
     @pytest.mark.asyncio
     async def test_question_tool_multiple(self):
         """Test question tool with multiple questions."""
-        from agent_smith.tools.builtin import QuestionTool
+        from nanocode.tools.builtin import QuestionTool
 
         tool = QuestionTool()
         result = await tool.execute(

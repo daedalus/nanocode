@@ -1,6 +1,6 @@
 """Tests for doom loop detection."""
 
-from agent_smith.doom_loop import (
+from nanocode.doom_loop import (
     DoomLoopDetection,
     DoomLoopHandler,
     ToolCall,

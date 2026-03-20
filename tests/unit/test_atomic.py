@@ -3,7 +3,7 @@
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from agent_smith.tools.builtin import atomic_read, atomic_write
+from nanocode.tools.builtin import atomic_read, atomic_write
 
 
 class TestAtomicWrite:

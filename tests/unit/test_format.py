@@ -1,7 +1,7 @@
 """Tests for format functionality."""
 
 import pytest
-from agent_smith.format import (
+from nanocode.format import (
     FormatterInfo,
     get_formatter_for_file,
     format_file,

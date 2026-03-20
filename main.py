@@ -8,10 +8,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent_smith.core import AutonomousAgent
-from agent_smith.cli import InteractiveCLI
-from agent_smith.config import Config
-from agent_smith.server import run_server
+from nanocode.core import AutonomousAgent
+from nanocode.cli import InteractiveCLI
+from nanocode.config import Config
+from nanocode.server import run_server
 
 
 def parse_args():
@@ -133,7 +133,7 @@ async def run_cli(agent, show_thinking: bool = True):
 
 async def run_acp(agent):
     """Run the ACP server."""
-    from agent_smith.acp import ACPServer
+    from nanocode.acp import ACPServer
 
     print("Starting ACP server...")
     server = ACPServer(agent)
@@ -145,7 +145,7 @@ async def main():
     args = parse_args()
 
     if args.install_skills:
-        from agent_smith.skills import install_skills
+        from nanocode.skills import install_skills
 
         if args.install_skills == "all":
             install_skills()
@@ -169,7 +169,7 @@ async def main():
 
         if args.mdns:
             try:
-                from agent_smith.mdns import get_manager
+                from nanocode.mdns import get_manager
 
                 mdns = get_manager()
                 await mdns.start()
@@ -197,7 +197,7 @@ async def main():
     if args.admin:
         os.chdir(args.cwd)
         config = Config(args.config)
-        from agent_smith.admin import start_admin_console
+        from nanocode.admin import start_admin_console
 
         runner = await start_admin_console(
             config=config,

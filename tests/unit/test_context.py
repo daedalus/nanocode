@@ -1,7 +1,7 @@
 """Tests for context manager."""
 
 import pytest
-from agent_smith.context import (
+from nanocode.context import (
     ContextManager,
     ContextStrategy,
     TokenCounter,

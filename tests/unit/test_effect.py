@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from agent_smith.effect import (
+from nanocode.effect import (
     Signal,
     Trigger,
     Ref,

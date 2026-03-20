@@ -20,7 +20,7 @@ from datetime import datetime
 from enum import Enum
 from abc import ABC, abstractmethod
 
-from agent_smith.llm import Message as LLMMessage
+from nanocode.llm import Message as LLMMessage
 
 
 class HTTPError(Exception):
@@ -308,7 +308,7 @@ class AgentServer:
         return JSONResponse(
             {
                 "status": "ok",
-                "name": "agent_smith",
+                "name": "nanocode",
                 "version": "0.1.0",
             }
         )
@@ -537,7 +537,7 @@ class AgentServer:
         return JSONResponse(
             {
                 "version": "0.1.0",
-                "name": "agent_smith",
+                "name": "nanocode",
                 "auth_enabled": bool(self.auth_username and self.auth_password),
                 "session_count": len(self.session_manager.list()),
             }

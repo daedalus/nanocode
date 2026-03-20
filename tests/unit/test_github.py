@@ -3,25 +3,25 @@
 import pytest
 from unittest.mock import Mock, patch
 
-from agent_smith.github import (
+from nanocode.github import (
     GitHubClient,
     GitHubGitOperations,
     create_github_client,
 )
-from agent_smith.github.tools import GitHubTool
+from nanocode.github.tools import GitHubTool
 
 
 class TestGitHubClient:
     """Tests for GitHubClient."""
 
-    @patch("agent_smith.github.Github")
+    @patch("nanocode.github.Github")
     def test_client_init_with_token(self, mock_github):
         """Test client initialization with token."""
         client = GitHubClient(token="test_token")
         assert client._token == "test_token"
         assert client._github is None
 
-    @patch("agent_smith.github.Github")
+    @patch("nanocode.github.Github")
     def test_client_init_with_app(self, mock_github):
         """Test client initialization with GitHub App."""
         client = GitHubClient(
@@ -33,7 +33,7 @@ class TestGitHubClient:
         assert client._app_private_key == "private_key"
         assert client._installation_id == "67890"
 
-    @patch("agent_smith.github.Github")
+    @patch("nanocode.github.Github")
     def test_authenticate_with_token(self, mock_github):
         """Test authenticating with a token."""
         client = GitHubClient()
@@ -42,7 +42,7 @@ class TestGitHubClient:
         assert client._token == "new_token"
         assert client._github is None
 
-    @patch("agent_smith.github.Github")
+    @patch("nanocode.github.Github")
     def test_authenticate_with_app(self, mock_github):
         """Test authenticating with GitHub App."""
         client = GitHubClient()
@@ -120,7 +120,7 @@ class TestGitHubGitOperations:
 class TestCreateGitHubClient:
     """Tests for create_github_client."""
 
-    @patch("agent_smith.github.Github")
+    @patch("nanocode.github.Github")
     def test_create_client_with_token(self, mock_github):
         """Test creating client with token from config."""
         config = {"github": {"token": "test_token"}}
@@ -128,7 +128,7 @@ class TestCreateGitHubClient:
         assert client is not None
         assert client._token == "test_token"
 
-    @patch("agent_smith.github.Github")
+    @patch("nanocode.github.Github")
     def test_create_client_from_env(self, mock_github):
         """Test creating client with token from environment."""
         with patch.dict("os.environ", {"GITHUB_TOKEN": "env_token"}):
@@ -151,7 +151,7 @@ class TestGitHubTool:
         assert tool.name == "github"
         assert tool.description is not None
 
-    @patch("agent_smith.github.Github")
+    @patch("nanocode.github.Github")
     def test_tool_init_with_client(self, mock_github):
         """Test tool initialization with client."""
         client = GitHubClient(token="test")
@@ -159,7 +159,7 @@ class TestGitHubTool:
         assert tool.github_client is client
 
     @pytest.mark.asyncio
-    @patch("agent_smith.github.Github")
+    @patch("nanocode.github.Github")
     async def test_tool_get_current_repo(self, mock_github):
         """Test getting current repo."""
         mock_git_ops = Mock()
@@ -174,7 +174,7 @@ class TestGitHubTool:
         assert result.success is True
 
     @pytest.mark.asyncio
-    @patch("agent_smith.github.Github")
+    @patch("nanocode.github.Github")
     async def test_tool_get_current_branch(self, mock_github):
         """Test getting current branch."""
         mock_git_ops = Mock()
@@ -194,7 +194,7 @@ class TestGitHubToolOperations:
     """Tests for GitHub tool operations."""
 
     @pytest.mark.asyncio
-    @patch("agent_smith.github.Github")
+    @patch("nanocode.github.Github")
     async def test_list_prs_operation(self, mock_github):
         """Test list_prs operation."""
         mock_pr = Mock()
@@ -215,7 +215,7 @@ class TestGitHubToolOperations:
         assert result.success is True
 
     @pytest.mark.asyncio
-    @patch("agent_smith.github.Github")
+    @patch("nanocode.github.Github")
     async def test_unknown_operation(self, mock_github):
         """Test unknown operation."""
         mock_github_client = Mock()

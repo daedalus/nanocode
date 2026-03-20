@@ -2,7 +2,7 @@
 
 import os
 
-from agent_smith.tools import Tool, ToolResult
+from nanocode.tools import Tool, ToolResult
 
 
 class ExaSearchTool(Tool):

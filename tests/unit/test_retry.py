@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_smith.retry import (
+from nanocode.retry import (
     RetryConfig,
     RetryState,
     RetryError,

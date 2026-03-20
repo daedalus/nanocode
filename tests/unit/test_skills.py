@@ -5,7 +5,7 @@ import tempfile
 import os
 import shutil
 
-from agent_smith.skills import (
+from nanocode.skills import (
     Skill,
     SkillsManager,
     SkillNotFoundError,
@@ -230,7 +230,7 @@ description: A test skill
 
     def test_install_skills_all(self, temp_package_dir, monkeypatch):
         """Test installing all skills."""
-        from agent_smith.skills import install_skills
+        from nanocode.skills import install_skills
 
         target_dir = tempfile.mkdtemp()
         monkeypatch.chdir(target_dir)
@@ -254,7 +254,7 @@ description: A test skill
 
     def test_install_skills_specific(self, temp_package_dir, monkeypatch):
         """Test installing a specific skill."""
-        from agent_smith.skills import install_skills
+        from nanocode.skills import install_skills
 
         target_dir = tempfile.mkdtemp()
         monkeypatch.chdir(target_dir)
@@ -270,7 +270,7 @@ description: A test skill
 
     def test_install_skills_nonexistent(self, monkeypatch):
         """Test installing a non-existent skill."""
-        from agent_smith.skills import install_skills
+        from nanocode.skills import install_skills
 
         target_dir = tempfile.mkdtemp()
 
@@ -285,7 +285,7 @@ description: A test skill
 
     def test_install_skills_updates_existing(self, monkeypatch):
         """Test that install_skills updates existing skills."""
-        from agent_smith.skills import install_skills
+        from nanocode.skills import install_skills
 
         target_dir = tempfile.mkdtemp()
 
@@ -336,8 +336,8 @@ Returns a greeting.
 
     def test_skill_tool_integration(self, temp_skill_dir):
         """Test skill tool with skills manager."""
-        from agent_smith.skills import SkillsManager
-        from agent_smith.tools.builtin.skill import SkillTool, ListSkillsTool
+        from nanocode.skills import SkillsManager
+        from nanocode.tools.builtin.skill import SkillTool, ListSkillsTool
 
         manager = SkillsManager(temp_skill_dir)
         manager.load_skills()

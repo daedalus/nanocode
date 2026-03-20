@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from agent_smith.tools import Tool, ToolResult, ToolRegistry
+from nanocode.tools import Tool, ToolResult, ToolRegistry
 
 
 def atomic_write(file_path: Path, content: str) -> None:
@@ -115,7 +115,7 @@ class BashTool(Tool):
 
     async def _execute_pty(self, command: str, workdir: str = None) -> ToolResult:
         """Execute command in a PTY session."""
-        from agent_smith.pty import PtyManager
+        from nanocode.pty import PtyManager
         import uuid
 
         session_id = self.pty_session
@@ -528,7 +528,7 @@ class LSPTool(Tool):
             return ToolResult(success=False, content=None, error="LSP manager not configured")
 
         try:
-            from agent_smith.lsp import path_to_file_uri, file_uri_to_path
+            from nanocode.lsp import path_to_file_uri, file_uri_to_path
 
             file_path = str(Path(file_path).resolve())
             uri = path_to_file_uri(file_path)
@@ -720,7 +720,7 @@ class PtyCreateTool(Tool):
     ) -> ToolResult:
         """Create a new PTY session."""
         try:
-            from agent_smith.pty import PtyManager
+            from nanocode.pty import PtyManager
 
             info = await PtyManager.create(
                 command=command,
@@ -758,7 +758,7 @@ class PtyListTool(Tool):
     async def execute(self) -> ToolResult:
         """List all PTY sessions."""
         try:
-            from agent_smith.pty import PtyManager
+            from nanocode.pty import PtyManager
 
             sessions = PtyManager.list()
             return ToolResult(
@@ -792,7 +792,7 @@ class PtyWriteTool(Tool):
     async def execute(self, id: str, data: str) -> ToolResult:
         """Write to a PTY session."""
         try:
-            from agent_smith.pty import PtyManager
+            from nanocode.pty import PtyManager
 
             await PtyManager.write(id, data)
             return ToolResult(success=True, content="Data written")
@@ -821,7 +821,7 @@ class PtyResizeTool(Tool):
     async def execute(self, id: str, rows: int, cols: int) -> ToolResult:
         """Resize a PTY terminal."""
         try:
-            from agent_smith.pty import PtyManager
+            from nanocode.pty import PtyManager
 
             await PtyManager.resize(id, cols, rows)
             return ToolResult(success=True, content=f"Resized to {cols}x{rows}")
@@ -850,7 +850,7 @@ class PtyReadTool(Tool):
     async def execute(self, id: str, cursor: int = 0, length: int = None) -> ToolResult:
         """Read from a PTY session."""
         try:
-            from agent_smith.pty import PtyManager
+            from nanocode.pty import PtyManager
 
             data = PtyManager.read_buffer(id, cursor, length)
             info = PtyManager.get(id)
@@ -886,7 +886,7 @@ class PtyRemoveTool(Tool):
     async def execute(self, id: str) -> ToolResult:
         """Remove a PTY session."""
         try:
-            from agent_smith.pty import PtyManager
+            from nanocode.pty import PtyManager
 
             manager = PtyManager.get_instance()
             await manager.kill_session(id)
@@ -1240,8 +1240,8 @@ class QuestionTool(Tool):
 
 
 def create_builtin_tools(config: dict = None, file_tracker=None, lsp_manager=None) -> list[Tool]:
-    from agent_smith.tools.builtin.exa_search import ExaSearchTool, ExaFetchTool
-    from agent_smith.tools.builtin.free_search import FreeExaSearchTool, OpenWebSearchTool
+    from nanocode.tools.builtin.exa_search import ExaSearchTool, ExaFetchTool
+    from nanocode.tools.builtin.free_search import FreeExaSearchTool, OpenWebSearchTool
 
     exa_config = config.get("exa", {}) if config else {}
 
@@ -1287,7 +1287,7 @@ def register_builtin_tools(
     registry: ToolRegistry, config: dict = None, file_tracker=None, lsp_manager=None
 ):
     """Register all built-in tools."""
-    from agent_smith.tools import ToolExecutor
+    from nanocode.tools import ToolExecutor
 
     executor = ToolExecutor(registry)
     for tool in create_builtin_tools(config, file_tracker, lsp_manager):
@@ -1296,8 +1296,8 @@ def register_builtin_tools(
         registry.register(tool)
 
     try:
-        from agent_smith.skills import create_skills_manager
-        from agent_smith.tools.builtin.skill import register_skill_tools
+        from nanocode.skills import create_skills_manager
+        from nanocode.tools.builtin.skill import register_skill_tools
 
         skills_manager = create_skills_manager()
         register_skill_tools(registry, skills_manager)
@@ -1305,8 +1305,8 @@ def register_builtin_tools(
         pass
 
     try:
-        from agent_smith.snapshot import create_snapshot_manager
-        from agent_smith.tools.builtin.snapshot import register_snapshot_tools
+        from nanocode.snapshot import create_snapshot_manager
+        from nanocode.tools.builtin.snapshot import register_snapshot_tools
 
         snapshot_manager = create_snapshot_manager()
         register_snapshot_tools(registry, snapshot_manager)

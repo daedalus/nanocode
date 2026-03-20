@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 from enum import Enum
 
-from agent_smith.llm import Message as LLMMessage
+from nanocode.llm import Message as LLMMessage
 
 
 class ACPError(Exception):
@@ -352,7 +352,7 @@ class ACPHandler:
                 "streaming": False,
             },
             "server_info": {
-                "name": "agent_smith",
+                "name": "nanocode",
                 "version": "0.1.0",
                 "description": "Agent Smith - Autonomous AI Agent",
             },
@@ -420,7 +420,7 @@ class ACPHandler:
         if system_prompt:
             llm_messages.insert(0, LLMMessage(role="system", content=system_prompt))
 
-        response_text = "ACP prompt processed. Use agent_smith directly for full functionality."
+        response_text = "ACP prompt processed. Use nanocode directly for full functionality."
 
         return {
             "session": {"id": session_id},

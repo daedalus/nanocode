@@ -3,7 +3,7 @@
 import pytest
 import os
 import subprocess
-from agent_smith.worktree import (
+from nanocode.worktree import (
     WorktreeInfo,
     NotGitError,
     generate_name,
@@ -48,7 +48,7 @@ def test_generate_name_with_base():
 
 def test_slug():
     """Test slug generation."""
-    from agent_smith.worktree import _slug
+    from nanocode.worktree import _slug
 
     assert _slug("Hello World") == "hello-world"
     assert _slug("Test  Multiple   Spaces") == "test-multiple-spaces"

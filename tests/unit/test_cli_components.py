@@ -7,7 +7,7 @@ import os
 # Add the agent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent_smith.cli import ConsoleUI, PromptHandler, CommandHistory
+from nanocode.cli import ConsoleUI, PromptHandler, CommandHistory
 
 
 class TestConsoleUI:

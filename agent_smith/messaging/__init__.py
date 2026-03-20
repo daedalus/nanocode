@@ -103,9 +103,9 @@ class MessagingManager:
             await platform.stop()
 
 
-from agent_smith.messaging.slack import SlackPlatform, create_slack_platform
-from agent_smith.messaging.telegram import TelegramPlatform, create_telegram_platform
-from agent_smith.messaging.whatsapp import WhatsAppPlatform, create_whatsapp_platform
+from nanocode.messaging.slack import SlackPlatform, create_slack_platform
+from nanocode.messaging.telegram import TelegramPlatform, create_telegram_platform
+from nanocode.messaging.whatsapp import WhatsAppPlatform, create_whatsapp_platform
 
 __all__ = [
     "Message",

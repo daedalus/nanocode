@@ -120,7 +120,7 @@ mcp:
 ```yaml
 storage:
   enabled: true
-  db_path: ~/.agent_smith/data/agent_smith.db
+  db_path: ~/.nanocode/data/nanocode.db
 ```
 
 ### Skills System
@@ -391,8 +391,8 @@ Works with Zed's agent configuration:
 ### Programmatic Usage
 
 ```python
-from agent_smith.core import AutonomousAgent
-from agent_smith.config import Config
+from nanocode.core import AutonomousAgent
+from nanocode.config import Config
 
 config = Config("config.yaml")
 agent = AutonomousAgent(config)
@@ -420,7 +420,7 @@ config.set("llm.providers.lm-studio.base_url", "http://localhost:1234/v1")
 The agent supports the `provider/model` format for flexible model selection:
 
 ```python
-from agent_smith.llm import create_llm_from_model_id
+from nanocode.llm import create_llm_from_model_id
 
 # Use any model from models.dev
 llm, config = await create_llm_from_model_id("openai/gpt-4o")

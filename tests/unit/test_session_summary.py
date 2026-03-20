@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 
-from agent_smith.session_summary import (
+from nanocode.session_summary import (
     SessionSummaryGenerator,
     SessionSummary,
     FileChange,

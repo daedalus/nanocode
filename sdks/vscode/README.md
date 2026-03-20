@@ -1,10 +1,10 @@
 # Agent Smith VS Code Extension
 
-A Visual Studio Code extension that integrates [Agent Smith](https://github.com/daedalus/agent_smith) directly into your development workflow.
+A Visual Studio Code extension that integrates [Agent Smith](https://github.com/daedalus/nanocode) directly into your development workflow.
 
 ## Prerequisites
 
-This extension requires the [Agent Smith CLI](https://github.com/daedalus/agent_smith) to be installed on your system.
+This extension requires the [Agent Smith CLI](https://github.com/daedalus/nanocode) to be installed on your system.
 
 ## Features
 
