@@ -21,7 +21,7 @@ Experimental. It might be buggy.
 
 ### Advanced Tool System
 - Programmatic tool registration and execution
-- Built-in tools: `bash`, `read`, `write`, `edit`, `glob`, `grep`, `ls`, `webfetch`, `websearch`, `todo`
+- Built-in tools: `bash`, `read`, `write`, `edit`, `glob`, `grep`, `ls`, `webfetch`, `websearch`, `todo`, `sed`, `diff`
 - Tool result validation and error handling
 - Parallel tool execution support
 - MCP tool integration

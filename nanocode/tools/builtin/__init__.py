@@ -243,6 +243,133 @@ class GrepTool(Tool):
             return ToolResult(success=False, content=None, error=str(e))
 
 
+class SedTool(Tool):
+    """Stream editor for performing text transformations."""
+
+    def __init__(self, root_dir: str = None):
+        super().__init__(
+            name="sed",
+            description="Perform text substitution on files (like sed command)",
+        )
+        self.root_dir = Path(root_dir) if root_dir else Path.cwd()
+
+    async def execute(
+        self,
+        path: str,
+        search: str,
+        replace: str,
+        global_flag: bool = False,
+    ) -> ToolResult:
+        """Perform sed-like substitution on a file."""
+        try:
+            file_path = self.root_dir / path
+            if not file_path.exists():
+                return ToolResult(success=False, content=None, error="File not found")
+
+            content = file_path.read_text(errors="ignore")
+
+            if global_flag:
+                new_content = content.replace(search, replace)
+            else:
+                new_content = content.replace(search, replace, 1)
+
+            if content == new_content:
+                return ToolResult(
+                    success=False,
+                    content=None,
+                    error="Pattern not found in file",
+                )
+
+            file_path.write_text(new_content)
+
+            count = content.count(search) if global_flag else (1 if search in content else 0)
+            return ToolResult(
+                success=True,
+                content=f"Replaced {count} occurrence(s) in {file_path}",
+                metadata={"path": str(file_path), "count": count},
+            )
+        except Exception as e:
+            return ToolResult(success=False, content=None, error=str(e))
+
+
+class DiffTool(Tool):
+    """Show differences between two files."""
+
+    def __init__(self, root_dir: str = None):
+        super().__init__(
+            name="diff",
+            description="Show differences between two files or a file and a snapshot",
+        )
+        self.root_dir = Path(root_dir) if root_dir else Path.cwd()
+
+    async def execute(
+        self,
+        path1: str,
+        path2: str = None,
+        original_content: str = None,
+    ) -> ToolResult:
+        """Show diff between files."""
+        import difflib
+
+        try:
+            file1 = self.root_dir / path1
+
+            if not file1.exists():
+                return ToolResult(success=False, content=None, error=f"File not found: {path1}")
+
+            content1 = file1.read_text(errors="ignore")
+            lines1 = content1.splitlines()
+
+            file2_path = None
+            if path2:
+                file2 = self.root_dir / path2
+                if not file2.exists():
+                    return ToolResult(success=False, content=None, error=f"File not found: {path2}")
+                content2 = file2.read_text(errors="ignore")
+                lines2 = content2.splitlines()
+                label1 = path1
+                label2 = path2
+                file2_path = str(file2)
+            elif original_content is not None:
+                lines2 = original_content.splitlines()
+                label1 = path1
+                label2 = "(original)"
+            else:
+                return ToolResult(
+                    success=False,
+                    content=None,
+                    error="Either path2 or original_content must be provided",
+                )
+
+            diff = difflib.unified_diff(
+                lines2,
+                lines1,
+                fromfile=label2,
+                tofile=label1,
+                lineterm="",
+            )
+            diff_lines = list(diff)
+
+            if not diff_lines:
+                return ToolResult(
+                    success=True,
+                    content="No differences",
+                    metadata={"files": (str(file1), file2_path)},
+                )
+
+            return ToolResult(
+                success=True,
+                content="\n".join(diff_lines),
+                metadata={
+                    "files": (str(file1), file2_path),
+                    "added": sum(1 for l in diff_lines if l.startswith("+")),
+                    "removed": sum(1 for l in diff_lines if l.startswith("-")),
+                },
+            )
+        except Exception as e:
+            return ToolResult(success=False, content=None, error=str(e))
+
+
 class ReadFileTool(Tool):
     """Read file contents with auto-refresh on modification."""
 
@@ -1279,6 +1406,9 @@ def create_builtin_tools(config: dict = None, file_tracker=None, lsp_manager=Non
         MultiEditTool(),
         ApplyPatchTool(),
         QuestionTool(),
+        # Text tools
+        SedTool(),
+        DiffTool(),
     ]
     return tools
 

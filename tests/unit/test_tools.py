@@ -413,3 +413,542 @@ class TestNewTools:
         assert result.success is True
         assert "What is your name?" in result.content
         assert "How old are you?" in result.content
+
+
+class TestSedTool:
+    """Test sed (stream editor) tool."""
+
+    @pytest.fixture
+    def temp_dir(self):
+        """Create temp directory."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield tmpdir
+
+    @pytest.mark.asyncio
+    async def test_sed_single_replacement(self, temp_dir):
+        """Test sed replaces first occurrence by default."""
+        from nanocode.tools.builtin import SedTool
+
+        test_file = os.path.join(temp_dir, "test.txt")
+        Path(test_file).write_text("Hello World\nHello World\nHello World")
+
+        tool = SedTool(root_dir=temp_dir)
+        result = await tool.execute(path="test.txt", search="World", replace="Universe")
+
+        assert result.success is True
+        assert result.metadata["count"] == 1
+        content = Path(test_file).read_text()
+        assert content.count("Universe") == 1
+        assert content.count("World") == 2
+
+    @pytest.mark.asyncio
+    async def test_sed_global_replacement(self, temp_dir):
+        """Test sed with global flag replaces all occurrences."""
+        from nanocode.tools.builtin import SedTool
+
+        test_file = os.path.join(temp_dir, "test.txt")
+        Path(test_file).write_text("Hello World\nHello World\nHello World")
+
+        tool = SedTool(root_dir=temp_dir)
+        result = await tool.execute(
+            path="test.txt", search="World", replace="Universe", global_flag=True
+        )
+
+        assert result.success is True
+        assert result.metadata["count"] == 3
+        content = Path(test_file).read_text()
+        assert content.count("Universe") == 3
+        assert "World" not in content
+
+    @pytest.mark.asyncio
+    async def test_sed_file_not_found(self, temp_dir):
+        """Test sed with nonexistent file."""
+        from nanocode.tools.builtin import SedTool
+
+        tool = SedTool(root_dir=temp_dir)
+        result = await tool.execute(path="nonexistent.txt", search="foo", replace="bar")
+
+        assert result.success is False
+        assert result.error is not None
+        assert "not found" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_sed_pattern_not_found(self, temp_dir):
+        """Test sed when pattern is not found."""
+        from nanocode.tools.builtin import SedTool
+
+        test_file = os.path.join(temp_dir, "test.txt")
+        Path(test_file).write_text("Hello World")
+
+        tool = SedTool(root_dir=temp_dir)
+        result = await tool.execute(path="test.txt", search="NotFound", replace="Replaced")
+
+        assert result.success is False
+        assert result.error is not None
+        assert "not found" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_sed_creates_backup_on_dry_run(self, temp_dir):
+        """Test sed does not create backup by default."""
+        from nanocode.tools.builtin import SedTool
+
+        test_file = os.path.join(temp_dir, "test.txt")
+        Path(test_file).write_text("Hello World")
+
+        tool = SedTool(root_dir=temp_dir)
+        result = await tool.execute(path="test.txt", search="World", replace="Universe")
+
+        assert result.success is True
+        assert not Path(test_file + ".bak").exists()
+
+    @pytest.mark.asyncio
+    async def test_sed_path_traversal(self, temp_dir):
+        """Test sed blocks path traversal attempts."""
+        from nanocode.tools.builtin import SedTool
+
+        tool = SedTool(root_dir=temp_dir)
+        result = await tool.execute(path="../etc/passwd", search="root", replace="hacked")
+
+        assert result.success is False
+        assert result.error is not None
+
+    @pytest.mark.asyncio
+    async def test_sed_absolute_path_outside_root(self, temp_dir):
+        """Test sed blocks absolute paths outside root."""
+        from nanocode.tools.builtin import SedTool
+
+        tool = SedTool(root_dir=temp_dir)
+        result = await tool.execute(path="/etc/hostname", search="test", replace="hacked")
+
+        assert result.success is False
+
+    @pytest.mark.asyncio
+    async def test_sed_empty_file(self, temp_dir):
+        """Test sed on empty file."""
+        from nanocode.tools.builtin import SedTool
+
+        test_file = os.path.join(temp_dir, "empty.txt")
+        Path(test_file).write_text("")
+
+        tool = SedTool(root_dir=temp_dir)
+        result = await tool.execute(path="empty.txt", search="test", replace="replaced")
+
+        assert result.success is False
+        assert result.error is not None
+
+    @pytest.mark.asyncio
+    async def test_sed_special_characters(self, temp_dir):
+        """Test sed with special characters in search/replace."""
+        from nanocode.tools.builtin import SedTool
+
+        test_file = os.path.join(temp_dir, "test.txt")
+        Path(test_file).write_text("Price: 100 200")
+
+        tool = SedTool(root_dir=temp_dir)
+        result = await tool.execute(path="test.txt", search="100", replace="150")
+
+        assert result.success is True
+        content = Path(test_file).read_text()
+        assert "150" in content
+
+    @pytest.mark.asyncio
+    async def test_sed_newline_in_search(self, temp_dir):
+        """Test sed with newline in search string."""
+        from nanocode.tools.builtin import SedTool
+
+        test_file = os.path.join(temp_dir, "test.txt")
+        original = "Line 1\nLine 2\nLine 3"
+        Path(test_file).write_text(original.replace("\n", " "))
+
+        tool = SedTool(root_dir=temp_dir)
+        result = await tool.execute(path="test.txt", search=" ", replace="\n")
+
+        assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_sed_unicode_content(self, temp_dir):
+        """Test sed with unicode content."""
+        from nanocode.tools.builtin import SedTool
+
+        test_file = os.path.join(temp_dir, "test.txt")
+        Path(test_file).write_text("こんにちは世界\nHello 世界")
+
+        tool = SedTool(root_dir=temp_dir)
+        result = await tool.execute(path="test.txt", search="世界", replace="地球")
+
+        assert result.success is True
+        content = Path(test_file).read_text()
+        assert "地球" in content
+
+    @pytest.mark.asyncio
+    async def test_sed_binary_file_like_content(self, temp_dir):
+        """Test sed with binary-like content."""
+        from nanocode.tools.builtin import SedTool
+
+        test_file = os.path.join(temp_dir, "test.bin")
+        Path(test_file).write_bytes(b"Hello\x00World\nData\xff\xfe")
+
+        tool = SedTool(root_dir=temp_dir)
+        result = await tool.execute(path="test.bin", search="Hello", replace="Hi")
+
+        assert result.success is True
+        content = Path(test_file).read_bytes()
+        assert b"Hi\x00World" in content
+
+    @pytest.mark.asyncio
+    async def test_sed_symlink_to_absolute(self, temp_dir):
+        """Test sed follows symlinks to absolute paths."""
+        from nanocode.tools.builtin import SedTool
+
+        os.symlink("/etc", os.path.join(temp_dir, "etc_link"))
+
+        tool = SedTool(root_dir=temp_dir)
+        result = await tool.execute(path="etc_link/hostname", search="test", replace="hacked")
+
+        assert result.success is False
+
+    @pytest.mark.asyncio
+    async def test_sed_very_large_file(self, temp_dir):
+        """Test sed handles large files."""
+        from nanocode.tools.builtin import SedTool
+
+        test_file = os.path.join(temp_dir, "large.txt")
+        large_content = "x" * 1_000_000
+        Path(test_file).write_text(large_content)
+
+        tool = SedTool(root_dir=temp_dir)
+        result = await tool.execute(path="large.txt", search="xxx", replace="y")
+
+        assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_sed_same_search_replace(self, temp_dir):
+        """Test sed when search and replace are identical returns no change."""
+        from nanocode.tools.builtin import SedTool
+
+        test_file = os.path.join(temp_dir, "test.txt")
+        Path(test_file).write_text("Hello World")
+
+        tool = SedTool(root_dir=temp_dir)
+        result = await tool.execute(path="test.txt", search="Hello", replace="Hello")
+
+        assert result.success is False
+        assert result.error is not None
+        assert "not found" in result.error.lower()
+        content = Path(test_file).read_text()
+        assert content == "Hello World"
+
+
+class TestDiffTool:
+    """Test diff tool."""
+
+    @pytest.fixture
+    def temp_dir(self):
+        """Create temp directory."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield tmpdir
+
+    @pytest.mark.asyncio
+    async def test_diff_two_files(self, temp_dir):
+        """Test diff between two files."""
+        from nanocode.tools.builtin import DiffTool
+
+        file1 = os.path.join(temp_dir, "file1.txt")
+        file2 = os.path.join(temp_dir, "file2.txt")
+
+        Path(file1).write_text("Hello World\nLine 2\nLine 3")
+        Path(file2).write_text("Hello Universe\nLine 2\nLine 3")
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="file1.txt", path2="file2.txt")
+
+        assert result.success is True
+        assert "-Hello Universe" in result.content
+        assert "+Hello World" in result.content
+
+    @pytest.mark.asyncio
+    async def test_diff_with_original_content(self, temp_dir):
+        """Test diff with original content."""
+        from nanocode.tools.builtin import DiffTool
+
+        test_file = os.path.join(temp_dir, "test.txt")
+        original = "Hello World\nLine 2"
+        Path(test_file).write_text("Hello Universe\nLine 2")
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="test.txt", original_content=original)
+
+        assert result.success is True
+        assert "-Hello World" in result.content
+        assert "+Hello Universe" in result.content
+
+    @pytest.mark.asyncio
+    async def test_diff_no_differences(self, temp_dir):
+        """Test diff when files are identical."""
+        from nanocode.tools.builtin import DiffTool
+
+        file1 = os.path.join(temp_dir, "file1.txt")
+        file2 = os.path.join(temp_dir, "file2.txt")
+
+        content = "Hello World\nLine 2\nLine 3"
+        Path(file1).write_text(content)
+        Path(file2).write_text(content)
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="file1.txt", path2="file2.txt")
+
+        assert result.success is True
+        assert result.content == "No differences"
+
+    @pytest.mark.asyncio
+    async def test_diff_file1_not_found(self, temp_dir):
+        """Test diff with nonexistent first file."""
+        from nanocode.tools.builtin import DiffTool
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="nonexistent.txt", path2="other.txt")
+
+        assert result.success is False
+        assert result.error is not None
+        assert "not found" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_diff_file2_not_found(self, temp_dir):
+        """Test diff with nonexistent second file."""
+        from nanocode.tools.builtin import DiffTool
+
+        file1 = os.path.join(temp_dir, "file1.txt")
+        Path(file1).write_text("Hello World")
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="file1.txt", path2="nonexistent.txt")
+
+        assert result.success is False
+        assert result.error is not None
+        assert "not found" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_diff_no_path2_or_original(self, temp_dir):
+        """Test diff requires either path2 or original_content."""
+        from nanocode.tools.builtin import DiffTool
+
+        file1 = os.path.join(temp_dir, "file1.txt")
+        Path(file1).write_text("Hello World")
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="file1.txt")
+
+        assert result.success is False
+        assert result.error is not None
+        assert "must be provided" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_diff_added_lines(self, temp_dir):
+        """Test diff shows added lines correctly."""
+        from nanocode.tools.builtin import DiffTool
+
+        file1 = os.path.join(temp_dir, "file1.txt")
+        file2 = os.path.join(temp_dir, "file2.txt")
+
+        Path(file1).write_text("Line 1\nLine 2")
+        Path(file2).write_text("Line 1\nLine 2\nLine 3\nLine 4")
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="file2.txt", path2="file1.txt")
+
+        assert result.success is True
+        assert "+Line 3" in result.content
+        assert "+Line 4" in result.content
+
+    @pytest.mark.asyncio
+    async def test_diff_path_traversal(self, temp_dir):
+        """Test diff blocks path traversal attempts."""
+        from nanocode.tools.builtin import DiffTool
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="../../etc/passwd", path2="test.txt")
+
+        assert result.success is False
+        assert result.error is not None
+
+    @pytest.mark.asyncio
+    async def test_diff_absolute_path_outside_root(self, temp_dir):
+        """Test diff blocks absolute paths outside root."""
+        from nanocode.tools.builtin import DiffTool
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="/etc/hostname", path2="test.txt")
+
+        assert result.success is False
+
+    @pytest.mark.asyncio
+    async def test_diff_empty_file(self, temp_dir):
+        """Test diff with empty files."""
+        from nanocode.tools.builtin import DiffTool
+
+        file1 = os.path.join(temp_dir, "empty1.txt")
+        file2 = os.path.join(temp_dir, "empty2.txt")
+
+        Path(file1).write_text("")
+        Path(file2).write_text("")
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="empty1.txt", path2="empty2.txt")
+
+        assert result.success is True
+        assert result.content == "No differences"
+
+    @pytest.mark.asyncio
+    async def test_diff_empty_vs_nonempty(self, temp_dir):
+        """Test diff between empty and non-empty file."""
+        from nanocode.tools.builtin import DiffTool
+
+        file1 = os.path.join(temp_dir, "empty.txt")
+        file2 = os.path.join(temp_dir, "content.txt")
+
+        Path(file1).write_text("")
+        Path(file2).write_text("Hello World")
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="content.txt", path2="empty.txt")
+
+        assert result.success is True
+        assert "+Hello World" in result.content
+
+    @pytest.mark.asyncio
+    async def test_diff_binary_files(self, temp_dir):
+        """Test diff with binary files."""
+        from nanocode.tools.builtin import DiffTool
+
+        file1 = os.path.join(temp_dir, "bin1.bin")
+        file2 = os.path.join(temp_dir, "bin2.bin")
+
+        Path(file1).write_bytes(b"Hello\x00World")
+        Path(file2).write_bytes(b"Hello\x00Universe")
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="bin1.bin", path2="bin2.bin")
+
+        assert result.success is True
+        assert "-Hello" in result.content or "+Hello" in result.content
+
+    @pytest.mark.asyncio
+    async def test_diff_unicode_content(self, temp_dir):
+        """Test diff with unicode content."""
+        from nanocode.tools.builtin import DiffTool
+
+        file1 = os.path.join(temp_dir, "unicode1.txt")
+        file2 = os.path.join(temp_dir, "unicode2.txt")
+
+        Path(file1).write_text("こんにちは世界")
+        Path(file2).write_text("hello世界")
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="unicode1.txt", path2="unicode2.txt")
+
+        assert result.success is True
+        assert "こんにちは" in result.content or "hello" in result.content
+
+    @pytest.mark.asyncio
+    async def test_diff_special_characters(self, temp_dir):
+        """Test diff with special characters."""
+        from nanocode.tools.builtin import DiffTool
+
+        file1 = os.path.join(temp_dir, "special1.txt")
+        file2 = os.path.join(temp_dir, "special2.txt")
+
+        Path(file1).write_text("$100 + $200 = $300")
+        Path(file2).write_text("€100 + €200 = €300")
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="special1.txt", path2="special2.txt")
+
+        assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_diff_very_large_files(self, temp_dir):
+        """Test diff with very large files."""
+        from nanocode.tools.builtin import DiffTool
+
+        file1 = os.path.join(temp_dir, "large1.txt")
+        file2 = os.path.join(temp_dir, "large2.txt")
+
+        content1 = "x" * 500_000 + "\nmodified line\n" + "y" * 500_000
+        content2 = "x" * 500_000 + "\nchanged line\n" + "y" * 500_000
+
+        Path(file1).write_text(content1)
+        Path(file2).write_text(content2)
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="large1.txt", path2="large2.txt")
+
+        assert result.success is True
+        assert "-changed line" in result.content
+        assert "+modified line" in result.content
+
+    @pytest.mark.asyncio
+    async def test_diff_with_null_bytes(self, temp_dir):
+        """Test diff with null bytes in content."""
+        from nanocode.tools.builtin import DiffTool
+
+        file1 = os.path.join(temp_dir, "null1.txt")
+        file2 = os.path.join(temp_dir, "null2.txt")
+
+        Path(file1).write_bytes(b"Hello\x00World")
+        Path(file2).write_bytes(b"Hello\x00Universe")
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="null1.txt", path2="null2.txt")
+
+        assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_diff_symlink_following(self, temp_dir):
+        """Test diff prevents following symlinks outside root."""
+        from nanocode.tools.builtin import DiffTool
+
+        os.symlink("/etc", os.path.join(temp_dir, "etc_link"))
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="etc_link/hostname", path2="test.txt")
+
+        assert result.success is False
+
+    @pytest.mark.asyncio
+    async def test_diff_nonexistent_both_files(self, temp_dir):
+        """Test diff when both files don't exist."""
+        from nanocode.tools.builtin import DiffTool
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="nonexistent1.txt", path2="nonexistent2.txt")
+
+        assert result.success is False
+        assert result.error is not None
+        assert "not found" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_diff_original_content_empty(self, temp_dir):
+        """Test diff with empty original_content."""
+        from nanocode.tools.builtin import DiffTool
+
+        test_file = os.path.join(temp_dir, "test.txt")
+        Path(test_file).write_text("Hello World")
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="test.txt", original_content="")
+
+        assert result.success is True
+        assert "+Hello World" in result.content
+
+    @pytest.mark.asyncio
+    async def test_diff_directory_not_file(self, temp_dir):
+        """Test diff when path points to a directory."""
+        from nanocode.tools.builtin import DiffTool
+
+        subdir = os.path.join(temp_dir, "subdir")
+        os.makedirs(subdir)
+
+        tool = DiffTool(root_dir=temp_dir)
+        result = await tool.execute(path1="subdir", path2="test.txt")
+
+        assert result.success is False
