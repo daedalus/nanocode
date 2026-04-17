@@ -148,7 +148,7 @@ class NanoCodeApp(App):
     }
     
     #status {
-        text: $text;
+        text-style: normal;
     }
     
     .permission-dialog {
@@ -159,7 +159,7 @@ class NanoCodeApp(App):
     }
     
     #perm-title {
-        text: bold $accent;
+        text-style: bold;
         margin-bottom: 1;
     }
     """
