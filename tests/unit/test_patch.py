@@ -1,16 +1,18 @@
 """Tests for patch functionality."""
 
-import pytest
-import tempfile
 import os
+import tempfile
 from pathlib import Path
+
+import pytest
+
 from nanocode.patch import (
-    parse_patch,
+    ParseError,
+    PatchType,
     apply_patch,
     derive_new_contents,
     generate_unified_diff,
-    PatchType,
-    ParseError,
+    parse_patch,
 )
 
 
@@ -410,8 +412,8 @@ async def test_apply_patch_update_multiple_chunks():
 @pytest.mark.asyncio
 async def test_apply_patch_to_read_only_location():
     """Test applying patch to read-only location fails gracefully."""
-    import tempfile
     import stat
+    import tempfile
 
     with tempfile.TemporaryDirectory() as tmpdir:
         test_file = os.path.join(tmpdir, "readonly.txt")
@@ -479,7 +481,7 @@ def test_normalize_unicode_edge_cases():
 
 def test_compute_replacements_no_context():
     """Test compute_replacements without context line."""
-    from nanocode.patch import compute_replacements, UpdateFileChunk
+    from nanocode.patch import UpdateFileChunk, compute_replacements
 
     lines = ["line1", "line2", "line3"]
     chunks = [

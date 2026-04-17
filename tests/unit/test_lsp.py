@@ -1,18 +1,19 @@
 """Tests for LSP system."""
 
-import pytest
-from pathlib import Path
-import tempfile
 import os
+import tempfile
+from pathlib import Path
+
+import pytest
 
 from nanocode.lsp import (
-    LSPServerManager,
-    LSPServerInfo,
-    LSPClient,
-    Diagnostic,
     CompletionItem,
+    Diagnostic,
     Hover,
     Location,
+    LSPClient,
+    LSPServerInfo,
+    LSPServerManager,
     SymbolInformation,
     file_uri_to_path,
     path_to_file_uri,
@@ -86,7 +87,10 @@ class TestDiagnostic:
     def test_diagnostic_creation(self):
         """Test creating a diagnostic."""
         diag = Diagnostic(
-            range={"start": {"line": 1, "character": 1}, "end": {"line": 1, "character": 10}},
+            range={
+                "start": {"line": 1, "character": 1},
+                "end": {"line": 1, "character": 10},
+            },
             message="Test error",
             severity=1,
             code="E001",
@@ -120,7 +124,10 @@ class TestHover:
         """Test creating a hover."""
         hover = Hover(
             contents={"kind": "markdown", "value": "**print** function"},
-            range={"start": {"line": 1, "character": 1}, "end": {"line": 1, "character": 10}},
+            range={
+                "start": {"line": 1, "character": 1},
+                "end": {"line": 1, "character": 10},
+            },
         )
         assert hover.contents["kind"] == "markdown"
 
@@ -132,7 +139,10 @@ class TestLocation:
         """Test creating a location."""
         loc = Location(
             uri="file:///home/user/test.py",
-            range={"start": {"line": 1, "character": 1}, "end": {"line": 1, "character": 10}},
+            range={
+                "start": {"line": 1, "character": 1},
+                "end": {"line": 1, "character": 10},
+            },
         )
         assert "file://" in loc.uri
 
@@ -147,7 +157,10 @@ class TestSymbolInformation:
             kind=6,
             location=Location(
                 uri="file:///home/user/test.py",
-                range={"start": {"line": 1, "character": 1}, "end": {"line": 1, "character": 10}},
+                range={
+                    "start": {"line": 1, "character": 1},
+                    "end": {"line": 1, "character": 10},
+                },
             ),
         )
         assert sym.name == "MyClass"

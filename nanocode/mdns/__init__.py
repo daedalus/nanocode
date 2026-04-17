@@ -6,9 +6,10 @@ on the local network, similar to opencode's implementation.
 Uses the python-zeroconf library (Bonjour/Avahi compatible).
 """
 
-from typing import Optional, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Optional
 
 
 @dataclass
@@ -197,7 +198,7 @@ class MDNSService:
         """Get list of discovered services."""
         return list(self._discovered.values())
 
-    def get_service(self, name: str) -> Optional[DiscoveredService]:
+    def get_service(self, name: str) -> DiscoveredService | None:
         """Get a specific discovered service by name."""
         for service in self._discovered.values():
             if name in service.name or service.name in name:
@@ -254,7 +255,7 @@ class MDNSManager:
         return []
 
 
-_default_manager: Optional[MDNSManager] = None
+_default_manager: MDNSManager | None = None
 
 
 def get_manager() -> MDNSManager:

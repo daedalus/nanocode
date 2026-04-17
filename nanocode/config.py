@@ -2,14 +2,15 @@
 
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
+
 import yaml
 
 
 class Config:
     """Configuration manager for the agent."""
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: str | None = None):
         self._config: dict = {}
         self._config_path = config_path or os.getenv("AGENT_CONFIG", "config.yaml")
         self.load()
@@ -24,13 +25,13 @@ class Config:
     def _apply_env_overrides(self):
         """Apply environment variable overrides."""
         if api_key := os.getenv("OPENAI_API_KEY"):
-            self.setdefault("llm", {}).setdefault("providers", {}).setdefault("openai", {})[
-                "api_key"
-            ] = api_key
+            self.setdefault("llm", {}).setdefault("providers", {}).setdefault(
+                "openai", {}
+            )["api_key"] = api_key
         if base_url := os.getenv("OPENAI_BASE_URL"):
-            self.setdefault("llm", {}).setdefault("providers", {}).setdefault("openai", {})[
-                "base_url"
-            ] = base_url
+            self.setdefault("llm", {}).setdefault("providers", {}).setdefault(
+                "openai", {}
+            )["base_url"] = base_url
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a configuration value using dot notation."""
@@ -109,12 +110,25 @@ class Config:
         return self.get("github", {})
 
     @property
-    def proxy(self) -> Optional[str]:
+    def proxy(self) -> str | None:
         """Get proxy configuration."""
         return self.get("proxy")
 
+    @property
+    def cache_enabled(self) -> bool:
+        """Check if prompt caching is enabled."""
+        return self.get("cache.enabled", False)
 
-_config: Optional[Config] = None
+    @property
+    def cache_dir(self) -> Path:
+        """Get cache directory."""
+        cache_path = self.get("cache.dir")
+        if cache_path:
+            return Path(cache_path)
+        return Path.home() / ".nanocode" / "cache"
+
+
+_config: Config | None = None
 
 
 def get_config() -> Config:

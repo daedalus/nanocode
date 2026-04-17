@@ -1,13 +1,12 @@
 """Git worktree management."""
 
 import os
-import re
 import random
+import re
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-from dataclasses import dataclass
-
 
 ADJECTIVES = [
     "brave",
@@ -115,7 +114,9 @@ class ResetFailedError(WorktreeError):
     pass
 
 
-def _run_git_command(cmd: list[str], cwd: str, check: bool = True) -> subprocess.CompletedProcess:
+def _run_git_command(
+    cmd: list[str], cwd: str, check: bool = True
+) -> subprocess.CompletedProcess:
     """Run a git command."""
     result = subprocess.run(
         cmd,
@@ -124,7 +125,9 @@ def _run_git_command(cmd: list[str], cwd: str, check: bool = True) -> subprocess
         text=True,
     )
     if check and result.returncode != 0:
-        raise WorktreeError(result.stderr or result.stdout or f"Command failed: {' '.join(cmd)}")
+        raise WorktreeError(
+            result.stderr or result.stdout or f"Command failed: {' '.join(cmd)}"
+        )
     return result
 
 
@@ -153,10 +156,12 @@ def _is_git_repo(path: str) -> bool:
     return os.path.exists(os.path.join(path, ".git"))
 
 
-def _get_git_common_dir(cwd: str) -> Optional[str]:
+def _get_git_common_dir(cwd: str) -> str | None:
     """Get the git common directory (handles worktrees)."""
     try:
-        result = _run_git_command(["git", "rev-parse", "--git-common-dir"], cwd, check=False)
+        result = _run_git_command(
+            ["git", "rev-parse", "--git-common-dir"], cwd, check=False
+        )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
     except Exception:
@@ -184,7 +189,7 @@ def is_worktree(path: str) -> bool:
     return False
 
 
-def generate_name(base: Optional[str] = None, root: str = None) -> WorktreeInfo:
+def generate_name(base: str | None = None, root: str = None) -> WorktreeInfo:
     """Generate a unique worktree name."""
     if base:
         base = _slug(base)
@@ -257,9 +262,9 @@ def list_worktrees(cwd: str = None) -> list[WorktreeInfo]:
 
 
 def create(
-    name: Optional[str] = None,
+    name: str | None = None,
     cwd: str = None,
-    start_command: Optional[str] = None,
+    start_command: str | None = None,
 ) -> WorktreeInfo:
     """Create a new git worktree."""
     cwd = cwd or os.getcwd()
@@ -427,7 +432,7 @@ def reset(directory: str) -> bool:
     return True
 
 
-def get_current_worktree(cwd: str = None) -> Optional[WorktreeInfo]:
+def get_current_worktree(cwd: str = None) -> WorktreeInfo | None:
     """Get the current worktree info."""
     cwd = cwd or os.getcwd()
     worktrees = list_worktrees(cwd)

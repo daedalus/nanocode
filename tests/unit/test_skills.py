@@ -1,14 +1,15 @@
 """Tests for skills module."""
 
-import pytest
-import tempfile
 import os
 import shutil
+import tempfile
+
+import pytest
 
 from nanocode.skills import (
     Skill,
-    SkillsManager,
     SkillNotFoundError,
+    SkillsManager,
     create_skills_manager,
 )
 
@@ -153,7 +154,11 @@ This skill has no frontmatter.
 
         skill = manager._parse_skill_file(
             os.path.join(
-                temp_skill_dir_no_frontmatter, ".nanocode", "skills", "no-fm-skill", "skill.md"
+                temp_skill_dir_no_frontmatter,
+                ".nanocode",
+                "skills",
+                "no-fm-skill",
+                "skill.md",
             )
         )
 
@@ -263,7 +268,9 @@ description: A test skill
             result = install_skills(target_dir, "redteaming")
 
             assert result is True
-            skill_path = os.path.join(target_dir, ".nanocode", "skills", "redteaming", "skill.md")
+            skill_path = os.path.join(
+                target_dir, ".nanocode", "skills", "redteaming", "skill.md"
+            )
             assert os.path.isfile(skill_path)
         finally:
             shutil.rmtree(target_dir)
@@ -337,7 +344,7 @@ Returns a greeting.
     def test_skill_tool_integration(self, temp_skill_dir):
         """Test skill tool with skills manager."""
         from nanocode.skills import SkillsManager
-        from nanocode.tools.builtin.skill import SkillTool, ListSkillsTool
+        from nanocode.tools.builtin.skill import ListSkillsTool, SkillTool
 
         manager = SkillsManager(temp_skill_dir)
         manager.load_skills()

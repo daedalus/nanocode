@@ -1,7 +1,9 @@
 """Tests for PTY functionality."""
 
-import pytest
 import asyncio
+
+import pytest
+
 from nanocode.pty import PtyManager, PtyStatus
 
 

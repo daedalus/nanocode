@@ -1,9 +1,11 @@
 """Skills system - custom commands defined in .nanocode/skills/."""
 
-import os
 import asyncio
-from typing import Any, Callable, Optional
+import os
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any, Optional
+
 import frontmatter
 
 
@@ -67,10 +69,10 @@ class SkillsManager:
 
         return discovered
 
-    def _parse_skill_file(self, path: str) -> Optional[Skill]:
+    def _parse_skill_file(self, path: str) -> Skill | None:
         """Parse a skill.md file."""
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 content = f.read()
 
             try:
@@ -194,7 +196,9 @@ def install_skills(base_dir: str = None, skill_name: str = None):
     if base_dir is None:
         base_dir = os.getcwd()
 
-    package_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    package_dir = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
     skills_src = os.path.join(package_dir, "skills")
     skills_dest = os.path.join(base_dir, ".nanocode", "skills")
 

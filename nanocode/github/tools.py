@@ -1,8 +1,8 @@
 """GitHub tools for the agent."""
 
-from typing import Optional
-from nanocode.tools import Tool, ToolResult
+
 from nanocode.github import GitHubClient, GitHubGitOperations, create_github_client
+from nanocode.tools import Tool, ToolResult
 
 
 class GitHubTool(Tool):
@@ -19,15 +19,15 @@ class GitHubTool(Tool):
     async def execute(
         self,
         operation: str,
-        repo: Optional[str] = None,
-        pr_number: Optional[int] = None,
-        title: Optional[str] = None,
-        body: Optional[str] = None,
-        head: Optional[str] = None,
-        base: Optional[str] = None,
-        state: Optional[str] = None,
-        issue_number: Optional[int] = None,
-        comment: Optional[str] = None,
+        repo: str | None = None,
+        pr_number: int | None = None,
+        title: str | None = None,
+        body: str | None = None,
+        head: str | None = None,
+        base: str | None = None,
+        state: str | None = None,
+        issue_number: int | None = None,
+        comment: str | None = None,
     ) -> ToolResult:
         """Execute a GitHub operation."""
         if not self.github_client:
@@ -82,8 +82,8 @@ class GitHubTool(Tool):
         self,
         repo: str,
         state: str = "open",
-        head: Optional[str] = None,
-        base: Optional[str] = None,
+        head: str | None = None,
+        base: str | None = None,
     ) -> ToolResult:
         """List pull requests."""
         prs = self.github_client.list_pull_requests(repo, state, head, base)
@@ -232,18 +232,22 @@ class GitHubTool(Tool):
         """Get current GitHub repository info."""
         is_github, repo = self.git_ops.is_github_repo()
         if not is_github:
-            return ToolResult(success=False, content=None, error="Not in a GitHub repository")
+            return ToolResult(
+                success=False, content=None, error="Not in a GitHub repository"
+            )
         return ToolResult(success=True, content={"repo": repo})
 
     async def _get_current_branch(self) -> ToolResult:
         """Get current git branch."""
         branch = self.git_ops.get_current_branch()
         if not branch:
-            return ToolResult(success=False, content=None, error="Not in a git repository")
+            return ToolResult(
+                success=False, content=None, error="Not in a git repository"
+            )
         return ToolResult(success=True, content={"branch": branch})
 
 
-def create_github_tool(config: dict = None) -> Optional[GitHubTool]:
+def create_github_tool(config: dict = None) -> GitHubTool | None:
     """Create a GitHub tool from configuration."""
     client = create_github_client(config)
     if client:

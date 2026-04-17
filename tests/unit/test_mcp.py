@@ -1,17 +1,18 @@
 """Tests for MCP (Model Context Protocol) module."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from nanocode.mcp import (
+    MCPClient,
+    MCPConnection,
+    MCPManager,
     MCPProtocol,
     MCPResource,
-    MCPTool,
-    MCPConnection,
-    MCPStdioConnection,
     MCPSSEConnection,
-    MCPClient,
-    MCPManager,
+    MCPStdioConnection,
+    MCPTool,
 )
 
 
@@ -86,7 +87,9 @@ class TestMCPStdioConnection:
     @pytest.mark.asyncio
     async def test_initialization(self):
         """Test stdio connection initialization."""
-        connection = MCPStdioConnection(command="echo", args=["hello"], env={"TEST": "value"})
+        connection = MCPStdioConnection(
+            command="echo", args=["hello"], env={"TEST": "value"}
+        )
 
         assert connection.command == "echo"
         assert connection.args == ["hello"]
@@ -149,7 +152,12 @@ class TestMCPManager:
 
         manager.add_server(
             "test-server",
-            {"type": "stdio", "command": "node", "args": ["server.js"], "env": {"TEST": "value"}},
+            {
+                "type": "stdio",
+                "command": "node",
+                "args": ["server.js"],
+                "env": {"TEST": "value"},
+            },
         )
 
         assert "test-server" in manager._clients
@@ -181,7 +189,9 @@ class TestMCPManager:
         """Test getting client by name."""
         manager = MCPManager()
 
-        manager.add_server("test-server", {"type": "sse", "url": "http://localhost:8080/mcp"})
+        manager.add_server(
+            "test-server", {"type": "sse", "url": "http://localhost:8080/mcp"}
+        )
 
         client = manager.get_client("test-server")
         assert client is not None
@@ -207,7 +217,9 @@ class TestMCPManager:
         """Test connecting to all servers."""
         manager = MCPManager()
 
-        manager.add_server("test-server", {"type": "sse", "url": "http://localhost:8080/mcp"})
+        manager.add_server(
+            "test-server", {"type": "sse", "url": "http://localhost:8080/mcp"}
+        )
 
         client = manager.get_client("test-server")
         client.initialize = AsyncMock()
@@ -221,7 +233,9 @@ class TestMCPManager:
         """Test disconnecting all servers."""
         manager = MCPManager()
 
-        manager.add_server("test-server", {"type": "sse", "url": "http://localhost:8080/mcp"})
+        manager.add_server(
+            "test-server", {"type": "sse", "url": "http://localhost:8080/mcp"}
+        )
 
         client = manager.get_client("test-server")
         client.close = AsyncMock()

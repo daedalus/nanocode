@@ -4,8 +4,8 @@ import pytest
 
 from nanocode.mdns import (
     DiscoveredService,
-    MDNSService,
     MDNSManager,
+    MDNSService,
     get_manager,
 )
 

@@ -1,13 +1,14 @@
 """Tests for CLI functionality."""
 
-import pytest
-import sys
 import os
+import sys
+
+import pytest
 
 # Add the agent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from nanocode.cli import ConsoleUI, PromptHandler, CommandHistory
+from nanocode.cli import CommandHistory, ConsoleUI, PromptHandler
 
 
 class TestConsoleUI:

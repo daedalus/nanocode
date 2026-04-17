@@ -12,7 +12,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import Optional
 
-from github import Github, GithubIntegration, Auth
+from github import Auth, Github, GithubIntegration
 from github.PullRequest import PullRequest
 
 
@@ -20,10 +20,10 @@ from github.PullRequest import PullRequest
 class GitHubAuth:
     """GitHub authentication configuration."""
 
-    token: Optional[str] = None
-    app_id: Optional[str] = None
-    app_private_key: Optional[str] = None
-    installation_id: Optional[str] = None
+    token: str | None = None
+    app_id: str | None = None
+    app_private_key: str | None = None
+    installation_id: str | None = None
 
 
 class GitHubClient:
@@ -31,10 +31,10 @@ class GitHubClient:
 
     def __init__(
         self,
-        token: Optional[str] = None,
-        app_id: Optional[str] = None,
-        app_private_key: Optional[str] = None,
-        installation_id: Optional[str] = None,
+        token: str | None = None,
+        app_id: str | None = None,
+        app_private_key: str | None = None,
+        installation_id: str | None = None,
     ):
         """Initialize GitHub client.
 
@@ -44,12 +44,12 @@ class GitHubClient:
             app_private_key: GitHub App private key
             installation_id: GitHub App installation ID
         """
-        self._github: Optional[Github] = None
+        self._github: Github | None = None
         self._token = token
         self._app_id = app_id
         self._app_private_key = app_private_key
         self._installation_id = installation_id
-        self._installation_token: Optional[str] = None
+        self._installation_token: str | None = None
 
     def _get_github_client(self) -> Github:
         """Get or create the GitHub client."""
@@ -74,7 +74,9 @@ class GitHubClient:
             private_key=self._app_private_key,
         )
         integration = GithubIntegration(auth=auth)
-        self._installation_token = integration.get_access_token(int(self._installation_id)).token
+        self._installation_token = integration.get_access_token(
+            int(self._installation_id)
+        ).token
         return Github(auth=Auth.Token(self._installation_token))
 
     def authenticate_with_token(self, token: str) -> "GitHubClient":
@@ -113,7 +115,9 @@ class GitHubClient:
 
     def search_repos(self, query: str, limit=30):
         """Search repositories."""
-        return list(self._get_github_client().search_repositories(query, per_page=limit))
+        return list(
+            self._get_github_client().search_repositories(query, per_page=limit)
+        )
 
     def get_pull_request(self, repo: str, pr_number: int) -> PullRequest:
         """Get a pull request by number."""
@@ -123,8 +127,8 @@ class GitHubClient:
         self,
         repo: str,
         state: str = "open",
-        head: Optional[str] = None,
-        base: Optional[str] = None,
+        head: str | None = None,
+        base: str | None = None,
     ) -> list[PullRequest]:
         """List pull requests in a repository."""
         repo_obj = self.get_repo(repo)
@@ -147,16 +151,20 @@ class GitHubClient:
         return self.get_repo(repo).get_issue(issue_number)
 
     def list_issues(
-        self, repo: str, state: str = "open", labels: Optional[list[str]] = None
+        self, repo: str, state: str = "open", labels: list[str] | None = None
     ) -> list:
         """List issues in a repository."""
         repo_obj = self.get_repo(repo)
         issues = repo_obj.get_issues(state=state)
         if labels:
-            return [i for i in issues if any(label.name in labels for label in i.labels)]
+            return [
+                i for i in issues if any(label.name in labels for label in i.labels)
+            ]
         return list(issues)
 
-    def create_issue(self, repo: str, title: str, body: str, labels: Optional[list[str]] = None):
+    def create_issue(
+        self, repo: str, title: str, body: str, labels: list[str] | None = None
+    ):
         """Create a new issue."""
         repo_obj = self.get_repo(repo)
         return repo_obj.create_issue(title=title, body=body, labels=labels or [])
@@ -215,7 +223,7 @@ class GitHubGitOperations:
     """Git operations using GitHub CLI and local git."""
 
     @staticmethod
-    def is_github_repo() -> tuple[bool, Optional[str]]:
+    def is_github_repo() -> tuple[bool, str | None]:
         """Check if current directory is a GitHub repository.
 
         Returns:
@@ -239,7 +247,7 @@ class GitHubGitOperations:
             return False, None
 
     @staticmethod
-    def _parse_github_url(url: str) -> Optional[str]:
+    def _parse_github_url(url: str) -> str | None:
         """Parse GitHub URL to get owner/repo."""
         url = url.replace(".git", "")
         if "github.com/" in url:
@@ -253,7 +261,7 @@ class GitHubGitOperations:
         return None
 
     @staticmethod
-    def get_current_branch() -> Optional[str]:
+    def get_current_branch() -> str | None:
         """Get the current git branch."""
         try:
             result = subprocess.run(
@@ -267,7 +275,7 @@ class GitHubGitOperations:
             return None
 
     @staticmethod
-    def get_default_branch() -> Optional[str]:
+    def get_default_branch() -> str | None:
         """Get the default branch of the repository."""
         try:
             result = subprocess.run(
@@ -335,7 +343,7 @@ class GitHubGitOperations:
             return False
 
     @staticmethod
-    def get_latest_commit_sha(branch: str = "HEAD") -> Optional[str]:
+    def get_latest_commit_sha(branch: str = "HEAD") -> str | None:
         """Get the SHA of the latest commit on a branch."""
         try:
             result = subprocess.run(
@@ -349,7 +357,7 @@ class GitHubGitOperations:
             return None
 
 
-def create_github_client(config: dict = None) -> Optional[GitHubClient]:
+def create_github_client(config: dict = None) -> GitHubClient | None:
     """Create a GitHub client from configuration.
 
     Args:

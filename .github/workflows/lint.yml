@@ -11,11 +11,13 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
-      - name: Install linting tools
-        run: pip install "black>=24.0" "ruff>=0.4.0"
-      - name: Check formatting with Black
-        run: black --check .
-      - name: Lint with Ruff
-        run: ruff check .
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: uv pip install --system -e ".[lint]"
+      - name: Run ruff format
+        run: ruff format --check nanocode/ tests/
+      - name: Run ruff
+        run: ruff check nanocode/ tests/
+      - name: Run mypy
+        run: mypy nanocode/

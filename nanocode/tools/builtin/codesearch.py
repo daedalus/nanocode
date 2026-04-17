@@ -1,8 +1,8 @@
 """Code search tool using Exa Code API."""
 
-import os
-import json
 import asyncio
+import json
+import os
 
 from nanocode.tools import Tool, ToolResult
 
@@ -75,15 +75,21 @@ class CodeSearchTool(Tool):
 
         if tokensNum < 1000 or tokensNum > 50000:
             return ToolResult(
-                success=False, content=None, error="tokensNum must be between 1000 and 50000"
+                success=False,
+                content=None,
+                error="tokensNum must be between 1000 and 50000",
             )
 
         try:
             return await self._do_search(query, tokensNum)
-        except asyncio.TimeoutError:
-            return ToolResult(success=False, content=None, error="Code search request timed out")
+        except TimeoutError:
+            return ToolResult(
+                success=False, content=None, error="Code search request timed out"
+            )
         except Exception as e:
-            return ToolResult(success=False, content=None, error=f"Code search error: {str(e)}")
+            return ToolResult(
+                success=False, content=None, error=f"Code search error: {str(e)}"
+            )
 
     async def _do_search(self, query: str, tokens_num: int) -> ToolResult:
         """Execute the code search request."""

@@ -1,12 +1,12 @@
 """Code formatting tools integration."""
 
 import os
-import subprocess
 import shutil
+import subprocess
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-from dataclasses import dataclass
-from abc import ABC, abstractmethod
 
 
 @dataclass
@@ -16,7 +16,7 @@ class FormatterInfo:
     name: str
     command: list[str]
     extensions: list[str]
-    environment: Optional[dict] = None
+    environment: dict | None = None
 
 
 class Formatter(ABC):
@@ -345,7 +345,7 @@ FORMATTERS: list[Formatter] = [
 ]
 
 
-def get_formatter_for_file(file_path: str) -> Optional[Formatter]:
+def get_formatter_for_file(file_path: str) -> Formatter | None:
     """Get the appropriate formatter for a file."""
     ext = Path(file_path).suffix.lower()
 

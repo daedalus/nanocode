@@ -87,7 +87,15 @@ class OpenWebSearchTool(Tool):
         num_results: int = 10,
     ) -> ToolResult:
         """Execute free web search."""
-        valid_engines = ["bing", "duckduckgo", "brave", "exa", "baidu", "juejin", "google"]
+        valid_engines = [
+            "bing",
+            "duckduckgo",
+            "brave",
+            "exa",
+            "baidu",
+            "juejin",
+            "google",
+        ]
 
         if engine not in valid_engines:
             engine = "duckduckgo"
@@ -170,7 +178,10 @@ class BraveSearchTool(Tool):
                         "q": query,
                         "count": num_results,
                     },
-                    headers={"Accept-Encoding": "gzip", "X-Subscription-Token": self.api_key},
+                    headers={
+                        "Accept-Encoding": "gzip",
+                        "X-Subscription-Token": self.api_key,
+                    },
                     timeout=30.0,
                 )
 

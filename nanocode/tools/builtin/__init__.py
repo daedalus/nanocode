@@ -1,13 +1,13 @@
 """Built-in tools for file operations, shell, and more."""
 
+import asyncio
 import os
 import subprocess
-import asyncio
 import tempfile
 from pathlib import Path
 from typing import Optional
 
-from nanocode.tools import Tool, ToolResult, ToolRegistry
+from nanocode.tools import Tool, ToolRegistry, ToolResult
 
 
 def atomic_write(file_path: Path, content: str) -> None:
@@ -41,7 +41,7 @@ def atomic_read(file_path: Path) -> str:
             with open(temp_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
-        with open(temp_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(temp_path, encoding="utf-8", errors="ignore") as f:
             return f.read()
     finally:
         if os.path.exists(temp_path):
@@ -58,13 +58,20 @@ class BashTool(Tool):
         )
         self.allowed_commands = allowed_commands or []
         self.blocked_patterns = ["rm -rf /", "dd if=", ":(){:|:&};:", "mkfs"]
-        self.pty_session: Optional[str] = None
+        self.pty_session: str | None = None
         self.parameters = {
             "type": "object",
             "properties": {
-                "command": {"type": "string", "description": "Shell command to execute"},
+                "command": {
+                    "type": "string",
+                    "description": "Shell command to execute",
+                },
                 "workdir": {"type": "string", "description": "Working directory"},
-                "timeout": {"type": "integer", "default": 60, "description": "Timeout in seconds"},
+                "timeout": {
+                    "type": "integer",
+                    "default": 60,
+                    "description": "Timeout in seconds",
+                },
                 "pty": {
                     "type": "boolean",
                     "default": False,
@@ -81,7 +88,9 @@ class BashTool(Tool):
         for pattern in self.blocked_patterns:
             if pattern in command:
                 return ToolResult(
-                    success=False, content=None, error=f"Blocked command pattern: {pattern}"
+                    success=False,
+                    content=None,
+                    error=f"Blocked command pattern: {pattern}",
                 )
 
         if pty:
@@ -198,7 +207,10 @@ class BashSessionTool(Tool):
                     "type": "string",
                     "description": "Session ID (for run, get, set_env, delete)",
                 },
-                "command": {"type": "string", "description": "Command to run (for action=run)"},
+                "command": {
+                    "type": "string",
+                    "description": "Command to run (for action=run)",
+                },
                 "workdir": {
                     "type": "string",
                     "description": "Working directory (for action=create)",
@@ -215,7 +227,11 @@ class BashSessionTool(Tool):
                     "type": "string",
                     "description": "Environment variable value (for action=set_env)",
                 },
-                "timeout": {"type": "integer", "default": 60, "description": "Timeout in seconds"},
+                "timeout": {
+                    "type": "integer",
+                    "default": 60,
+                    "description": "Timeout in seconds",
+                },
             },
             "required": ["action"],
         }
@@ -257,7 +273,9 @@ class BashSessionTool(Tool):
                 session = _bash_session_manager.get(session_id)
                 if not session:
                     return ToolResult(
-                        success=False, content=None, error=f"Session {session_id} not found"
+                        success=False,
+                        content=None,
+                        error=f"Session {session_id} not found",
                     )
 
                 result = subprocess.run(
@@ -309,7 +327,9 @@ class BashSessionTool(Tool):
                 session = _bash_session_manager.get(session_id)
                 if not session:
                     return ToolResult(
-                        success=False, content=None, error=f"Session {session_id} not found"
+                        success=False,
+                        content=None,
+                        error=f"Session {session_id} not found",
                     )
                 return ToolResult(
                     success=True, content=session, metadata={"session_id": session_id}
@@ -318,12 +338,16 @@ class BashSessionTool(Tool):
             elif action == "set_env":
                 if not session_id or not key:
                     return ToolResult(
-                        success=False, content=None, error="session_id and key required for set_env"
+                        success=False,
+                        content=None,
+                        error="session_id and key required for set_env",
                     )
                 session = _bash_session_manager.get(session_id)
                 if not session:
                     return ToolResult(
-                        success=False, content=None, error=f"Session {session_id} not found"
+                        success=False,
+                        content=None,
+                        error=f"Session {session_id} not found",
                     )
                 _bash_session_manager.update_env(session_id, key, value or "")
                 return ToolResult(
@@ -337,18 +361,26 @@ class BashSessionTool(Tool):
 
             elif action == "list":
                 sessions = _bash_session_manager.list()
-                return ToolResult(success=True, content=sessions, metadata={"count": len(sessions)})
+                return ToolResult(
+                    success=True, content=sessions, metadata={"count": len(sessions)}
+                )
 
             elif action == "delete":
                 if not session_id:
                     return ToolResult(
-                        success=False, content=None, error="session_id required for delete"
+                        success=False,
+                        content=None,
+                        error="session_id required for delete",
                     )
                 _bash_session_manager.remove(session_id)
-                return ToolResult(success=True, content=f"Deleted session: {session_id}")
+                return ToolResult(
+                    success=True, content=f"Deleted session: {session_id}"
+                )
 
             else:
-                return ToolResult(success=False, content=None, error=f"Unknown action: {action}")
+                return ToolResult(
+                    success=False, content=None, error=f"Unknown action: {action}"
+                )
 
         except subprocess.TimeoutExpired:
             return ToolResult(success=False, content=None, error="Command timed out")
@@ -372,7 +404,10 @@ class GlobTool(Tool):
                     "type": "string",
                     "description": "Glob pattern to match files (e.g., **/*.py, *.txt)",
                 },
-                "path": {"type": "string", "description": "Directory to search in (optional)"},
+                "path": {
+                    "type": "string",
+                    "description": "Directory to search in (optional)",
+                },
             },
             "required": ["pattern"],
         }
@@ -403,8 +438,14 @@ class GrepTool(Tool):
         self.parameters = {
             "type": "object",
             "properties": {
-                "pattern": {"type": "string", "description": "Regex pattern to search for"},
-                "path": {"type": "string", "description": "Directory to search in (optional)"},
+                "pattern": {
+                    "type": "string",
+                    "description": "Regex pattern to search for",
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Directory to search in (optional)",
+                },
                 "include": {
                     "type": "string",
                     "description": "Glob pattern to filter files (e.g., *.py)",
@@ -413,7 +454,9 @@ class GrepTool(Tool):
             "required": ["pattern"],
         }
 
-    async def execute(self, pattern: str, path: str = None, include: str = None) -> ToolResult:
+    async def execute(
+        self, pattern: str, path: str = None, include: str = None
+    ) -> ToolResult:
         """Search for pattern in files."""
         import re
 
@@ -492,7 +535,11 @@ class SedTool(Tool):
 
             file_path.write_text(new_content)
 
-            count = content.count(search) if global_flag else (1 if search in content else 0)
+            count = (
+                content.count(search)
+                if global_flag
+                else (1 if search in content else 0)
+            )
             return ToolResult(
                 success=True,
                 content=f"Replaced {count} occurrence(s) in {file_path}",
@@ -525,7 +572,9 @@ class DiffTool(Tool):
             file1 = self.root_dir / path1
 
             if not file1.exists():
-                return ToolResult(success=False, content=None, error=f"File not found: {path1}")
+                return ToolResult(
+                    success=False, content=None, error=f"File not found: {path1}"
+                )
 
             content1 = file1.read_text(errors="ignore")
             lines1 = content1.splitlines()
@@ -534,7 +583,9 @@ class DiffTool(Tool):
             if path2:
                 file2 = self.root_dir / path2
                 if not file2.exists():
-                    return ToolResult(success=False, content=None, error=f"File not found: {path2}")
+                    return ToolResult(
+                        success=False, content=None, error=f"File not found: {path2}"
+                    )
                 content2 = file2.read_text(errors="ignore")
                 lines2 = content2.splitlines()
                 label1 = path1
@@ -592,7 +643,11 @@ class ReadFileTool(Tool):
         self.file_tracker = file_tracker
 
     async def execute(
-        self, path: str, limit: int = None, offset: int = None, force_refresh: bool = False
+        self,
+        path: str,
+        limit: int = None,
+        offset: int = None,
+        force_refresh: bool = False,
     ) -> ToolResult:
         """Read a file."""
         try:
@@ -687,7 +742,9 @@ class EditFileTool(Tool):
                 content = atomic_read(file_path)
 
             if old not in content:
-                return ToolResult(success=False, content=None, error="Old string not found in file")
+                return ToolResult(
+                    success=False, content=None, error="Old string not found in file"
+                )
 
             new_content = content.replace(old, new, 1)
             atomic_write(file_path, new_content)
@@ -719,7 +776,9 @@ class ListDirTool(Tool):
         try:
             dir_path = Path(path) if path else self.root_dir
             if not dir_path.exists():
-                return ToolResult(success=False, content=None, error="Directory not found")
+                return ToolResult(
+                    success=False, content=None, error="Directory not found"
+                )
 
             entries = []
             for entry in dir_path.iterdir():
@@ -825,7 +884,9 @@ class TodoTool(Tool):
         )
         self.tasks = {}
 
-    async def execute(self, action: str, task: str = None, task_id: str = None) -> ToolResult:
+    async def execute(
+        self, action: str, task: str = None, task_id: str = None
+    ) -> ToolResult:
         """Manage todos."""
         if action == "add":
             import uuid
@@ -839,7 +900,9 @@ class TodoTool(Tool):
             if task_id in self.tasks:
                 self.tasks[task_id]["status"] = "completed"
                 return ToolResult(success=True, content=f"Completed task {task_id}")
-            return ToolResult(success=False, content=None, error=f"Task {task_id} not found")
+            return ToolResult(
+                success=False, content=None, error=f"Task {task_id} not found"
+            )
         elif action == "delete" and task_id:
             self.tasks.pop(task_id, None)
             return ToolResult(success=True, content=f"Deleted task {task_id}")
@@ -858,14 +921,21 @@ class LSPTool(Tool):
         self.lsp_manager = lsp_manager
 
     async def execute(
-        self, operation: str, file_path: str, line: int = 1, character: int = 1, query: str = None
+        self,
+        operation: str,
+        file_path: str,
+        line: int = 1,
+        character: int = 1,
+        query: str = None,
     ) -> ToolResult:
         """Perform LSP operation."""
         if self.lsp_manager is None:
-            return ToolResult(success=False, content=None, error="LSP manager not configured")
+            return ToolResult(
+                success=False, content=None, error="LSP manager not configured"
+            )
 
         try:
-            from nanocode.lsp import path_to_file_uri, file_uri_to_path
+            from nanocode.lsp import file_uri_to_path, path_to_file_uri
 
             file_path = str(Path(file_path).resolve())
             uri = path_to_file_uri(file_path)
@@ -876,14 +946,18 @@ class LSPTool(Tool):
 
             if client is None:
                 return ToolResult(
-                    success=False, content=None, error="No LSP server available for this file type"
+                    success=False,
+                    content=None,
+                    error="No LSP server available for this file type",
                 )
 
             if isinstance(client, tuple):
                 client = client[0]
 
             if operation == "definition":
-                result = await client.text_document__definition(uri, line - 1, character - 1)
+                result = await client.text_document__definition(
+                    uri, line - 1, character - 1
+                )
                 if not result:
                     return ToolResult(success=True, content="No definition found")
                 locations = []
@@ -899,7 +973,9 @@ class LSPTool(Tool):
                 )
 
             elif operation == "references":
-                result = await client.text_document__references(uri, line - 1, character - 1)
+                result = await client.text_document__references(
+                    uri, line - 1, character - 1
+                )
                 if not result:
                     return ToolResult(success=True, content="No references found")
                 locations = []
@@ -921,10 +997,14 @@ class LSPTool(Tool):
                     content = content.get("value", str(content))
                 elif isinstance(content, list):
                     content = "\n".join(str(c) for c in content)
-                return ToolResult(success=True, content=content, metadata={"range": result.range})
+                return ToolResult(
+                    success=True, content=content, metadata={"range": result.range}
+                )
 
             elif operation == "completion":
-                result = await client.text_document__completion(uri, line - 1, character - 1)
+                result = await client.text_document__completion(
+                    uri, line - 1, character - 1
+                )
                 if not result:
                     return ToolResult(success=True, content=[])
                 items = []
@@ -936,7 +1016,9 @@ class LSPTool(Tool):
                             "detail": item.detail,
                         }
                     )
-                return ToolResult(success=True, content=items, metadata={"count": len(items)})
+                return ToolResult(
+                    success=True, content=items, metadata={"count": len(items)}
+                )
 
             elif operation == "symbols":
                 result = await client.text_document__symbol(uri)
@@ -954,12 +1036,16 @@ class LSPTool(Tool):
                             },
                         }
                     )
-                return ToolResult(success=True, content=symbols, metadata={"count": len(symbols)})
+                return ToolResult(
+                    success=True, content=symbols, metadata={"count": len(symbols)}
+                )
 
             elif operation == "workspace_symbol":
                 if not query:
                     return ToolResult(
-                        success=False, content=None, error="query is required for workspace_symbol"
+                        success=False,
+                        content=None,
+                        error="query is required for workspace_symbol",
                     )
                 result = await client.workspace__symbol(query)
                 if not result:
@@ -976,10 +1062,14 @@ class LSPTool(Tool):
                             },
                         }
                     )
-                return ToolResult(success=True, content=symbols, metadata={"count": len(symbols)})
+                return ToolResult(
+                    success=True, content=symbols, metadata={"count": len(symbols)}
+                )
 
             elif operation == "implementation":
-                result = await client.text_document__implementation(uri, line - 1, character - 1)
+                result = await client.text_document__implementation(
+                    uri, line - 1, character - 1
+                )
                 if not result:
                     return ToolResult(success=True, content="No implementation found")
                 locations = []
@@ -1008,7 +1098,9 @@ class LSPTool(Tool):
                             "code": diag.code,
                         }
                     )
-                return ToolResult(success=True, content=diags, metadata={"count": len(diags)})
+                return ToolResult(
+                    success=True, content=diags, metadata={"count": len(diags)}
+                )
 
             else:
                 return ToolResult(
@@ -1041,8 +1133,16 @@ class PtyCreateTool(Tool):
                 },
                 "cwd": {"type": "string", "description": "Working directory"},
                 "title": {"type": "string", "description": "Terminal title"},
-                "rows": {"type": "integer", "default": 24, "description": "Terminal rows"},
-                "cols": {"type": "integer", "default": 80, "description": "Terminal columns"},
+                "rows": {
+                    "type": "integer",
+                    "default": 24,
+                    "description": "Terminal rows",
+                },
+                "cols": {
+                    "type": "integer",
+                    "default": 80,
+                    "description": "Terminal columns",
+                },
             },
         }
 
@@ -1101,7 +1201,12 @@ class PtyListTool(Tool):
             return ToolResult(
                 success=True,
                 content=[
-                    {"id": s.id, "title": s.title, "status": s.status.value, "pid": s.pid}
+                    {
+                        "id": s.id,
+                        "title": s.title,
+                        "status": s.status.value,
+                        "pid": s.pid,
+                    }
                     for s in sessions
                 ],
             )
@@ -1121,7 +1226,10 @@ class PtyWriteTool(Tool):
             "type": "object",
             "properties": {
                 "id": {"type": "string", "description": "PTY session ID"},
-                "data": {"type": "string", "description": "Data to write to the terminal"},
+                "data": {
+                    "type": "string",
+                    "description": "Data to write to the terminal",
+                },
             },
             "required": ["id", "data"],
         }
@@ -1178,7 +1286,10 @@ class PtyReadTool(Tool):
             "type": "object",
             "properties": {
                 "id": {"type": "string", "description": "PTY session ID"},
-                "cursor": {"type": "integer", "description": "Cursor position to read from"},
+                "cursor": {
+                    "type": "integer",
+                    "description": "Cursor position to read from",
+                },
                 "length": {"type": "integer", "description": "Maximum length to read"},
             },
             "required": ["id"],
@@ -1270,7 +1381,9 @@ class BatchTool(Tool):
         """Execute multiple tools in parallel."""
         if not self.tool_executor:
             return ToolResult(
-                success=False, content=None, error="Tool executor not available for batch execution"
+                success=False,
+                content=None,
+                error="Tool executor not available for batch execution",
             )
 
         if len(tool_calls) > 25:
@@ -1334,13 +1447,19 @@ class MultiEditTool(Tool):
         self.parameters = {
             "type": "object",
             "properties": {
-                "filePath": {"type": "string", "description": "The path to the file to modify"},
+                "filePath": {
+                    "type": "string",
+                    "description": "The path to the file to modify",
+                },
                 "edits": {
                     "type": "array",
                     "items": {
                         "type": "object",
                         "properties": {
-                            "oldString": {"type": "string", "description": "The text to replace"},
+                            "oldString": {
+                                "type": "string",
+                                "description": "The text to replace",
+                            },
                             "newString": {
                                 "type": "string",
                                 "description": "The text to replace it with",
@@ -1423,8 +1542,12 @@ class ApplyPatchTool(Tool):
                     old_file = file_match.group(1)
 
                     if i + 1 < len(lines) and lines[i + 1].startswith("+++ "):
-                        new_file_match = re.match(r"\+\+\+ (?:b/)?(.+?)(?:\t|$)", lines[i + 1])
-                        new_file = new_file_match.group(1) if new_file_match else old_file
+                        new_file_match = re.match(
+                            r"\+\+\+ (?:b/)?(.+?)(?:\t|$)", lines[i + 1]
+                        )
+                        new_file = (
+                            new_file_match.group(1) if new_file_match else old_file
+                        )
                         i += 2
 
                         hunk_lines = []
@@ -1439,7 +1562,7 @@ class ApplyPatchTool(Tool):
 
                         try:
                             if os.path.exists(new_file):
-                                with open(new_file, "r") as f:
+                                with open(new_file) as f:
                                     old_content = f.read()
                             else:
                                 old_content = ""
@@ -1450,7 +1573,9 @@ class ApplyPatchTool(Tool):
                                     continue
                                 patch_lines.append(hl)
 
-                            new_content = self._apply_unified_diff(old_content, patch_lines)
+                            new_content = self._apply_unified_diff(
+                                old_content, patch_lines
+                            )
 
                             os.makedirs(os.path.dirname(new_file), exist_ok=True)
                             with open(new_file, "w") as f:
@@ -1458,7 +1583,9 @@ class ApplyPatchTool(Tool):
 
                             files_changed.append(new_file)
                         except Exception as e:
-                            errors.append(f"Error applying patch to {new_file}: {str(e)}")
+                            errors.append(
+                                f"Error applying patch to {new_file}: {str(e)}"
+                            )
                     else:
                         i += 1
                 else:
@@ -1506,7 +1633,9 @@ class ApplyPatchTool(Tool):
                             result.append(pl[1:])
                         elif pl.startswith("-"):
                             pass
-                        elif pl.startswith(" ") or (pl and not pl.startswith(("+", "-", "@"))):
+                        elif pl.startswith(" ") or (
+                            pl and not pl.startswith(("+", "-", "@"))
+                        ):
                             result.append(pl)
                         i += 1
 
@@ -1542,7 +1671,10 @@ class QuestionTool(Tool):
                     "items": {
                         "type": "object",
                         "properties": {
-                            "question": {"type": "string", "description": "The question to ask"},
+                            "question": {
+                                "type": "string",
+                                "description": "The question to ask",
+                            },
                             "header": {
                                 "type": "string",
                                 "description": "Short header for the question",
@@ -1577,8 +1709,10 @@ class QuestionTool(Tool):
         )
 
 
-def create_builtin_tools(config: dict = None, file_tracker=None, lsp_manager=None) -> list[Tool]:
-    from nanocode.tools.builtin.exa_search import ExaSearchTool, ExaFetchTool
+def create_builtin_tools(
+    config: dict = None, file_tracker=None, lsp_manager=None
+) -> list[Tool]:
+    from nanocode.tools.builtin.exa_search import ExaFetchTool, ExaSearchTool
     from nanocode.tools.builtin.free_search import FreeExaSearchTool, OpenWebSearchTool
 
     exa_config = config.get("exa", {}) if config else {}

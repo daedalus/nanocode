@@ -1,14 +1,14 @@
 """Session sharing functionality."""
 
+import asyncio
+import hashlib
 import os
 import uuid
-import hashlib
-import asyncio
-import aiohttp
-from typing import Optional, Any
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any, Optional
 
+import aiohttp
 
 SHARE_API_BASE = os.environ.get("OPENCODE_SHARE_URL", "https://opncd.ai")
 SHARE_DISABLED = os.environ.get("OPENCODE_DISABLE_SHARE", "").lower() in ("true", "1")
@@ -153,7 +153,7 @@ class ShareManager:
         """Check if a session is shared."""
         return session_id in self._shares
 
-    def get_share(self, session_id: str) -> Optional[ShareInfo]:
+    def get_share(self, session_id: str) -> ShareInfo | None:
         """Get share info for a session."""
         return self._shares.get(session_id)
 
@@ -183,7 +183,9 @@ class ShareManager:
 
         if self._storage:
             try:
-                await self._storage.save_share(session_id, share_id, secret, share_info.url)
+                await self._storage.save_share(
+                    session_id, share_id, secret, share_info.url
+                )
             except Exception:
                 pass
 
@@ -288,7 +290,9 @@ class ShareManager:
                 if resp.status not in (200, 204, 404):
                     raise ShareError(f"Failed to remove share: {resp.status}")
 
-    async def _sync_remote(self, session_id: str, share_info: ShareInfo, data: dict[str, Any]):
+    async def _sync_remote(
+        self, session_id: str, share_info: ShareInfo, data: dict[str, Any]
+    ):
         """Sync data to remote server."""
         url = f"{SHARE_API_BASE}/api/share/{share_info.share_id}/sync"
 
@@ -303,7 +307,7 @@ class ShareManager:
                     pass
 
 
-_manager: Optional[ShareManager] = None
+_manager: ShareManager | None = None
 
 
 def get_share_manager() -> ShareManager:
@@ -334,7 +338,7 @@ async def remove_share(session_id: str):
     await get_share_manager().remove(session_id)
 
 
-def get_share(session_id: str) -> Optional[ShareInfo]:
+def get_share(session_id: str) -> ShareInfo | None:
     """Get share info for a session."""
     return get_share_manager().get_share(session_id)
 
@@ -398,7 +402,7 @@ class ForkManager:
         return new_session.id
 
 
-_fork_manager: Optional[ForkManager] = None
+_fork_manager: ForkManager | None = None
 
 
 def get_fork_manager() -> ForkManager:

@@ -260,7 +260,7 @@ def create_default_agents() -> AgentRegistry:
             native=True,
             permission=[
                 PermissionRule(permission="*", action=PermissionAction.ALLOW),
-                PermissionRule(permission="doom_loop", action=PermissionAction.ALLOW),
+                PermissionRule(permission="doom_loop", action=PermissionAction.DENY),
                 PermissionRule(
                     permission="external_directory",
                     pattern=glob_pattern,
@@ -300,7 +300,7 @@ def create_default_agents() -> AgentRegistry:
             native=True,
             permission=[
                 PermissionRule(permission="*", action=PermissionAction.ALLOW),
-                PermissionRule(permission="doom_loop", action=PermissionAction.ALLOW),
+                PermissionRule(permission="doom_loop", action=PermissionAction.DENY),
                 PermissionRule(
                     permission="external_directory",
                     pattern=f"{home}/.opencode/plans/*",
@@ -342,7 +342,7 @@ def create_default_agents() -> AgentRegistry:
             native=True,
             permission=[
                 PermissionRule(permission="*", action=PermissionAction.ALLOW),
-                PermissionRule(permission="doom_loop", action=PermissionAction.ALLOW),
+                PermissionRule(permission="doom_loop", action=PermissionAction.DENY),
                 PermissionRule(
                     permission="external_directory",
                     pattern=glob_pattern,
@@ -382,7 +382,7 @@ def create_default_agents() -> AgentRegistry:
             permission=[
                 PermissionRule(permission="*", action=PermissionAction.DENY),
                 PermissionRule(permission="task", action=PermissionAction.DENY),
-                PermissionRule(permission="doom_loop", action=PermissionAction.ALLOW),
+                PermissionRule(permission="doom_loop", action=PermissionAction.DENY),
                 PermissionRule(permission="grep", action=PermissionAction.ALLOW),
                 PermissionRule(permission="glob", action=PermissionAction.ALLOW),
                 PermissionRule(permission="ls", action=PermissionAction.ALLOW),

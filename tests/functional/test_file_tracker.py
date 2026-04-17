@@ -1,10 +1,11 @@
 """Tests for file tracker."""
 
-import pytest
-import tempfile
 import os
+import tempfile
 import time
 from pathlib import Path
+
+import pytest
 
 from nanocode.tools.file_tracker import FileTracker
 

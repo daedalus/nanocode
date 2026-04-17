@@ -10,9 +10,9 @@ This module provides a local web-based admin console for:
 """
 
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
-from dataclasses import dataclass, field
 
 from aiohttp import web
 
@@ -60,7 +60,9 @@ class AdminConsole:
         self.app.router.add_get("/chat", self.handle_chat)
         self.app.router.add_get("/sessions", self.handle_sessions)
         self.app.router.add_get("/sessions/{session_id}", self.handle_session_detail)
-        self.app.router.add_post("/sessions/{session_id}/delete", self.handle_delete_session)
+        self.app.router.add_post(
+            "/sessions/{session_id}/delete", self.handle_delete_session
+        )
         self.app.router.add_get("/files", self.handle_files)
         self.app.router.add_get("/usage", self.handle_usage)
         self.app.router.add_get("/config", self.handle_config)
@@ -193,7 +195,13 @@ class AdminConsole:
                 for item in sorted(search_path.iterdir()):
                     if item.name.startswith("."):
                         continue
-                    if item.name in ["node_modules", "__pycache__", ".git", "venv", ".venv"]:
+                    if item.name in [
+                        "node_modules",
+                        "__pycache__",
+                        ".git",
+                        "venv",
+                        ".venv",
+                    ]:
                         continue
 
                     stat = item.stat()
@@ -205,7 +213,7 @@ class AdminConsole:
                             "size": (
                                 f"{stat.st_size:,}"
                                 if stat.st_size < 1024 * 1024
-                                else f"{stat.st_size//1024//1024}MB"
+                                else f"{stat.st_size // 1024 // 1024}MB"
                             ),
                             "modified": stat.st_mtime,
                         }
@@ -304,7 +312,12 @@ class AdminConsole:
     async def handle_skills(self, request):
         """Skills page."""
         html = self._web.get_tools_html(
-            [{"name": "skills", "description": "Custom skills loaded from .nanocode/skills"}]
+            [
+                {
+                    "name": "skills",
+                    "description": "Custom skills loaded from .nanocode/skills",
+                }
+            ]
         )
         return web.Response(text=html, content_type="text/html")
 
@@ -349,7 +362,11 @@ class AdminConsole:
 
                             model = msg.get("model", "unknown")
                             if model not in stats.tokens_by_model:
-                                stats.tokens_by_model[model] = {"in": 0, "out": 0, "cost": 0.0}
+                                stats.tokens_by_model[model] = {
+                                    "in": 0,
+                                    "out": 0,
+                                    "cost": 0.0,
+                                }
                             stats.tokens_by_model[model]["in"] += tokens_in
                             stats.tokens_by_model[model]["out"] += tokens_out
                             stats.tokens_by_model[model]["cost"] += cost
@@ -358,9 +375,14 @@ class AdminConsole:
                             if created_at:
                                 date = created_at[:10]
                                 if date not in stats.sessions_by_date:
-                                    stats.sessions_by_date[date] = {"messages": 0, "tokens": 0}
+                                    stats.sessions_by_date[date] = {
+                                        "messages": 0,
+                                        "tokens": 0,
+                                    }
                                 stats.sessions_by_date[date]["messages"] += 1
-                                stats.sessions_by_date[date]["tokens"] += tokens_in + tokens_out
+                                stats.sessions_by_date[date]["tokens"] += (
+                                    tokens_in + tokens_out
+                                )
         except Exception:
             pass
 
@@ -400,7 +422,7 @@ class AdminConsole:
             await runner.cleanup()
 
 
-_admin_console: Optional[AdminConsole] = None
+_admin_console: AdminConsole | None = None
 
 
 def get_admin_console(config: Config = None) -> AdminConsole:
@@ -412,7 +434,9 @@ def get_admin_console(config: Config = None) -> AdminConsole:
     return _admin_console
 
 
-async def start_admin_console(config: Config = None, host: str = None, port: int = None):
+async def start_admin_console(
+    config: Config = None, host: str = None, port: int = None
+):
     """Start the admin console server."""
     config = config or get_config()
     host = host or config.get("admin.host", "127.0.0.1")

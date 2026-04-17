@@ -1,11 +1,11 @@
 """Anthropic Claude LLM provider."""
 
 import os
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import httpx
 
-from nanocode.llm.base import LLMBase, LLMResponse, ToolCall, Message
+from nanocode.llm.base import LLMBase, LLMResponse, Message, ToolCall
 
 
 class AnthropicLLM(LLMBase):
@@ -21,7 +21,9 @@ class AnthropicLLM(LLMBase):
         super().__init__(api_key, None, model, proxy=proxy, **kwargs)
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
 
-    async def chat(self, messages: list, tools: list[dict] = None, **kwargs) -> LLMResponse:
+    async def chat(
+        self, messages: list, tools: list[dict] = None, **kwargs
+    ) -> LLMResponse:
         """Send a chat completion request."""
         messages = self._normalize_messages(messages)
 
@@ -50,7 +52,7 @@ class AnthropicLLM(LLMBase):
         if tools:
             payload["tools"] = tools
 
-        async with httpx.AsyncClient(proxies=self.proxy) as client:
+        async with httpx.AsyncClient(proxy=self.proxy) as client:
             response = await client.post(
                 "https://api.anthropic.com/v1/messages",
                 json=payload,
@@ -63,7 +65,9 @@ class AnthropicLLM(LLMBase):
         tool_calls = []
         if tc_data := data.get("tool_calls", []):
             for tc in tc_data:
-                tool_calls.append(ToolCall(name=tc.get("name", ""), arguments=tc.get("input", {})))
+                tool_calls.append(
+                    ToolCall(name=tc.get("name", ""), arguments=tc.get("input", {}))
+                )
 
         content_parts = []
         thinking = None
@@ -72,7 +76,9 @@ class AnthropicLLM(LLMBase):
                 content_parts.append(block.get("text", ""))
             elif block.get("type") == "tool_use":
                 tool_calls.append(
-                    ToolCall(name=block.get("name", ""), arguments=block.get("input", {}))
+                    ToolCall(
+                        name=block.get("name", ""), arguments=block.get("input", {})
+                    )
                 )
             elif block.get("type") == "thinking":
                 thinking = block.get("thinking", "")

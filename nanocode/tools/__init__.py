@@ -1,11 +1,15 @@
 """Tool system for the autonomous agent."""
 
-from abc import ABC, abstractmethod
-from typing import Any, Optional, Callable, Awaitable
 import asyncio
-import json
 import inspect
+import json
+import logging
+from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import Any, Optional
+
+logger = logging.getLogger("nanocode.tools")
 
 
 @dataclass
@@ -14,7 +18,7 @@ class ToolResult:
 
     success: bool
     content: Any
-    error: Optional[str] = None
+    error: str | None = None
     metadata: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -50,7 +54,7 @@ class Tool(ABC):
             },
         }
 
-    def validate_args(self, args: dict) -> tuple[bool, Optional[str]]:
+    def validate_args(self, args: dict) -> tuple[bool, str | None]:
         """Validate tool arguments against schema."""
         required = self.parameters.get("required", [])
         for req in required:
@@ -62,7 +66,9 @@ class Tool(ABC):
 class FuncTool(Tool):
     """Tool wrapper around a function."""
 
-    def __init__(self, func: Callable[..., Awaitable], name: str = None, description: str = None):
+    def __init__(
+        self, func: Callable[..., Awaitable], name: str = None, description: str = None
+    ):
         self.func = func
         self.name = name or func.__name__
         self.description = description or func.__doc__ or f"Execute {self.name}"
@@ -144,7 +150,9 @@ class ToolRegistry:
         """Register a tool."""
         self._tools[tool.name] = tool
 
-    def register_function(self, func: Callable, name: str = None, description: str = None):
+    def register_function(
+        self, func: Callable, name: str = None, description: str = None
+    ):
         """Register a function as a tool."""
         if asyncio.iscoroutinefunction(func):
             tool = FuncTool(func, name, description)
@@ -156,7 +164,7 @@ class ToolRegistry:
         """Register a custom handler for a tool name."""
         self._handlers[name] = handler
 
-    def get(self, name: str) -> Optional[Tool]:
+    def get(self, name: str) -> Tool | None:
         """Get a tool by name."""
         return self._tools.get(name)
 
@@ -183,20 +191,32 @@ class ToolExecutor:
     def __init__(self, registry: ToolRegistry):
         self.registry = registry
         self.execution_history: list[dict] = []
+        logger.debug("ToolExecutor initialized")
 
     async def execute(self, tool_name: str, arguments: dict) -> ToolResult:
         """Execute a tool by name with arguments."""
+        logger.debug(f"ToolExecutor.execute('{tool_name}', {arguments})")
+
         tool = self.registry.get(tool_name)
 
         if not tool:
+            logger.debug(
+                f"Tool '{tool_name}' not found in registry, checking handlers..."
+            )
             if handler := self.registry._handlers.get(tool_name):
                 try:
+                    logger.debug(f"Executing handler for '{tool_name}'")
                     result = await handler(**arguments)
                     return ToolResult(success=True, content=result)
                 except Exception as e:
+                    logger.error(f"Handler for '{tool_name}' failed: {e}")
                     return ToolResult(success=False, content=None, error=str(e))
-            return ToolResult(success=False, content=None, error=f"Unknown tool: {tool_name}")
+            logger.warning(f"Unknown tool: '{tool_name}'")
+            return ToolResult(
+                success=False, content=None, error=f"Unknown tool: {tool_name}"
+            )
 
+        logger.debug(f"Executing tool '{tool_name}'")
         result = await tool.execute(**arguments)
 
         self.execution_history.append(
@@ -207,10 +227,18 @@ class ToolExecutor:
             }
         )
 
+        if result.success:
+            logger.info(f"Tool '{tool_name}' executed successfully")
+        else:
+            logger.warning(f"Tool '{tool_name}' failed: {result.error}")
+
         return result
 
-    async def execute_multiple(self, tool_calls: list[tuple[str, dict]]) -> list[ToolResult]:
+    async def execute_multiple(
+        self, tool_calls: list[tuple[str, dict]]
+    ) -> list[ToolResult]:
         """Execute multiple tools in parallel."""
+        logger.debug(f"execute_multiple: {len(tool_calls)} tools")
         tasks = [self.execute(name, args) for name, args in tool_calls]
         return await asyncio.gather(*tasks)
 

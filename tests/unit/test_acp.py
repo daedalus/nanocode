@@ -3,21 +3,21 @@
 import pytest
 
 from nanocode.acp import (
-    ACPParseError,
-    ACPInvalidRequest,
-    ACPMethodNotFound,
-    ACPInvalidParams,
-    ACPInternalError,
-    ACPProtocolVersion,
     ACPContentBlock,
+    ACPHandler,
+    ACPInternalError,
+    ACPInvalidParams,
+    ACPInvalidRequest,
     ACPMessage,
-    ACPToolUse,
-    ACPToolResult,
-    ACPSessionState,
-    ACPSessionManager,
+    ACPMethodNotFound,
+    ACPParseError,
+    ACPProtocolVersion,
     ACPRequest,
     ACPResponse,
-    ACPHandler,
+    ACPSessionManager,
+    ACPSessionState,
+    ACPToolResult,
+    ACPToolUse,
 )
 
 
@@ -287,7 +287,9 @@ class TestACPHandler:
 
         session = handler.session_manager.create(cwd="/home/user")
 
-        request = ACPRequest(id=1, method="session/delete", params={"sessionId": session.id})
+        request = ACPRequest(
+            id=1, method="session/delete", params={"sessionId": session.id}
+        )
 
         response = await handler.handle(request)
 
@@ -305,7 +307,9 @@ class TestACPHandler:
             method="session/prompt",
             params={
                 "sessionId": session.id,
-                "messages": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}],
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
+                ],
             },
         )
 

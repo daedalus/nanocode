@@ -46,6 +46,14 @@ Examples of correct tool usage:
 3. If you don't know the answer, use tools to find out
 4. Never say "I need to know" - use tools to find the information
 
+# AVOID DOOM LOOPS - VERY IMPORTANT
+- NEVER repeat the same tool calls in succession (e.g., don't call 'ls' then 'ls' then 'ls')
+- NEVER call ls/glob repeatedly without reading any files - after 2 ls/glob calls you MUST use 'read' or 'grep'
+- If you call 'ls' or 'glob' more than twice consecutively, you are in a doom loop - STOP and use 'read' or 'grep'
+- Make progress with each tool call - don't just explore, actually analyze and complete the task
+- After getting file list, READ files to analyze them - don't just keep listing
+- If stuck, try a DIFFERENT approach instead of repeating the same exploration
+
 # Available tools
 - bash: Execute shell commands (use 'ls', 'find', 'grep', etc.)
 - glob: Find files by pattern (e.g., pattern='**/*.py')
@@ -339,8 +347,9 @@ class AutonomousAgent:
                         f"[{agent_name}] DOOM LOOP DETECTED for '{tool_name}': {warning}"
                     )
                     print(f"\n\033[91m{warning}\033[0m\n")
+                
+                doom_loop_msg = f"\n[DOOM LOOP WARNING] {warning}\n"
 
-                # Allow tool to execute even on doom loop (show warning but don't block)
                 if self.current_agent:
                     doom_action = self.permission_handler.check_permission(
                         self.current_agent,
@@ -355,8 +364,18 @@ class AutonomousAgent:
                             {
                                 "tool_call_id": tc.id,
                                 "tool_name": tool_name,
-                                "result": f"Error: Doom loop detected - tool '{tool_name}' called repeatedly with same arguments. Permission denied.",
+                                "result": f"Error: Doom loop detected - tool '{tool_name}' called repeatedly with same arguments. Permission denied.{doom_loop_msg}",
                                 "success": False,
+                            }
+                        )
+                        continue
+                    else:
+                        results.append(
+                            {
+                                "tool_call_id": tc.id,
+                                "tool_name": tool_name,
+                                "result": doom_loop_msg + "Tool executed but doom loop detected.",
+                                "success": True,
                             }
                         )
                         continue
@@ -632,9 +651,6 @@ class AutonomousAgent:
                         f"\n\033[96m[DEBUG] Handling {len(response.tool_calls)} tool calls...\033[0m"
                     )
                 
-                # Reset doom loop tracking at the start of each tool call round
-                self.doom_loop_handler.reset()
-                
                 tool_results = await self._handle_tool_calls(response.tool_calls)
                 tool_results_history.extend(tool_results)
 
@@ -665,9 +681,6 @@ class AutonomousAgent:
                     logger.info(
                         f"[{agent_name}] Second LLM requested {len(final_response.tool_calls)} tool call(s): {[tc.name for tc in final_response.tool_calls]} (iteration {iteration})"
                     )
-                    
-                    # Reset doom loop tracking for this iteration
-                    self.doom_loop_handler.reset()
                     
                     tool_results = await self._handle_tool_calls(final_response.tool_calls)
                     tool_results_history.extend(tool_results)

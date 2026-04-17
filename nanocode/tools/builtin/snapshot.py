@@ -1,7 +1,7 @@
 """Snapshot tools for capturing and reverting changes."""
 
-from nanocode.tools import Tool, ToolResult
 from nanocode.snapshot import SnapshotManager
+from nanocode.tools import Tool, ToolResult
 
 
 class SnapshotTrackTool(Tool):

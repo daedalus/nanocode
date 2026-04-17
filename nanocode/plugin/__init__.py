@@ -1,13 +1,14 @@
 """Plugin system for extensible functionality."""
 
-import os
 import asyncio
 import importlib.util
-from pathlib import Path
-from typing import Any, Callable, Optional, Protocol, runtime_checkable
+import os
+from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Any, Optional, Protocol, runtime_checkable
 
 
 @dataclass
@@ -177,9 +178,11 @@ class PluginManager:
         self._plugins.pop(name)
 
         for hook_type in PluginHookType:
-            self._hooks[hook_type] = [(n, fn) for n, fn in self._hooks[hook_type] if n != name]
+            self._hooks[hook_type] = [
+                (n, fn) for n, fn in self._hooks[hook_type] if n != name
+            ]
 
-    def get_plugin(self, name: str) -> Optional[Plugin]:
+    def get_plugin(self, name: str) -> Plugin | None:
         """Get a plugin by name."""
         return self._plugins.get(name)
 
@@ -191,7 +194,9 @@ class PluginManager:
         """Get hooks of a specific type."""
         return self._hooks.get(hook_type, [])
 
-    async def trigger_hook(self, hook_type: PluginHookType, *args, **kwargs) -> list[Any]:
+    async def trigger_hook(
+        self, hook_type: PluginHookType, *args, **kwargs
+    ) -> list[Any]:
         """Trigger all hooks of a specific type."""
         if not self._enabled:
             return []

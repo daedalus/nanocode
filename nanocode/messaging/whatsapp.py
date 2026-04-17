@@ -1,12 +1,13 @@
 """WhatsApp messaging platform integration."""
 
-import os
-import logging
 import hashlib
 import hmac
+import logging
+import os
+
 from aiohttp import web
 
-from nanocode.messaging import MessagingPlatform, Message
+from nanocode.messaging import Message, MessagingPlatform
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +20,15 @@ class WhatsAppPlatform(MessagingPlatform):
         self.phone_number_id = self.config.get("phone_number_id") or os.getenv(
             "WHATSAPP_PHONE_NUMBER_ID"
         )
-        self.access_token = self.config.get("access_token") or os.getenv("WHATSAPP_ACCESS_TOKEN")
+        self.access_token = self.config.get("access_token") or os.getenv(
+            "WHATSAPP_ACCESS_TOKEN"
+        )
         self.verify_token = self.config.get("verify_token") or os.getenv(
             "WHATSAPP_VERIFY_TOKEN", "your_verify_token"
         )
-        self.app_secret = self.config.get("app_secret") or os.getenv("WHATSAPP_APP_SECRET")
+        self.app_secret = self.config.get("app_secret") or os.getenv(
+            "WHATSAPP_APP_SECRET"
+        )
         self.webhook_port = self.config.get("webhook_port", 8080)
         self.app = None
         self.runner = None
@@ -127,14 +132,18 @@ class WhatsAppPlatform(MessagingPlatform):
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(url, json=payload, headers=headers, timeout=30.0)
+                response = await client.post(
+                    url, json=payload, headers=headers, timeout=30.0
+                )
                 data = response.json()
                 return data.get("messages", [{}])[0].get("id", "")
         except Exception as e:
             logger.error(f"WhatsApp send error: {e}")
             return ""
 
-    async def send_interactive_message(self, chat_id: str, text: str, buttons: list = None) -> str:
+    async def send_interactive_message(
+        self, chat_id: str, text: str, buttons: list = None
+    ) -> str:
         """Send a message with interactive buttons to WhatsApp."""
         if not self.access_token or not self.phone_number_id:
             logger.warning("WhatsApp access_token or phone_number_id not configured")
@@ -158,7 +167,9 @@ class WhatsAppPlatform(MessagingPlatform):
                     "type": "reply",
                     "reply": {
                         "id": btn.get("value", f"btn_{i}"),
-                        "title": btn.get("text", "")[:25],  # WhatsApp limits button text
+                        "title": btn.get("text", "")[
+                            :25
+                        ],  # WhatsApp limits button text
                     },
                 }
             )
@@ -176,7 +187,9 @@ class WhatsAppPlatform(MessagingPlatform):
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(url, json=payload, headers=headers, timeout=30.0)
+                response = await client.post(
+                    url, json=payload, headers=headers, timeout=30.0
+                )
                 data = response.json()
                 return data.get("messages", [{}])[0].get("id", "")
         except Exception as e:
@@ -188,7 +201,9 @@ class WhatsAppPlatform(MessagingPlatform):
         if not self.app_secret:
             return True
 
-        expected = hmac.new(self.app_secret.encode(), payload, hashlib.sha256).hexdigest()
+        expected = hmac.new(
+            self.app_secret.encode(), payload, hashlib.sha256
+        ).hexdigest()
 
         return hmac.compare_digest(expected, signature)
 

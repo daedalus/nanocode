@@ -1,19 +1,19 @@
 """PTY (Pseudo-Terminal) support for nanocode."""
 
+import asyncio
+import fcntl
 import os
 import pty
 import select
-import subprocess
-import fcntl
-import termios
 import struct
-import uuid
-import asyncio
+import subprocess
+import termios
 import threading
+import uuid
 import warnings
-from typing import Optional
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Optional
 
 
 class PtyStatus(Enum):
@@ -32,7 +32,7 @@ class PtyInfo:
     cwd: str
     status: PtyStatus
     pid: int
-    exit_code: Optional[int] = None
+    exit_code: int | None = None
 
 
 @dataclass
@@ -41,7 +41,7 @@ class PtySession:
 
     info: PtyInfo
     master_fd: int
-    process: Optional[subprocess.Popen]
+    process: subprocess.Popen | None
     buffer: str = ""
     buffer_cursor: int = 0
     cursor: int = 0
@@ -155,7 +155,9 @@ class PtyManager:
                         try:
                             data = os.read(session.master_fd, 4096)
                             if data:
-                                loop.run_until_complete(cls._handle_output(session_id, data))
+                                loop.run_until_complete(
+                                    cls._handle_output(session_id, data)
+                                )
                             else:
                                 break
                         except OSError:
@@ -167,7 +169,9 @@ class PtyManager:
                 try:
                     pid, status = os.waitpid(session.info.pid, os.WNOHANG)
                     if pid != 0:
-                        exit_code = os.WEXITSTATUS(status) if os.WIFEXITED(status) else -1
+                        exit_code = (
+                            os.WEXITSTATUS(status) if os.WIFEXITED(status) else -1
+                        )
                         loop.run_until_complete(cls._handle_exit(session_id, exit_code))
                         break
                 except ChildProcessError:
@@ -231,7 +235,7 @@ class PtyManager:
             pass
 
     @classmethod
-    def get(cls, session_id: str) -> Optional[PtyInfo]:
+    def get(cls, session_id: str) -> PtyInfo | None:
         """Get PTY session info."""
         session = cls.sessions.get(session_id)
         return session.info if session else None

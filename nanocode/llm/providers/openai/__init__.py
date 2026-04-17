@@ -71,6 +71,10 @@ class OpenAILLM(LLMBase):
         )
         data = response.json()
 
+        if "choices" not in data:
+            error_msg = data.get("error", {}).get("message", str(data))
+            raise RuntimeError(f"LLM API error: {error_msg}")
+
         choice = data["choices"][0]
         msg_data = choice["message"]
 

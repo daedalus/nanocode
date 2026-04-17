@@ -111,11 +111,11 @@ class ACPContentBlock:
     """A content block in a message."""
 
     type: str
-    text: Optional[str] = None
-    resource: Optional[dict] = None
-    resource_uri: Optional[str] = None
-    image: Optional[str] = None
-    mime_type: Optional[str] = None
+    text: str | None = None
+    resource: dict | None = None
+    resource_uri: str | None = None
+    image: str | None = None
+    mime_type: str | None = None
 
     def to_dict(self) -> dict:
         result = {"type": self.type}
@@ -150,7 +150,12 @@ class ACPToolUse:
     input: dict
 
     def to_dict(self) -> dict:
-        return {"type": "tool_use", "id": self.id, "name": self.name, "input": self.input}
+        return {
+            "type": "tool_use",
+            "id": self.id,
+            "name": self.name,
+            "input": self.input,
+        }
 
 
 @dataclass
@@ -189,7 +194,7 @@ class ACPSessionState:
     cwd: str
     created_at: Any = None
     messages: list[dict] = field(default_factory=list)
-    model: Optional[dict] = None
+    model: dict | None = None
 
 
 class ACPSessionManager:
@@ -210,7 +215,7 @@ class ACPSessionManager:
         self._sessions[session_id] = session
         return session
 
-    def get(self, session_id: str) -> Optional[ACPSessionState]:
+    def get(self, session_id: str) -> ACPSessionState | None:
         """Get a session by ID."""
         return self._sessions.get(session_id)
 
@@ -289,7 +294,9 @@ class ACPHandler:
                 return ACPResponse(request.id, result)
 
             if not self._initialized and request.method != "initialize":
-                return ACPResponse(request.id, error=ACPInvalidRequest("Not initialized"))
+                return ACPResponse(
+                    request.id, error=ACPInvalidRequest("Not initialized")
+                )
 
             if request.method == "ping":
                 return ACPResponse(request.id, {"pong": True})
@@ -330,8 +337,13 @@ class ACPHandler:
         """Handle initialize request."""
         protocol_version = params.get("protocolVersion", 1)
 
-        if protocol_version < ACPProtocolVersion.MIN or protocol_version > ACPProtocolVersion.MAX:
-            raise ACPInvalidRequest(f"Protocol version {protocol_version} not supported")
+        if (
+            protocol_version < ACPProtocolVersion.MIN
+            or protocol_version > ACPProtocolVersion.MAX
+        ):
+            raise ACPInvalidRequest(
+                f"Protocol version {protocol_version} not supported"
+            )
 
         self._protocol_version = protocol_version
 
@@ -419,11 +431,16 @@ class ACPHandler:
         if system_prompt:
             llm_messages.insert(0, LLMMessage(role="system", content=system_prompt))
 
-        response_text = "ACP prompt processed. Use nanocode directly for full functionality."
+        response_text = (
+            "ACP prompt processed. Use nanocode directly for full functionality."
+        )
 
         return {
             "session": {"id": session_id},
-            "message": {"role": "assistant", "content": [{"type": "text", "text": response_text}]},
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": response_text}],
+            },
             "stop_reason": "end_turn",
         }
 
@@ -503,7 +520,9 @@ class ACPServer:
                 error = ACPInternalError(str(e))
                 response = ACPResponse(None, error=error)
                 response_json = json.dumps(response.to_dict())
-                sys.stdout.write(f"Content-Length: {len(response_json)}\r\n\r\n{response_json}")
+                sys.stdout.write(
+                    f"Content-Length: {len(response_json)}\r\n\r\n{response_json}"
+                )
                 sys.stdout.flush()
                 buffer = ""
 

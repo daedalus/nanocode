@@ -3,18 +3,18 @@
 import pytest
 
 from nanocode.agents import (
+    AgentInfo,
     AgentMode,
     PermissionAction,
     PermissionRule,
-    AgentInfo,
 )
 from nanocode.agents.permission import (
-    PermissionHandler,
-    PermissionDeniedError,
-    PermissionRejectedError,
     PermissionCorrectedError,
-    PermissionReplyType,
+    PermissionDeniedError,
+    PermissionHandler,
+    PermissionRejectedError,
     PermissionReply,
+    PermissionReplyType,
 )
 
 
@@ -44,7 +44,9 @@ class TestPermissionHandler:
             native=True,
             permission=[
                 PermissionRule(permission="*", action=PermissionAction.ALLOW),
-                PermissionRule(permission="edit", pattern="*", action=PermissionAction.DENY),
+                PermissionRule(
+                    permission="edit", pattern="*", action=PermissionAction.DENY
+                ),
                 PermissionRule(permission="bash", action=PermissionAction.ASK),
             ],
         )

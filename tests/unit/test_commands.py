@@ -2,8 +2,8 @@
 
 from nanocode.cli.commands import (
     COMMANDS,
-    get_command_help,
     find_command,
+    get_command_help,
     get_command_names,
 )
 

@@ -1,11 +1,11 @@
 """Slack messaging platform integration."""
 
-import os
 import asyncio
 import logging
+import os
 from typing import Any
 
-from nanocode.messaging import MessagingPlatform, Message
+from nanocode.messaging import Message, MessagingPlatform
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,9 @@ class SlackPlatform(MessagingPlatform):
     def __init__(self, config: dict = None):
         super().__init__(config)
         self.bot_token = self.config.get("bot_token") or os.getenv("SLACK_BOT_TOKEN")
-        self.signing_secret = self.config.get("signing_secret") or os.getenv("SLACK_SIGNING_SECRET")
+        self.signing_secret = self.config.get("signing_secret") or os.getenv(
+            "SLACK_SIGNING_SECRET"
+        )
         self.app_token = self.config.get("app_token") or os.getenv("SLACK_APP_TOKEN")
         self.socket_mode = self.config.get("socket_mode", True)
         self.client = None
@@ -29,7 +31,9 @@ class SlackPlatform(MessagingPlatform):
             from slack_bolt import App
             from slack_bolt.adapter.socket_mode import SocketModeHandler
         except ImportError:
-            logger.warning("slack_bolt not installed. Install with: pip install slack-bolt")
+            logger.warning(
+                "slack_bolt not installed. Install with: pip install slack-bolt"
+            )
             return
 
         self.app = App(
@@ -120,7 +124,9 @@ class SlackPlatform(MessagingPlatform):
             logger.error(f"Slack send error: {e}")
             return ""
 
-    async def send_interactive_message(self, chat_id: str, text: str, buttons: list = None) -> str:
+    async def send_interactive_message(
+        self, chat_id: str, text: str, buttons: list = None
+    ) -> str:
         """Send a message with interactive buttons to Slack."""
         if not self.app or not buttons:
             return await self.send_message(chat_id, text)

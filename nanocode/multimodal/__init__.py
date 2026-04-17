@@ -1,16 +1,16 @@
 """Multimodal support for the agent."""
 
 import base64
-from typing import Any, Optional
 from dataclasses import dataclass
+from typing import Any, Optional
 
 
 @dataclass
 class ImageContent:
     """Image content for multimodal input."""
 
-    url: Optional[str] = None
-    base64: Optional[str] = None
+    url: str | None = None
+    base64: str | None = None
     mime_type: str = "image/png"
 
 
@@ -45,7 +45,9 @@ class VisionProcessor:
         with open(image_path, "rb") as f:
             return base64.b64encode(f.read()).decode()
 
-    def create_multimodal_message(self, text: str, images: list[str] = None) -> list[dict]:
+    def create_multimodal_message(
+        self, text: str, images: list[str] = None
+    ) -> list[dict]:
         """Create a multimodal message content."""
         content = [{"type": "text", "text": text}]
 

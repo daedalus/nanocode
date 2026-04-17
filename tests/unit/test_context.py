@@ -1,14 +1,15 @@
 """Tests for context manager."""
 
 import pytest
+
 from nanocode.context import (
     ContextManager,
     ContextStrategy,
-    TokenCounter,
     Message,
     MessagePartType,
     ModelLimits,
     ScrapManager,
+    TokenCounter,
 )
 
 

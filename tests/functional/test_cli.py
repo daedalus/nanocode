@@ -1,7 +1,9 @@
 """Tests for CLI functionality."""
 
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
+
 from nanocode.cli import ConsoleUI, InteractiveCLI
 from nanocode.core import AutonomousAgent
 
@@ -38,7 +40,7 @@ class TestInteractiveCLI:
     @pytest.fixture
     def mock_agent(self):
         """Create a mock agent."""
-        from nanocode.state import AgentStateData, AgentState
+        from nanocode.state import AgentState, AgentStateData
 
         agent = Mock(spec=AutonomousAgent)
         agent.state = AgentStateData()

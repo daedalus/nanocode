@@ -1,11 +1,11 @@
 """Agent state machine and state management."""
 
-from enum import Enum, auto
-from typing import Any, Optional
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
-import json
+from enum import Enum, auto
 from pathlib import Path
+from typing import Any
 
 
 class AgentState(Enum):
@@ -26,13 +26,13 @@ class TaskStep:
 
     id: str
     description: str
-    tool: Optional[str] = None
+    tool: str | None = None
     args: dict = field(default_factory=dict)
     result: Any = None
     status: str = "pending"  # pending, running, complete, failed
-    error: Optional[str] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    error: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
 
 @dataclass
@@ -44,7 +44,7 @@ class ExecutionPlan:
     steps: list[TaskStep] = field(default_factory=list)
     current_step: int = 0
     created_at: datetime = field(default_factory=datetime.now)
-    checkpoint_file: Optional[Path] = None
+    checkpoint_file: Path | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
@@ -61,7 +61,9 @@ class ExecutionPlan:
                     "status": s.status,
                     "error": s.error,
                     "started_at": s.started_at.isoformat() if s.started_at else None,
-                    "completed_at": s.completed_at.isoformat() if s.completed_at else None,
+                    "completed_at": s.completed_at.isoformat()
+                    if s.completed_at
+                    else None,
                 }
                 for s in self.steps
             ],
@@ -100,13 +102,13 @@ class AgentStateData:
     """Complete agent state data."""
 
     state: AgentState = AgentState.IDLE
-    task: Optional[str] = None
-    plan: Optional[ExecutionPlan] = None
+    task: str | None = None
+    plan: ExecutionPlan | None = None
     messages: list[dict] = field(default_factory=list)
     context: dict = field(default_factory=dict)
-    error: Optional[str] = None
-    last_traceback: Optional[str] = None
-    last_summary: Optional[dict] = None
+    error: str | None = None
+    last_traceback: str | None = None
+    last_summary: dict | None = None
     last_update: datetime = field(default_factory=datetime.now)
 
     def to_dict(self) -> dict:

@@ -1,11 +1,19 @@
 """Tests for tool system."""
 
-import pytest
-import tempfile
 import os
+import tempfile
 from pathlib import Path
 
-from nanocode.tools import Tool, ToolResult, ToolRegistry, ToolExecutor, FuncTool, SyncFuncTool
+import pytest
+
+from nanocode.tools import (
+    FuncTool,
+    SyncFuncTool,
+    Tool,
+    ToolExecutor,
+    ToolRegistry,
+    ToolResult,
+)
 
 
 class TestToolResult:
@@ -279,8 +287,8 @@ class TestNewTools:
     @pytest.mark.asyncio
     async def test_batch_tool(self):
         """Test batch tool executes multiple tools."""
+        from nanocode.tools import ToolExecutor, ToolRegistry
         from nanocode.tools.builtin import BatchTool
-        from nanocode.tools import ToolRegistry, ToolExecutor
 
         registry = ToolRegistry()
         executor = ToolExecutor(registry)
@@ -294,8 +302,8 @@ class TestNewTools:
     @pytest.mark.asyncio
     async def test_batch_tool_with_calls(self, temp_dir):
         """Test batch tool with actual tool calls."""
+        from nanocode.tools import ToolExecutor, ToolRegistry
         from nanocode.tools.builtin import BatchTool, ReadFileTool
-        from nanocode.tools import ToolRegistry, ToolExecutor
 
         registry = ToolRegistry()
         registry.register(ReadFileTool(root_dir=temp_dir))
@@ -316,8 +324,8 @@ class TestNewTools:
     @pytest.mark.asyncio
     async def test_batch_tool_disallowed(self):
         """Test batch tool blocks disallowed tools."""
+        from nanocode.tools import ToolExecutor, ToolRegistry
         from nanocode.tools.builtin import BatchTool
-        from nanocode.tools import ToolRegistry, ToolExecutor
 
         registry = ToolRegistry()
         executor = ToolExecutor(registry)
@@ -331,8 +339,8 @@ class TestNewTools:
     @pytest.mark.asyncio
     async def test_batch_tool_max_limit(self):
         """Test batch tool enforces max limit."""
+        from nanocode.tools import ToolExecutor, ToolRegistry
         from nanocode.tools.builtin import BatchTool
-        from nanocode.tools import ToolRegistry, ToolExecutor
 
         registry = ToolRegistry()
         executor = ToolExecutor(registry)
@@ -481,7 +489,9 @@ class TestSedTool:
         Path(test_file).write_text("Hello World")
 
         tool = SedTool(root_dir=temp_dir)
-        result = await tool.execute(path="test.txt", search="NotFound", replace="Replaced")
+        result = await tool.execute(
+            path="test.txt", search="NotFound", replace="Replaced"
+        )
 
         assert result.success is False
         assert result.error is not None
@@ -507,7 +517,9 @@ class TestSedTool:
         from nanocode.tools.builtin import SedTool
 
         tool = SedTool(root_dir=temp_dir)
-        result = await tool.execute(path="../etc/passwd", search="root", replace="hacked")
+        result = await tool.execute(
+            path="../etc/passwd", search="root", replace="hacked"
+        )
 
         assert result.success is False
         assert result.error is not None
@@ -518,7 +530,9 @@ class TestSedTool:
         from nanocode.tools.builtin import SedTool
 
         tool = SedTool(root_dir=temp_dir)
-        result = await tool.execute(path="/etc/hostname", search="test", replace="hacked")
+        result = await tool.execute(
+            path="/etc/hostname", search="test", replace="hacked"
+        )
 
         assert result.success is False
 
@@ -603,7 +617,9 @@ class TestSedTool:
         os.symlink("/etc", os.path.join(temp_dir, "etc_link"))
 
         tool = SedTool(root_dir=temp_dir)
-        result = await tool.execute(path="etc_link/hostname", search="test", replace="hacked")
+        result = await tool.execute(
+            path="etc_link/hostname", search="test", replace="hacked"
+        )
 
         assert result.success is False
 
@@ -966,8 +982,7 @@ class TestBashSessionTool:
     @pytest.mark.asyncio
     async def test_create_session(self, temp_dir):
         """Test creating a bash session."""
-        from nanocode.tools.builtin import BashSessionTool
-        from nanocode.tools.builtin import _bash_session_manager
+        from nanocode.tools.builtin import BashSessionTool, _bash_session_manager
 
         _bash_session_manager._sessions.clear()
 
@@ -981,13 +996,14 @@ class TestBashSessionTool:
     @pytest.mark.asyncio
     async def test_create_with_custom_id(self, temp_dir):
         """Test creating a session with custom ID."""
-        from nanocode.tools.builtin import BashSessionTool
-        from nanocode.tools.builtin import _bash_session_manager
+        from nanocode.tools.builtin import BashSessionTool, _bash_session_manager
 
         _bash_session_manager._sessions.clear()
 
         tool = BashSessionTool()
-        result = await tool.execute(action="create", session_id="myid", workdir=temp_dir)
+        result = await tool.execute(
+            action="create", session_id="myid", workdir=temp_dir
+        )
 
         assert result.success is True
         assert "myid" in result.content
@@ -995,14 +1011,15 @@ class TestBashSessionTool:
     @pytest.mark.asyncio
     async def test_run_command(self, temp_dir):
         """Test running a command in a session."""
-        from nanocode.tools.builtin import BashSessionTool
-        from nanocode.tools.builtin import _bash_session_manager
+        from nanocode.tools.builtin import BashSessionTool, _bash_session_manager
 
         _bash_session_manager._sessions.clear()
 
         tool = BashSessionTool()
         await tool.execute(action="create", session_id="test1", workdir=temp_dir)
-        result = await tool.execute(action="run", session_id="test1", command="echo hello")
+        result = await tool.execute(
+            action="run", session_id="test1", command="echo hello"
+        )
 
         assert result.success is True
         assert "hello" in result.content
@@ -1010,13 +1027,14 @@ class TestBashSessionTool:
     @pytest.mark.asyncio
     async def test_run_nonexistent_session(self, temp_dir):
         """Test running command in nonexistent session."""
-        from nanocode.tools.builtin import BashSessionTool
-        from nanocode.tools.builtin import _bash_session_manager
+        from nanocode.tools.builtin import BashSessionTool, _bash_session_manager
 
         _bash_session_manager._sessions.clear()
 
         tool = BashSessionTool()
-        result = await tool.execute(action="run", session_id="nonexistent", command="echo hello")
+        result = await tool.execute(
+            action="run", session_id="nonexistent", command="echo hello"
+        )
 
         assert result.success is False
         assert "not found" in result.error
@@ -1024,8 +1042,7 @@ class TestBashSessionTool:
     @pytest.mark.asyncio
     async def test_get_session(self, temp_dir):
         """Test getting session state."""
-        from nanocode.tools.builtin import BashSessionTool
-        from nanocode.tools.builtin import _bash_session_manager
+        from nanocode.tools.builtin import BashSessionTool, _bash_session_manager
 
         _bash_session_manager._sessions.clear()
 
@@ -1039,14 +1056,15 @@ class TestBashSessionTool:
     @pytest.mark.asyncio
     async def test_set_env(self, temp_dir):
         """Test setting environment variable."""
-        from nanocode.tools.builtin import BashSessionTool
-        from nanocode.tools.builtin import _bash_session_manager
+        from nanocode.tools.builtin import BashSessionTool, _bash_session_manager
 
         _bash_session_manager._sessions.clear()
 
         tool = BashSessionTool()
         await tool.execute(action="create", session_id="envtest", workdir=temp_dir)
-        result = await tool.execute(action="set_env", session_id="envtest", key="FOO", value="bar")
+        result = await tool.execute(
+            action="set_env", session_id="envtest", key="FOO", value="bar"
+        )
 
         assert result.success is True
         assert "FOO=bar" in result.content
@@ -1057,8 +1075,7 @@ class TestBashSessionTool:
     @pytest.mark.asyncio
     async def test_list_sessions(self, temp_dir):
         """Test listing sessions."""
-        from nanocode.tools.builtin import BashSessionTool
-        from nanocode.tools.builtin import _bash_session_manager
+        from nanocode.tools.builtin import BashSessionTool, _bash_session_manager
 
         _bash_session_manager._sessions.clear()
 
@@ -1074,8 +1091,7 @@ class TestBashSessionTool:
     @pytest.mark.asyncio
     async def test_delete_session(self, temp_dir):
         """Test deleting a session."""
-        from nanocode.tools.builtin import BashSessionTool
-        from nanocode.tools.builtin import _bash_session_manager
+        from nanocode.tools.builtin import BashSessionTool, _bash_session_manager
 
         _bash_session_manager._sessions.clear()
 
@@ -1092,8 +1108,7 @@ class TestBashSessionTool:
     @pytest.mark.asyncio
     async def test_cd_updates_cwd(self, temp_dir):
         """Test that cd command updates working directory."""
-        from nanocode.tools.builtin import BashSessionTool
-        from nanocode.tools.builtin import _bash_session_manager
+        from nanocode.tools.builtin import BashSessionTool, _bash_session_manager
 
         _bash_session_manager._sessions.clear()
 
@@ -1103,6 +1118,8 @@ class TestBashSessionTool:
         subdir = os.path.join(temp_dir, "subdir")
         os.makedirs(subdir)
 
-        result = await tool.execute(action="run", session_id="cdtest", command=f"cd {subdir}")
+        result = await tool.execute(
+            action="run", session_id="cdtest", command=f"cd {subdir}"
+        )
 
         assert result.success is True

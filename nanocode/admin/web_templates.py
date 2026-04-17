@@ -226,11 +226,11 @@ def get_dashboard_html(stats: dict, recent_sessions: list) -> str:
     for session in recent_sessions[:10]:
         sessions_html += f"""
         <tr>
-            <td><a href="/sessions/{session.get('id', '')}">{session.get('id', '')[:8]}...</a></td>
-            <td>{session.get('created_at', '')[:19] if session.get('created_at') else '-'}</td>
-            <td>{session.get('message_count', 0)}</td>
+            <td><a href="/sessions/{session.get("id", "")}">{session.get("id", "")[:8]}...</a></td>
+            <td>{session.get("created_at", "")[:19] if session.get("created_at") else "-"}</td>
+            <td>{session.get("message_count", 0)}</td>
             <td>
-                <a href="/chat?session={session.get('id', '')}" class="btn btn-sm btn-outline-primary">
+                <a href="/chat?session={session.get("id", "")}" class="btn btn-sm btn-outline-primary">
                     <i class="bi bi-chat"></i>
                 </a>
             </td>
@@ -244,7 +244,7 @@ def get_dashboard_html(stats: dict, recent_sessions: list) -> str:
             <div class="col-md-3">
                 <div class="card stat-card">
                     <div class="card-body text-center">
-                        <div class="stat-value">{stats.get('total_sessions', 0)}</div>
+                        <div class="stat-value">{stats.get("total_sessions", 0)}</div>
                         <div>Total Sessions</div>
                     </div>
                 </div>
@@ -252,7 +252,7 @@ def get_dashboard_html(stats: dict, recent_sessions: list) -> str:
             <div class="col-md-3">
                 <div class="card stat-card">
                     <div class="card-body text-center">
-                        <div class="stat-value">{stats.get('total_messages', 0)}</div>
+                        <div class="stat-value">{stats.get("total_messages", 0)}</div>
                         <div>Messages</div>
                     </div>
                 </div>
@@ -260,7 +260,7 @@ def get_dashboard_html(stats: dict, recent_sessions: list) -> str:
             <div class="col-md-3">
                 <div class="card stat-card">
                     <div class="card-body text-center">
-                        <div class="stat-value">{stats.get('total_tokens_in', 0):,.0f}</div>
+                        <div class="stat-value">{stats.get("total_tokens_in", 0):,.0f}</div>
                         <div>Tokens In</div>
                     </div>
                 </div>
@@ -268,7 +268,7 @@ def get_dashboard_html(stats: dict, recent_sessions: list) -> str:
             <div class="col-md-3">
                 <div class="card stat-card">
                     <div class="card-body text-center">
-                        <div class="stat-value">${stats.get('total_cost', 0):.4f}</div>
+                        <div class="stat-value">${stats.get("total_cost", 0):.4f}</div>
                         <div>Total Cost</div>
                     </div>
                 </div>
@@ -420,19 +420,19 @@ def get_sessions_html(sessions: list, page: int = 1, total: int = 0) -> str:
     for session in sessions:
         sessions_html += f"""
         <tr>
-            <td><a href="/sessions/{session.get('id', '')}">{session.get('id', '')[:12]}...</a></td>
-            <td>{session.get('created_at', '')[:19] if session.get('created_at') else '-'}</td>
-            <td>{session.get('message_count', 0)}</td>
+            <td><a href="/sessions/{session.get("id", "")}">{session.get("id", "")[:12]}...</a></td>
+            <td>{session.get("created_at", "")[:19] if session.get("created_at") else "-"}</td>
+            <td>{session.get("message_count", 0)}</td>
             <td>
-                <span class="badge bg-{ 'success' if session.get('status') == 'active' else 'secondary'}">
-                    {session.get('status', 'unknown')}
+                <span class="badge bg-{"success" if session.get("status") == "active" else "secondary"}">
+                    {session.get("status", "unknown")}
                 </span>
             </td>
             <td>
-                <a href="/chat?session={session.get('id', '')}" class="btn btn-sm btn-outline-primary">
+                <a href="/chat?session={session.get("id", "")}" class="btn btn-sm btn-outline-primary">
                     <i class="bi bi-chat"></i>
                 </a>
-                <a href="/sessions/{session.get('id', '')}" class="btn btn-sm btn-outline-secondary">
+                <a href="/sessions/{session.get("id", "")}" class="btn btn-sm btn-outline-secondary">
                     <i class="bi bi-eye"></i>
                 </a>
             </td>
@@ -490,8 +490,8 @@ def get_files_html(files: list, current_path: str = "") -> str:
             <td><a href="/files?path={path}" class="text-decoration-none">
                 <i class="bi bi-{icon}"></i> {name}
             </a></td>
-            <td>{f.get('size', '-')}</td>
-            <td>{f.get('modified', '-')}</td>
+            <td>{f.get("size", "-")}</td>
+            <td>{f.get("modified", "-")}</td>
         </tr>"""
 
     content = f"""
@@ -501,7 +501,7 @@ def get_files_html(files: list, current_path: str = "") -> str:
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item"><a href="/files">Root</a></li>
-                    {f'<li class="breadcrumb-item active">{current_path}</li>' if current_path else ''}
+                    {f'<li class="breadcrumb-item active">{current_path}</li>' if current_path else ""}
                 </ol>
             </nav>
         </div>
@@ -540,7 +540,7 @@ def get_usage_html(stats: dict) -> str:
             <div class="col-md-3">
                 <div class="card stat-card">
                     <div class="card-body text-center">
-                        <div class="stat-value">{stats.get('total_sessions', 0)}</div>
+                        <div class="stat-value">{stats.get("total_sessions", 0)}</div>
                         <div>Total Sessions</div>
                     </div>
                 </div>
@@ -548,7 +548,7 @@ def get_usage_html(stats: dict) -> str:
             <div class="col-md-3">
                 <div class="card stat-card">
                     <div class="card-body text-center">
-                        <div class="stat-value">{stats.get('total_messages', 0):,}</div>
+                        <div class="stat-value">{stats.get("total_messages", 0):,}</div>
                         <div>Messages</div>
                     </div>
                 </div>
@@ -556,7 +556,7 @@ def get_usage_html(stats: dict) -> str:
             <div class="col-md-3">
                 <div class="card stat-card">
                     <div class="card-body text-center">
-                        <div class="stat-value">{(stats.get('total_tokens_in', 0) + stats.get('total_tokens_out', 0)):,}</div>
+                        <div class="stat-value">{(stats.get("total_tokens_in", 0) + stats.get("total_tokens_out", 0)):,}</div>
                         <div>Total Tokens</div>
                     </div>
                 </div>
@@ -564,7 +564,7 @@ def get_usage_html(stats: dict) -> str:
             <div class="col-md-3">
                 <div class="card stat-card">
                     <div class="card-body text-center">
-                        <div class="stat-value">${stats.get('total_cost', 0):.4f}</div>
+                        <div class="stat-value">${stats.get("total_cost", 0):.4f}</div>
                         <div>Total Cost</div>
                     </div>
                 </div>
@@ -588,7 +588,7 @@ def get_usage_html(stats: dict) -> str:
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {''.join(f'<tr><td>{date}</td><td>{data.get("messages", 0)}</td><td>{data.get("tokens", 0):,}</td></tr>' for date, data in sorted(sessions_by_date.items(), reverse=True)[:10])}
+                                    {"".join(f"<tr><td>{date}</td><td>{data.get('messages', 0)}</td><td>{data.get('tokens', 0):,}</td></tr>" for date, data in sorted(sessions_by_date.items(), reverse=True)[:10])}
                                 </tbody>
                             </table>
                         </div>
@@ -613,7 +613,7 @@ def get_usage_html(stats: dict) -> str:
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {''.join(f'<tr><td>{model}</td><td>{data.get("in", 0):,}</td><td>{data.get("out", 0):,}</td><td>${data.get("cost", 0):.4f}</td></tr>' for model, data in tokens_by_model.items())}
+                                    {"".join(f"<tr><td>{model}</td><td>{data.get('in', 0):,}</td><td>{data.get('out', 0):,}</td><td>${data.get('cost', 0):.4f}</td></tr>" for model, data in tokens_by_model.items())}
                                 </tbody>
                             </table>
                         </div>
@@ -664,11 +664,11 @@ def get_keys_html(keys: list) -> str:
     for key in keys:
         keys_html += f"""
         <tr>
-            <td><i class="bi bi-key"></i> {key.get('name', '')}</td>
-            <td><code>{key.get('key', '')}</code></td>
+            <td><i class="bi bi-key"></i> {key.get("name", "")}</td>
+            <td><code>{key.get("key", "")}</code></td>
             <td>
                 <form method="post" action="/keys/delete" class="d-inline">
-                    <input type="hidden" name="name" value="{key.get('name', '')}">
+                    <input type="hidden" name="name" value="{key.get("name", "")}">
                     <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this key?')">
                         <i class="bi bi-trash"></i>
                     </button>
@@ -838,8 +838,8 @@ def get_tools_html(tools: list) -> str:
         <div class="col-md-6">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title"><i class="bi bi-plug"></i> {tool.get('name', '')}</h5>
-                    <p class="card-text text-muted">{tool.get('description', '')}</p>
+                    <h5 class="card-title"><i class="bi bi-plug"></i> {tool.get("name", "")}</h5>
+                    <p class="card-text text-muted">{tool.get("description", "")}</p>
                 </div>
             </div>
         </div>"""

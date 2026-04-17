@@ -1,15 +1,15 @@
 """Tests for InteractiveCLI command processing."""
 
-from unittest.mock import Mock, AsyncMock, patch
-import sys
-import os
-import traceback
 import logging
+import os
+import sys
+import traceback
+from unittest.mock import AsyncMock, Mock, patch
 
 # Add the agent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from nanocode.cli import InteractiveCLI, ConsoleUI
+from nanocode.cli import ConsoleUI, InteractiveCLI
 
 
 class TestInteractiveCLI:
@@ -86,7 +86,10 @@ class TestInteractiveCLI:
 
         try:
             with patch("os.path.exists", return_value=True):
-                with patch("os.listdir", return_value=["checkpoint_1.json", "checkpoint_2.json"]):
+                with patch(
+                    "os.listdir",
+                    return_value=["checkpoint_1.json", "checkpoint_2.json"],
+                ):
                     cli._list_checkpoints()
                     output = buffer.getvalue()
                     assert "Saved Checkpoints:" in output
@@ -393,10 +396,12 @@ class TestPromptHistoryNavigation:
 
     def test_load_history_from_file(self):
         """Test that history is loaded from file on initialization."""
-        import tempfile
         import os
+        import tempfile
 
-        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix="_history") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix="_history"
+        ) as f:
             f.write("command1\ncommand2\n")
             temp_file = f.name
 
@@ -409,8 +414,8 @@ class TestPromptHistoryNavigation:
 
     def test_save_history_to_file(self):
         """Test that history is saved to file."""
-        import tempfile
         import os
+        import tempfile
 
         with tempfile.NamedTemporaryFile(delete=False, suffix="_history") as f:
             temp_file = f.name
@@ -430,8 +435,8 @@ class TestPromptHistoryNavigation:
 
     def test_history_persistence_across_sessions(self):
         """Test that history persists across CLI sessions."""
-        import tempfile
         import os
+        import tempfile
 
         with tempfile.NamedTemporaryFile(delete=False, suffix="_history") as f:
             temp_file = f.name
@@ -457,8 +462,8 @@ class TestPromptHistoryNavigation:
 
     def test_history_file_creation(self):
         """Test that history file is created if it doesn't exist."""
-        import tempfile
         import os
+        import tempfile
 
         temp_dir = tempfile.mkdtemp()
         history_file = os.path.join(temp_dir, "new_history")
@@ -487,7 +492,14 @@ class TestPromptHistoryNavigation:
         ui = ConsoleUI(use_colors=False)
 
         with patch("builtins.input", return_value="test"):
-            for state in ["idle", "planning", "executing", "waiting", "complete", "error"]:
+            for state in [
+                "idle",
+                "planning",
+                "executing",
+                "waiting",
+                "complete",
+                "error",
+            ]:
                 result = ui.print_prompt(state=state)
                 assert result == "test"
 
@@ -611,6 +623,7 @@ class TestAgentDebug:
     def test_agent_debug_attribute_in_class(self):
         """Test that AutonomousAgent class has debug in __init__."""
         import inspect
+
         from nanocode.core import AutonomousAgent
 
         source = inspect.getsource(AutonomousAgent.__init__)

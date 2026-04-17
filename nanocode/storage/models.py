@@ -1,8 +1,8 @@
 """Database models for nanocode."""
 
 from datetime import datetime
-from typing import Optional
-from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, JSON
+
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -22,7 +22,9 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     directory: Mapped[str] = mapped_column(String(512), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=func.now(), onupdate=func.now()
+    )
 
     sessions: Mapped[list["Session"]] = relationship(
         "Session", back_populates="project", cascade="all, delete-orphan"
@@ -38,15 +40,17 @@ class Session(Base):
     project_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
-    parent_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     directory: Mapped[str] = mapped_column(String(512), nullable=False)
-    summary_additions: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    summary_deletions: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    summary_files: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    summary_additions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    summary_deletions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    summary_files: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
-    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=func.now(), onupdate=func.now()
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     project: Mapped["Project"] = relationship("Project", back_populates="sessions")
     messages: Mapped[list["Message"]] = relationship(
@@ -56,7 +60,10 @@ class Session(Base):
         order_by="Message.created_at",
     )
     todos: Mapped[list["Todo"]] = relationship(
-        "Todo", back_populates="session", cascade="all, delete-orphan", order_by="Todo.position"
+        "Todo",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="Todo.position",
     )
 
 
@@ -71,9 +78,9 @@ class Message(Base):
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    tool_call_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    tool_call_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     tokens: Mapped[int] = mapped_column(Integer, default=0)
-    extra_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    extra_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
     session: Mapped["Session"] = relationship("Session", back_populates="messages")
@@ -112,7 +119,9 @@ class Todo(Base):
     status: Mapped[str] = mapped_column(String(20), default="pending")
     priority: Mapped[str] = mapped_column(String(20), default="medium")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=func.now(), onupdate=func.now()
+    )
 
     session: Mapped["Session"] = relationship("Session", back_populates="todos")
 
@@ -131,4 +140,12 @@ class SessionShare(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
 
-__all__ = ["Base", "Project", "Session", "Message", "MessagePart", "Todo", "SessionShare"]
+__all__ = [
+    "Base",
+    "Project",
+    "Session",
+    "Message",
+    "MessagePart",
+    "Todo",
+    "SessionShare",
+]

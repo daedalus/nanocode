@@ -3,18 +3,18 @@
 import pytest
 
 from nanocode.retry import (
-    RetryConfig,
-    RetryState,
-    RetryError,
-    RateLimitError,
-    ProviderOverloadedError,
     ContextOverflowError,
     FreeUsageLimitError,
-    retry_with_backoff,
-    is_retryable_error,
+    ProviderOverloadedError,
+    RateLimitError,
+    RetryConfig,
+    RetryError,
+    RetryState,
     calculate_retry_delay,
-    parse_error_type,
     create_error_from_response,
+    is_retryable_error,
+    parse_error_type,
+    retry_with_backoff,
 )
 
 
@@ -98,7 +98,9 @@ class TestCalculateRetryDelay:
 
     def test_max_delay(self):
         """Test max delay cap."""
-        delay = calculate_retry_delay(10, initial_delay=2.0, backoff_factor=2.0, max_delay=30.0)
+        delay = calculate_retry_delay(
+            10, initial_delay=2.0, backoff_factor=2.0, max_delay=30.0
+        )
         assert delay == 30.0
 
     def test_retry_after_header(self):
@@ -246,7 +248,9 @@ class TestRetryWithBackoff:
                 raise RateLimitError("rate limited")
             return "success"
 
-        result = await retry_with_backoff(func, RetryConfig(max_retries=3, initial_delay=0.01))
+        result = await retry_with_backoff(
+            func, RetryConfig(max_retries=3, initial_delay=0.01)
+        )
 
         assert result == "success"
         assert call_count == 3
@@ -262,7 +266,9 @@ class TestRetryWithBackoff:
             raise RateLimitError("rate limited")
 
         with pytest.raises(RetryError):
-            await retry_with_backoff(func, RetryConfig(max_retries=2, initial_delay=0.01))
+            await retry_with_backoff(
+                func, RetryConfig(max_retries=2, initial_delay=0.01)
+            )
 
         assert call_count == 3
 

@@ -4,7 +4,6 @@ import os
 import subprocess
 from dataclasses import dataclass, field
 
-
 SUMMARY_PROMPT = """Summarize what was done in this conversation. Write like a pull request description.
 
 Rules:
@@ -46,7 +45,9 @@ class SessionSummaryGenerator:
         self.llm = llm
         self.storage = storage
 
-    async def summarize(self, messages: list, tool_results: list = None) -> SessionSummary:
+    async def summarize(
+        self, messages: list, tool_results: list = None
+    ) -> SessionSummary:
         """Generate a summary for the session."""
         summary = SessionSummary()
 
@@ -206,7 +207,9 @@ class SessionSummaryGenerator:
         except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
             return []
 
-    async def _generate_text_summary(self, messages: list, tool_results: list = None) -> str:
+    async def _generate_text_summary(
+        self, messages: list, tool_results: list = None
+    ) -> str:
         """Generate a text summary using the LLM."""
         if not self.llm:
             return ""

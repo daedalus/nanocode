@@ -30,7 +30,9 @@ class ExaSearchTool(Tool):
 
                 self._client = Exa(api_key=self.api_key)
             except ImportError:
-                raise ImportError("exa-py package not installed. Run: pip install exa-py")
+                raise ImportError(
+                    "exa-py package not installed. Run: pip install exa-py"
+                )
         return self._client
 
     async def execute(
@@ -63,7 +65,9 @@ class ExaSearchTool(Tool):
             if answer:
                 return await self._execute_answer(query, num_results)
 
-            return await self._execute_search(query, search_type, num_results, highlights)
+            return await self._execute_search(
+                query, search_type, num_results, highlights
+            )
 
         except Exception as e:
             return ToolResult(success=False, content=None, error=str(e))
@@ -159,7 +163,9 @@ class ExaFetchTool(Tool):
 
                 self._client = Exa(api_key=self.api_key)
             except ImportError:
-                raise ImportError("exa-py package not installed. Run: pip install exa-py")
+                raise ImportError(
+                    "exa-py package not installed. Run: pip install exa-py"
+                )
         return self._client
 
     async def execute(

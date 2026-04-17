@@ -1,22 +1,28 @@
 """Ollama local LLM provider."""
 
-import os
 import json
-from typing import AsyncIterator
+import os
+from collections.abc import AsyncIterator
 
 import httpx
 
-from nanocode.llm.base import LLMBase, LLMResponse, ToolCall, Message
+from nanocode.llm.base import LLMBase, LLMResponse, Message, ToolCall
 
 
 class OllamaLLM(LLMBase):
     """Ollama local LLM provider."""
 
-    def __init__(self, base_url: str = None, model: str = "llama2", proxy: str = None, **kwargs):
+    def __init__(
+        self, base_url: str = None, model: str = "llama2", proxy: str = None, **kwargs
+    ):
         super().__init__(None, base_url, model, proxy=proxy, **kwargs)
-        self.base_url = base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        self.base_url = base_url or os.getenv(
+            "OLLAMA_BASE_URL", "http://localhost:11434"
+        )
 
-    async def chat(self, messages: list, tools: list[dict] = None, **kwargs) -> LLMResponse:
+    async def chat(
+        self, messages: list, tools: list[dict] = None, **kwargs
+    ) -> LLMResponse:
         """Send a chat completion request."""
         messages = self._normalize_messages(messages)
 
@@ -29,7 +35,7 @@ class OllamaLLM(LLMBase):
         if tools:
             payload["tools"] = tools
 
-        async with httpx.AsyncClient(proxies=self.proxy) as client:
+        async with httpx.AsyncClient(proxy=self.proxy) as client:
             response = await client.post(
                 f"{self.base_url}/api/chat",
                 json=payload,
@@ -44,7 +50,9 @@ class OllamaLLM(LLMBase):
                 tool_calls.append(
                     ToolCall(
                         name=tc.get("function", {}).get("name", ""),
-                        arguments=json.loads(tc.get("function", {}).get("arguments", "{}")),
+                        arguments=json.loads(
+                            tc.get("function", {}).get("arguments", "{}")
+                        ),
                     )
                 )
 
@@ -68,7 +76,7 @@ class OllamaLLM(LLMBase):
         if tools:
             payload["tools"] = tools
 
-        async with httpx.AsyncClient(proxies=self.proxy) as client:
+        async with httpx.AsyncClient(proxy=self.proxy) as client:
             async with client.stream(
                 "POST",
                 f"{self.base_url}/api/chat",

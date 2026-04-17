@@ -1,8 +1,9 @@
 """Tests for storage module."""
 
-import pytest
-import tempfile
 import os
+import tempfile
+
+import pytest
 
 from nanocode.storage import Database, SessionStorage
 
@@ -84,7 +85,9 @@ class TestSessionStorage:
         assert project1 is not None
         assert project1.name == "My Project"
 
-        project2 = await storage.get_or_create_project("/tmp/newproject", "Another Name")
+        project2 = await storage.get_or_create_project(
+            "/tmp/newproject", "Another Name"
+        )
 
         assert project2.id == project1.id
         assert project2.name == "My Project"

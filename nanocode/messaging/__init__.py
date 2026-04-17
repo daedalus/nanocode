@@ -1,8 +1,8 @@
 """Messaging integrations base classes."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Callable, Awaitable
 
 from nanocode.messaging.slack import SlackPlatform, create_slack_platform
 from nanocode.messaging.telegram import TelegramPlatform, create_telegram_platform
@@ -52,7 +52,9 @@ class MessagingPlatform(ABC):
         pass
 
     @abstractmethod
-    async def send_interactive_message(self, chat_id: str, text: str, buttons: list = None) -> str:
+    async def send_interactive_message(
+        self, chat_id: str, text: str, buttons: list = None
+    ) -> str:
         """Send a message with interactive buttons."""
         pass
 

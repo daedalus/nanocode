@@ -14,9 +14,10 @@ Supports:
 import asyncio
 import json
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Optional, Callable
 from datetime import datetime
+from typing import Any, Optional
 
 from nanocode.llm import Message as LLMMessage
 
@@ -73,7 +74,7 @@ class Session:
     created_at: datetime = field(default_factory=datetime.now)
     messages: list[dict] = field(default_factory=list)
     metadata: dict = field(default_factory=dict)
-    pending_input: Optional[str] = None
+    pending_input: str | None = None
 
 
 @dataclass
@@ -81,10 +82,10 @@ class AgentRequest:
     """Request to run agent."""
 
     messages: list[dict]
-    system_prompt: Optional[str] = None
-    model: Optional[str] = None
-    temperature: Optional[float] = None
-    max_tokens: Optional[int] = None
+    system_prompt: str | None = None
+    model: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
     stream: bool = True
 
 
@@ -95,7 +96,7 @@ class AgentResponse:
     message: dict
     session_id: str
     done: bool
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class RouteHandler:
@@ -123,7 +124,7 @@ class Request:
         self.body = body
         self.query_params = query_params or {}
 
-    def get_header(self, name: str) -> Optional[str]:
+    def get_header(self, name: str) -> str | None:
         """Get header value."""
         return self.headers.get(name.lower())
 
@@ -201,7 +202,7 @@ class ServerSessionManager:
         self._sessions[session_id] = session
         return session
 
-    def get(self, session_id: str) -> Optional[Session]:
+    def get(self, session_id: str) -> Session | None:
         """Get a session."""
         return self._sessions.get(session_id)
 
@@ -233,7 +234,7 @@ class ServerRouter:
         """Add a route."""
         self._routes[(method.upper(), path)] = handler
 
-    def get_handler(self, method: str, path: str) -> Optional[Callable]:
+    def get_handler(self, method: str, path: str) -> Callable | None:
         """Get handler for method and path."""
         return self._routes.get((method.upper(), path))
 
@@ -278,7 +279,9 @@ class AgentServer:
         self.router.add_route("DELETE", "/sessions/{id}", self._delete_session)
 
         self.router.add_route("POST", "/sessions/{id}/prompt", self._session_prompt)
-        self.router.add_route("POST", "/sessions/{id}/prompt/stream", self._session_prompt_stream)
+        self.router.add_route(
+            "POST", "/sessions/{id}/prompt/stream", self._session_prompt_stream
+        )
 
         self.router.add_route("POST", "/tui/append-prompt", self._append_prompt)
 
@@ -554,10 +557,15 @@ class AgentServer:
         }
 
         if self.nanocode:
-            if hasattr(self.nanocode, "context_manager") and self.nanocode.context_manager:
+            if (
+                hasattr(self.nanocode, "context_manager")
+                and self.nanocode.context_manager
+            ):
                 token_usage = self.nanocode.context_manager.get_token_usage()
                 stats["tokens_used"] = token_usage.get("current_tokens", 0)
-                stats["context_percent_used"] = token_usage.get("context_usage_percent", 0.0)
+                stats["context_percent_used"] = token_usage.get(
+                    "context_usage_percent", 0.0
+                )
                 stats["max_tokens_context"] = token_usage.get("context_limit", 0)
 
             if hasattr(self.nanocode, "llm") and self.nanocode.llm:
@@ -615,7 +623,11 @@ class AgentServer:
 
             request = Request(method, path, headers, body, query_params)
 
-            if not self._check_auth(request) and path not in ["/health", "/ready", "/openapi.json"]:
+            if not self._check_auth(request) and path not in [
+                "/health",
+                "/ready",
+                "/openapi.json",
+            ]:
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
             handler = self.router.get_handler(method, path)
@@ -667,7 +679,9 @@ class AgentServer:
         )
         print(f"Server started on http://{self.host}:{self.port}")
 
-    async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    async def _handle_client(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ):
         """Handle a client connection."""
         try:
             request_data = await reader.readline()
@@ -719,7 +733,9 @@ class AgentServer:
 
             if response.body:
                 writer.write(
-                    response.body.encode() if isinstance(response.body, str) else response.body
+                    response.body.encode()
+                    if isinstance(response.body, str)
+                    else response.body
                 )
 
             await writer.drain()

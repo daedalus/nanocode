@@ -3,15 +3,15 @@
 import pytest
 
 from nanocode.agents import (
+    AgentInfo,
     AgentMode,
+    AgentRegistry,
     PermissionAction,
     PermissionRule,
-    AgentInfo,
-    AgentRegistry,
-    evaluate_permission,
-    get_disabled_tools,
     create_default_agents,
     create_registry_from_config,
+    evaluate_permission,
+    get_disabled_tools,
     match_pattern,
 )
 
@@ -29,7 +29,9 @@ class TestPermissionRule:
 
     def test_rule_with_pattern(self):
         """Test rule with pattern."""
-        rule = PermissionRule(permission="read", pattern="*.env", action=PermissionAction.ASK)
+        rule = PermissionRule(
+            permission="read", pattern="*.env", action=PermissionAction.ASK
+        )
 
         assert rule.permission == "read"
         assert rule.pattern == "*.env"
@@ -80,7 +82,9 @@ class TestEvaluatePermission:
         """Test ask for specific pattern."""
         rules = [
             PermissionRule(permission="*", action=PermissionAction.ALLOW),
-            PermissionRule(permission="read", pattern="*.env", action=PermissionAction.ASK),
+            PermissionRule(
+                permission="read", pattern="*.env", action=PermissionAction.ASK
+            ),
         ]
 
         assert evaluate_permission("read", "file.txt", rules) == PermissionAction.ALLOW
@@ -108,7 +112,9 @@ class TestGetDisabledTools:
         """Test edit tools disabled."""
         rules = [
             PermissionRule(permission="*", action=PermissionAction.ALLOW),
-            PermissionRule(permission="edit", pattern="*", action=PermissionAction.DENY),
+            PermissionRule(
+                permission="edit", pattern="*", action=PermissionAction.DENY
+            ),
         ]
 
         disabled = get_disabled_tools(
@@ -150,7 +156,9 @@ class TestAgentInfo:
             native=True,
             permission=[
                 PermissionRule(permission="*", action=PermissionAction.ALLOW),
-                PermissionRule(permission="edit", pattern="*", action=PermissionAction.DENY),
+                PermissionRule(
+                    permission="edit", pattern="*", action=PermissionAction.DENY
+                ),
             ],
         )
 
@@ -199,8 +207,12 @@ class TestAgentRegistry:
 
     def test_list_agents(self, registry):
         """Test listing agents."""
-        registry.register(AgentInfo(name="a1", description="A1", mode=AgentMode.PRIMARY))
-        registry.register(AgentInfo(name="a2", description="A2", mode=AgentMode.SUBAGENT))
+        registry.register(
+            AgentInfo(name="a1", description="A1", mode=AgentMode.PRIMARY)
+        )
+        registry.register(
+            AgentInfo(name="a2", description="A2", mode=AgentMode.SUBAGENT)
+        )
         registry.register(
             AgentInfo(name="a3", description="A3", mode=AgentMode.PRIMARY, hidden=True)
         )
@@ -211,8 +223,12 @@ class TestAgentRegistry:
 
     def test_list_primary(self, registry):
         """Test listing primary agents."""
-        registry.register(AgentInfo(name="a1", description="A1", mode=AgentMode.PRIMARY))
-        registry.register(AgentInfo(name="a2", description="A2", mode=AgentMode.SUBAGENT))
+        registry.register(
+            AgentInfo(name="a1", description="A1", mode=AgentMode.PRIMARY)
+        )
+        registry.register(
+            AgentInfo(name="a2", description="A2", mode=AgentMode.SUBAGENT)
+        )
         registry.register(
             AgentInfo(name="a3", description="A3", mode=AgentMode.PRIMARY, hidden=True)
         )
@@ -224,8 +240,12 @@ class TestAgentRegistry:
 
     def test_set_default(self, registry):
         """Test setting default agent."""
-        registry.register(AgentInfo(name="a1", description="A1", mode=AgentMode.PRIMARY))
-        registry.register(AgentInfo(name="a2", description="A2", mode=AgentMode.PRIMARY))
+        registry.register(
+            AgentInfo(name="a1", description="A1", mode=AgentMode.PRIMARY)
+        )
+        registry.register(
+            AgentInfo(name="a2", description="A2", mode=AgentMode.PRIMARY)
+        )
 
         registry.set_default("a2")
 
@@ -257,9 +277,18 @@ class TestCreateDefaultAgents:
         assert build is not None
         assert build.mode == AgentMode.PRIMARY
 
-        assert evaluate_permission("read", "file.txt", build.permission) == PermissionAction.ALLOW
-        assert evaluate_permission("edit", "file.txt", build.permission) == PermissionAction.ALLOW
-        assert evaluate_permission("bash", "ls", build.permission) == PermissionAction.ALLOW
+        assert (
+            evaluate_permission("read", "file.txt", build.permission)
+            == PermissionAction.ALLOW
+        )
+        assert (
+            evaluate_permission("edit", "file.txt", build.permission)
+            == PermissionAction.ALLOW
+        )
+        assert (
+            evaluate_permission("bash", "ls", build.permission)
+            == PermissionAction.ALLOW
+        )
 
     def test_plan_agent_denies_edit(self):
         """Test plan agent denies edit tools."""
@@ -269,9 +298,18 @@ class TestCreateDefaultAgents:
         assert plan is not None
         assert plan.mode == AgentMode.PRIMARY
 
-        assert evaluate_permission("edit", "file.txt", plan.permission) == PermissionAction.DENY
-        assert evaluate_permission("write", "file.txt", plan.permission) == PermissionAction.DENY
-        assert evaluate_permission("read", "file.txt", plan.permission) == PermissionAction.ALLOW
+        assert (
+            evaluate_permission("edit", "file.txt", plan.permission)
+            == PermissionAction.DENY
+        )
+        assert (
+            evaluate_permission("write", "file.txt", plan.permission)
+            == PermissionAction.DENY
+        )
+        assert (
+            evaluate_permission("read", "file.txt", plan.permission)
+            == PermissionAction.ALLOW
+        )
 
     def test_general_agent_permissions(self):
         """Test general agent permissions."""
@@ -281,8 +319,14 @@ class TestCreateDefaultAgents:
         assert general is not None
         assert general.mode == AgentMode.SUBAGENT
 
-        assert evaluate_permission("read", "file.txt", general.permission) == PermissionAction.ALLOW
-        assert evaluate_permission("edit", "file.txt", general.permission) == PermissionAction.ALLOW
+        assert (
+            evaluate_permission("read", "file.txt", general.permission)
+            == PermissionAction.ALLOW
+        )
+        assert (
+            evaluate_permission("edit", "file.txt", general.permission)
+            == PermissionAction.ALLOW
+        )
 
     def test_explore_agent_denies_edit(self):
         """Test explore agent denies edit tools."""
@@ -292,9 +336,18 @@ class TestCreateDefaultAgents:
         assert explore is not None
         assert explore.mode == AgentMode.SUBAGENT
 
-        assert evaluate_permission("grep", "pattern", explore.permission) == PermissionAction.ALLOW
-        assert evaluate_permission("glob", "*.py", explore.permission) == PermissionAction.ALLOW
-        assert evaluate_permission("edit", "file.txt", explore.permission) == PermissionAction.DENY
+        assert (
+            evaluate_permission("grep", "pattern", explore.permission)
+            == PermissionAction.ALLOW
+        )
+        assert (
+            evaluate_permission("glob", "*.py", explore.permission)
+            == PermissionAction.ALLOW
+        )
+        assert (
+            evaluate_permission("edit", "file.txt", explore.permission)
+            == PermissionAction.DENY
+        )
 
     def test_default_agent_is_build(self):
         """Test default agent is build."""

@@ -1,17 +1,18 @@
 """Base classes for LLM providers."""
 
-from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator
 import json
 import os
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 
 from nanocode.retry import (
+    ProviderOverloadedError,
+    RateLimitError,
     RetryConfig,
     retry_with_backoff,
-    RateLimitError,
-    ProviderOverloadedError,
 )
 
 
@@ -31,7 +32,11 @@ class Message:
     """Represents a message in the conversation."""
 
     def __init__(
-        self, role: str, content: Any, tool_calls: list[ToolCall] = None, tool_call_id: str = None
+        self,
+        role: str,
+        content: Any,
+        tool_calls: list[ToolCall] = None,
+        tool_call_id: str = None,
     ):
         self.role = role
         self.content = content
@@ -43,7 +48,13 @@ class Message:
         result = {"role": self.role, "content": self.content}
         if self.tool_calls:
             result["tool_calls"] = [
-                {"id": tc.id, "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)}}
+                {
+                    "id": tc.id,
+                    "function": {
+                        "name": tc.name,
+                        "arguments": json.dumps(tc.arguments),
+                    },
+                }
                 for tc in self.tool_calls
             ]
         if self.tool_call_id:
@@ -58,7 +69,9 @@ class Message:
             for tc in tool_calls_data:
                 func = tc.get("function", {})
                 tool_calls.append(
-                    ToolCall(func.get("name", ""), json.loads(func.get("arguments", "{}")))
+                    ToolCall(
+                        func.get("name", ""), json.loads(func.get("arguments", "{}"))
+                    )
                 )
         return cls(
             role=data.get("role", "user"),
@@ -110,7 +123,9 @@ class LLMBase(ABC):
         self.proxy = proxy
 
     @abstractmethod
-    async def chat(self, messages: list, tools: list[dict] = None, **kwargs) -> LLMResponse:
+    async def chat(
+        self, messages: list, tools: list[dict] = None, **kwargs
+    ) -> LLMResponse:
         """Send a chat completion request."""
         pass
 
@@ -151,7 +166,7 @@ class LLMBase(ABC):
             headers["User-Agent"] = self.user_agent
 
         async def make_request():
-            async with httpx.AsyncClient(proxies=self.proxy) as client:
+            async with httpx.AsyncClient(proxy=self.proxy) as client:
                 response = await client.request(
                     method=method,
                     url=url,
@@ -173,7 +188,10 @@ class LLMBase(ABC):
                     data = response.json()
                     if data.get("error"):
                         error_msg = data["error"].get("message", "")
-                        if "rate limit" in error_msg.lower() or "free_usage" in error_msg.lower():
+                        if (
+                            "rate limit" in error_msg.lower()
+                            or "free_usage" in error_msg.lower()
+                        ):
                             error = RateLimitError(f"Rate limited: {error_msg}")
                             raise error
                 except Exception:
@@ -192,7 +210,9 @@ class LLMBase(ABC):
                 return response
 
         if self.retry_config.max_retries > 0:
-            return await retry_with_backoff(make_request, self.retry_config, on_retry=on_retry)
+            return await retry_with_backoff(
+                make_request, self.retry_config, on_retry=on_retry
+            )
         else:
             return await make_request()
 

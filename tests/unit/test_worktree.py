@@ -1,16 +1,18 @@
 """Tests for worktree functionality."""
 
-import pytest
 import os
 import subprocess
+
+import pytest
+
 from nanocode.worktree import (
-    WorktreeInfo,
     NotGitError,
+    WorktreeInfo,
     generate_name,
-    list_worktrees,
+    get_current_worktree,
     get_worktree_root,
     is_worktree,
-    get_current_worktree,
+    list_worktrees,
 )
 
 
@@ -20,7 +22,9 @@ def git_repo(tmp_path):
     os.chdir(tmp_path)
 
     subprocess.run(["git", "init"], capture_output=True)
-    subprocess.run(["git", "config", "user.email", "test@test.com"], capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"], capture_output=True
+    )
     subprocess.run(["git", "config", "user.name", "Test User"], capture_output=True)
 
     (tmp_path / "test.txt").write_text("test")

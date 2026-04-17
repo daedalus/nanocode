@@ -22,6 +22,7 @@ class DoomLoopDetection:
     _recent_calls: dict[str, list[ToolCall]] = field(
         default_factory=lambda: defaultdict(list)
     )
+    _all_recent_calls: list[ToolCall] = field(default_factory=list)
 
     def record_call(self, tool_name: str, arguments: dict, call_id: str = None) -> bool:
         """
@@ -32,13 +33,42 @@ class DoomLoopDetection:
 
         tool_calls = self._recent_calls[tool_name]
         tool_calls.append(call)
+        self._all_recent_calls.append(call)
 
         if len(tool_calls) > self.threshold:
             tool_calls.pop(0)
+        if len(self._all_recent_calls) > 6:
+            self._all_recent_calls.pop(0)
 
         if len(tool_calls) >= self.threshold:
             return self._is_doom_loop(tool_calls)
 
+        if len(self._all_recent_calls) >= 3:
+            return self._is_exploration_loop()
+
+        return False
+
+    def _is_exploration_loop(self) -> bool:
+        """Detect repetitive exploration pattern without progress."""
+        if len(self._all_recent_calls) < 3:
+            return False
+
+        recent = self._all_recent_calls[-4:]
+        
+        if len(recent) < 3:
+            return False
+
+        exploration_tools = {"ls", "glob", "bash"}
+        
+        recent_tools = [c.tool_name for c in recent]
+        
+        unique_tools = set(recent_tools)
+        if not unique_tools.issubset(exploration_tools):
+            return False
+        
+        if len(unique_tools) <= 2:
+            return True
+        
         return False
 
     def _is_doom_loop(self, calls: list[ToolCall]) -> bool:
@@ -73,7 +103,17 @@ class DoomLoopDetection:
                     "tool": tool_name,
                     "arguments": calls[-1].arguments,
                     "count": len(calls),
+                    "type": "repeat",
                 }
+        
+        if self._is_exploration_loop():
+            return {
+                "tool": "exploration",
+                "arguments": {"pattern": "ls/glob repetition without progress"},
+                "count": len(self._all_recent_calls),
+                "type": "exploration",
+            }
+        
         return None
 
     def clear(self, tool_name: str = None):
@@ -82,12 +122,15 @@ class DoomLoopDetection:
             self._recent_calls[tool_name] = []
         else:
             self._recent_calls.clear()
+            self._all_recent_calls.clear()
 
     def should_prompt(self, tool_name: str) -> bool:
         """Check if we should prompt for permission for this tool (doom loop detected)."""
         calls = self._recent_calls.get(tool_name, [])
         if len(calls) >= self.threshold:
             return self._is_doom_loop(calls)
+        if self._is_exploration_loop():
+            return True
         return False
 
 
@@ -111,6 +154,14 @@ class DoomLoopHandler:
         """Generate a warning message about the doom loop."""
         info = self.detection.get_loop_info()
         if info:
+            loop_type = info.get("type", "repeat")
+            if loop_type == "exploration":
+                return (
+                    f"Warning: Repetitive exploration detected - "
+                    f"calling ls/glob repeatedly without making progress. "
+                    f"Total calls: {info['count']}. "
+                    f"STOP exploring and start reading/analyzing files with 'read' or 'grep'."
+                )
             return (
                 f"Warning: The tool '{info['tool']}' has been called "
                 f"{info['count']} times with the same arguments. "

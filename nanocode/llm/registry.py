@@ -1,8 +1,7 @@
 """Model registry from models.dev - provides access to 2000+ LLM models."""
 
-import os
 import json
-from typing import Optional
+import os
 from dataclasses import dataclass, field
 
 
@@ -71,7 +70,7 @@ class ModelRegistry:
 
         await self.refresh()
 
-    def _load_from_cache(self) -> Optional[dict[str, ProviderInfo]]:
+    def _load_from_cache(self) -> dict[str, ProviderInfo] | None:
         """Load from local cache."""
         if not os.path.exists(self.cache_file):
             return None
@@ -199,18 +198,18 @@ class ModelRegistry:
                 auth_type="api_key",
             )
 
-    def get_provider(self, provider_id: str) -> Optional[ProviderInfo]:
+    def get_provider(self, provider_id: str) -> ProviderInfo | None:
         """Get provider by ID."""
         return self._providers.get(provider_id)
 
-    def get_model(self, provider_id: str, model_id: str) -> Optional[ModelInfo]:
+    def get_model(self, provider_id: str, model_id: str) -> ModelInfo | None:
         """Get model by provider and model ID."""
         provider = self._providers.get(provider_id)
         if not provider:
             return None
         return provider.models.get(model_id)
 
-    def get_model_by_full_id(self, full_id: str) -> Optional[ModelInfo]:
+    def get_model_by_full_id(self, full_id: str) -> ModelInfo | None:
         """Get model by full ID (e.g., 'openai/gpt-4o')."""
         if "/" not in full_id:
             return None
@@ -254,7 +253,7 @@ class ModelRegistry:
 
 
 # Global registry instance
-_registry: Optional[ModelRegistry] = None
+_registry: ModelRegistry | None = None
 
 
 def get_registry() -> ModelRegistry:

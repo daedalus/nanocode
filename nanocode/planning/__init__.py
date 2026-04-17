@@ -1,13 +1,13 @@
 """Planning engine for task decomposition and execution."""
 
-import uuid
 import json
-from datetime import datetime
-from typing import Any, Optional
+import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
+from typing import Any, Optional
 
-from nanocode.state import TaskStep, ExecutionPlan
+from nanocode.state import ExecutionPlan, TaskStep
 
 
 class PlanStrategy(Enum):
@@ -36,7 +36,7 @@ class TaskPlanner:
     def __init__(self, llm, registry):
         self.llm = llm
         self.registry = registry
-        self._current_plan: Optional[ExecutionPlan] = None
+        self._current_plan: ExecutionPlan | None = None
 
     async def create_plan(self, context: PlanningContext) -> ExecutionPlan:
         """Create an execution plan for a task."""
@@ -78,7 +78,7 @@ Respond with a JSON plan in this format:
         steps = []
         for i, step_data in enumerate(plan_data.get("steps", [])):
             step = TaskStep(
-                id=step_data.get("id", f"step_{i+1}"),
+                id=step_data.get("id", f"step_{i + 1}"),
                 description=step_data.get("description", ""),
                 tool=step_data.get("tool"),
                 args=step_data.get("args", {}),
@@ -97,10 +97,10 @@ Respond with a JSON plan in this format:
             if line and (line[0].isdigit() or line.startswith("-")):
                 desc = line.lstrip("0123456789.- ").strip()
                 if desc:
-                    steps.append({"id": f"step_{len(steps)+1}", "description": desc})
+                    steps.append({"id": f"step_{len(steps) + 1}", "description": desc})
         return {"steps": steps}
 
-    def get_current_plan(self) -> Optional[ExecutionPlan]:
+    def get_current_plan(self) -> ExecutionPlan | None:
         """Get the current plan."""
         return self._current_plan
 
@@ -135,7 +135,9 @@ Respond with a JSON plan in this format:
 class PlanExecutor:
     """Executes plans with progress tracking and checkpointing."""
 
-    def __init__(self, planner: TaskPlanner, executor, checkpoint_dir: str = ".nanocode"):
+    def __init__(
+        self, planner: TaskPlanner, executor, checkpoint_dir: str = ".nanocode"
+    ):
         self.planner = planner
         self.executor = executor
         self.checkpoint_dir = checkpoint_dir
@@ -165,7 +167,9 @@ class PlanExecutor:
                 else:
                     result = await self._execute_llm_step(step.description)
 
-                self.planner.update_step(step.id, result=result.content, error=result.error)
+                self.planner.update_step(
+                    step.id, result=result.content, error=result.error
+                )
                 results.append({"step": step.id, "result": result})
 
                 if not result.success:
@@ -205,7 +209,7 @@ class PlanExecutor:
         path = os.path.join(self.checkpoint_dir, f"checkpoint_{plan.id}.json")
         plan.save_checkpoint(plan.checkpoint_file or path)
 
-    def load_checkpoint(self, plan_id: str) -> Optional[ExecutionPlan]:
+    def load_checkpoint(self, plan_id: str) -> ExecutionPlan | None:
         """Load a checkpoint."""
         import os
 
@@ -223,7 +227,9 @@ class PlanMonitor:
     def __init__(self, llm):
         self.llm = llm
 
-    async def evaluate_progress(self, plan: ExecutionPlan, recent_results: list[dict]) -> dict:
+    async def evaluate_progress(
+        self, plan: ExecutionPlan, recent_results: list[dict]
+    ) -> dict:
         """Evaluate execution progress and determine if replanning is needed."""
         from nanocode.llm import Message
 

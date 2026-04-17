@@ -1,9 +1,9 @@
 """Telegram messaging platform integration."""
 
-import os
 import logging
+import os
 
-from nanocode.messaging import MessagingPlatform, Message
+from nanocode.messaging import Message, MessagingPlatform
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +21,12 @@ class TelegramPlatform(MessagingPlatform):
     async def start(self):
         """Start the Telegram bot."""
         try:
-            from telegram.ext import Application, CommandHandler, MessageHandler
-            from telegram.ext import filters
+            from telegram.ext import (
+                Application,
+                CommandHandler,
+                MessageHandler,
+                filters,
+            )
         except ImportError:
             logger.warning(
                 "python-telegram-bot not installed. Install with: pip install python-telegram-bot"
@@ -99,7 +103,9 @@ class TelegramPlatform(MessagingPlatform):
             logger.error(f"Telegram send error: {e}")
             return ""
 
-    async def send_interactive_message(self, chat_id: str, text: str, buttons: list = None) -> str:
+    async def send_interactive_message(
+        self, chat_id: str, text: str, buttons: list = None
+    ) -> str:
         """Send a message with inline keyboard buttons to Telegram."""
         if not self.application or not buttons:
             return await self.send_message(chat_id, text)
@@ -108,7 +114,11 @@ class TelegramPlatform(MessagingPlatform):
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
             keyboard = [
-                [InlineKeyboardButton(btn.get("text", ""), callback_data=btn.get("value", ""))]
+                [
+                    InlineKeyboardButton(
+                        btn.get("text", ""), callback_data=btn.get("value", "")
+                    )
+                ]
                 for btn in buttons
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)

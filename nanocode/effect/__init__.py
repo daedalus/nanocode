@@ -1,10 +1,10 @@
 """Effect system - Reactive programming primitives."""
 
 import asyncio
-import threading
-from typing import Any, Callable, Generic, TypeVar, Optional
 import logging
-
+import threading
+from collections.abc import Callable
+from typing import Any, Generic, Optional, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ class Signal:
 
     def __init__(self):
         self._resolves: list[Callable] = []
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     def trigger(self):
         """Trigger the signal."""
@@ -60,7 +60,7 @@ class Trigger:
     """A trigger that can fire once and be awaited."""
 
     def __init__(self):
-        self._future: Optional[asyncio.Future] = None
+        self._future: asyncio.Future | None = None
 
     def fire(self):
         """Fire the trigger."""
@@ -124,12 +124,12 @@ class Ref(Generic[T]):
 class Observable(Generic[T]):
     """An observable that can be subscribed to."""
 
-    def __init__(self, value: Optional[T] = None):
+    def __init__(self, value: T | None = None):
         self._value = value
         self._subscribers: list[Callable[[T], Any]] = []
 
     @property
-    def value(self) -> Optional[T]:
+    def value(self) -> T | None:
         return self._value
 
     def subscribe(self, callback: Callable[[T], Any]) -> Callable[[], None]:
@@ -160,10 +160,12 @@ class Observable(Generic[T]):
 class Computed(Generic[T]):
     """A computed value that auto-updates when dependencies change."""
 
-    def __init__(self, compute_fn: Callable[[], T], dependencies: list[Observable] = None):
+    def __init__(
+        self, compute_fn: Callable[[], T], dependencies: list[Observable] = None
+    ):
         self._compute_fn = compute_fn
         self._dependencies = dependencies or []
-        self._value: Optional[T] = None
+        self._value: T | None = None
         self._subscribers: list[Callable[[T], Any]] = []
         self._disposers: list[Callable[[], None]] = []
 
@@ -268,7 +270,7 @@ class Lazy(Generic[T]):
 
     def __init__(self, factory: Callable[[], T]):
         self._factory = factory
-        self._value: Optional[T] = None
+        self._value: T | None = None
         self._evaluated = False
 
     @property
@@ -288,7 +290,7 @@ class Deferred(Generic[T]):
     """A deferred value that can be resolved later."""
 
     def __init__(self):
-        self._future: Optional[asyncio.Future] = None
+        self._future: asyncio.Future | None = None
 
     def resolve(self, value: T):
         """Resolve the deferred value."""
@@ -312,7 +314,7 @@ class Deferred(Generic[T]):
         return self._future is not None and self._future.done()
 
     @property
-    def result(self) -> Optional[T]:
+    def result(self) -> T | None:
         if self._future is not None and self._future.done():
             return self._future.result()
         return None
@@ -324,7 +326,7 @@ class Resource(Generic[T]):
     def __init__(self, acquire: Callable[[], T], release: Callable[[T], None] = None):
         self._acquire = acquire
         self._release = release
-        self._value: Optional[T] = None
+        self._value: T | None = None
         self._acquired = False
 
     def __enter__(self) -> T:
@@ -352,7 +354,7 @@ class Cache(Generic[T]):
         self._cache: dict[str, tuple[T, float]] = {}
         self._ttl = ttl
 
-    def get(self, key: str) -> Optional[T]:
+    def get(self, key: str) -> T | None:
         """Get a value from cache."""
         if key in self._cache:
             value, timestamp = self._cache[key]
@@ -430,14 +432,14 @@ class State(Generic[T]):
         self._history.append(value)
         self._index += 1
 
-    def undo(self) -> Optional[T]:
+    def undo(self) -> T | None:
         """Go back one state."""
         if self._index > 0:
             self._index -= 1
             return self.value
         return None
 
-    def redo(self) -> Optional[T]:
+    def redo(self) -> T | None:
         """Go forward one state."""
         if self._index < len(self._history) - 1:
             self._index += 1
@@ -473,7 +475,9 @@ def observable(initial_value: T = None) -> Observable[T]:
     return Observable(initial_value)
 
 
-def computed(compute_fn: Callable[[], T], dependencies: list[Observable] = None) -> Computed[T]:
+def computed(
+    compute_fn: Callable[[], T], dependencies: list[Observable] = None
+) -> Computed[T]:
     """Create a computed value."""
     return Computed(compute_fn, dependencies)
 

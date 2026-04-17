@@ -1,15 +1,16 @@
 """Tests for model registry and provider router."""
 
-import pytest
-import tempfile
 import os
-from unittest.mock import AsyncMock, patch, Mock
+import tempfile
+from unittest.mock import AsyncMock, Mock, patch
 
-from nanocode.llm.registry import ModelRegistry
-from nanocode.llm.router import ProviderRouter
+import pytest
+
 from nanocode.llm import OpenAILLM
 from nanocode.llm.providers.anthropic import AnthropicLLM
 from nanocode.llm.providers.ollama import OllamaLLM
+from nanocode.llm.registry import ModelRegistry
+from nanocode.llm.router import ProviderRouter
 
 
 class TestModelRegistry:
@@ -333,7 +334,9 @@ class TestLLMProxySupport:
 
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"choices": [{"message": {"content": "test"}}]}
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "test"}}]
+        }
         mock_response.headers = {}
         mock_response.text = ""
         mock_response.raise_for_status = Mock()
@@ -347,7 +350,7 @@ class TestLLMProxySupport:
 
             await llm.chat([{"role": "user", "content": "hello"}])
 
-            mock_client_class.assert_called_once_with(proxies="http://localhost:3128")
+            mock_client_class.assert_called_once_with(proxy="http://localhost:3128")
 
     @pytest.mark.asyncio
     async def test_anthropic_llm_uses_proxy_in_request(self):
@@ -360,7 +363,9 @@ class TestLLMProxySupport:
 
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"content": [{"type": "text", "text": "test"}]}
+        mock_response.json.return_value = {
+            "content": [{"type": "text", "text": "test"}]
+        }
         mock_response.raise_for_status = Mock()
 
         with patch("nanocode.llm.base.httpx.AsyncClient") as mock_client_class:
@@ -372,7 +377,7 @@ class TestLLMProxySupport:
 
             await llm.chat([{"role": "user", "content": "hello"}])
 
-            mock_client_class.assert_called_once_with(proxies="http://localhost:3128")
+            mock_client_class.assert_called_once_with(proxy="http://localhost:3128")
 
     @pytest.mark.asyncio
     async def test_ollama_llm_uses_proxy_in_request(self):
@@ -397,7 +402,7 @@ class TestLLMProxySupport:
 
             await llm.chat([{"role": "user", "content": "hello"}])
 
-            mock_client_class.assert_called_once_with(proxies="http://localhost:3128")
+            mock_client_class.assert_called_once_with(proxy="http://localhost:3128")
 
 
 class TestOpenAICompatibleProviders:

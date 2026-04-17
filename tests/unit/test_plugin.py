@@ -1,17 +1,19 @@
 """Tests for plugin functionality."""
 
-import pytest
 import asyncio
 import tempfile
+
+import pytest
+
 from nanocode.plugin import (
     Plugin,
-    PluginMetadata,
     PluginContext,
     PluginHookType,
+    PluginMetadata,
     get_plugin_manager,
+    list_plugins,
     register_plugin,
     unregister_plugin,
-    list_plugins,
 )
 
 
@@ -170,7 +172,9 @@ def test_trigger_hook_with_args(plugin_manager):
     plugin = EventPlugin()
     plugin_manager.register_plugin(plugin)
 
-    results = asyncio.run(plugin_manager.trigger_hook(PluginHookType.EVENT, {"type": "test"}))
+    results = asyncio.run(
+        plugin_manager.trigger_hook(PluginHookType.EVENT, {"type": "test"})
+    )
     assert len(results) > 0
 
 

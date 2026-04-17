@@ -1,7 +1,8 @@
 """Unit tests for admin console module."""
 
+from unittest.mock import AsyncMock, Mock
+
 import pytest
-from unittest.mock import Mock, AsyncMock
 
 from nanocode.admin import AdminConsole, UsageStats
 

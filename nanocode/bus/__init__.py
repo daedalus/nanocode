@@ -1,11 +1,11 @@
 """Event bus system for pub/sub messaging."""
 
+import asyncio
 import logging
-from typing import Any, Callable, Optional
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-import asyncio
-
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class BusEvent:
     """Typed event definition."""
 
     type: str
-    properties_schema: Optional[type] = None
+    properties_schema: type | None = None
 
 
 class EventBus:
@@ -221,7 +221,7 @@ class EventBus:
 
         return results
 
-    def unsubscribe_all(self, event_type: Optional[str] = None):
+    def unsubscribe_all(self, event_type: str | None = None):
         """Unsubscribe all callbacks for an event type, or all if None."""
         if event_type is None:
             self._subscriptions.clear()
@@ -240,7 +240,9 @@ class EventBus:
         wildcard = len(self._wildcard_subscriptions)
         return specific + wildcard
 
-    def get_history(self, event_type: Optional[str] = None, limit: int = 10) -> list[Event]:
+    def get_history(
+        self, event_type: str | None = None, limit: int = 10
+    ) -> list[Event]:
         """Get event history, optionally filtered by type."""
         history = self._event_history
 
@@ -255,7 +257,7 @@ class EventBus:
 
 
 # Global event bus instance
-_bus: Optional[EventBus] = None
+_bus: EventBus | None = None
 
 
 def get_event_bus() -> EventBus:

@@ -1,10 +1,9 @@
 """File tracking for auto-reload on modification."""
 
 import os
-from pathlib import Path
-from typing import Optional
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 
 
 @dataclass
@@ -42,7 +41,7 @@ class FileTracker:
         """Ensure cache directory exists."""
         os.makedirs(self._cache_dir, exist_ok=True)
 
-    def get(self, path: str) -> Optional[FileCacheEntry]:
+    def get(self, path: str) -> FileCacheEntry | None:
         """Get cached file if exists."""
         return self._cache.get(path)
 
@@ -67,7 +66,10 @@ class FileTracker:
         try:
             current_stat = os.stat(path)
             cached = self._cache[path]
-            return current_stat.st_mtime > cached.mtime or current_stat.st_size != cached.size
+            return (
+                current_stat.st_mtime > cached.mtime
+                or current_stat.st_size != cached.size
+            )
         except OSError:
             return True
 
@@ -86,7 +88,9 @@ class FileTracker:
     def invalidate_dir(self, dir_path: str):
         """Invalidate all cached files in a directory."""
         dir_path = str(Path(dir_path).resolve())
-        to_remove = [p for p in self._cache if str(Path(p).resolve()).startswith(dir_path)]
+        to_remove = [
+            p for p in self._cache if str(Path(p).resolve()).startswith(dir_path)
+        ]
         for p in to_remove:
             self._cache.pop(p, None)
 

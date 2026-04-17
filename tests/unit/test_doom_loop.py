@@ -13,7 +13,9 @@ class TestToolCall:
 
     def test_tool_call_creation(self):
         """Test creating a ToolCall."""
-        call = ToolCall(tool_name="read", arguments={"path": "test.py"}, call_id="call-1")
+        call = ToolCall(
+            tool_name="read", arguments={"path": "test.py"}, call_id="call-1"
+        )
         assert call.tool_name == "read"
         assert call.arguments == {"path": "test.py"}
         assert call.call_id == "call-1"

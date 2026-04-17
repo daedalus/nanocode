@@ -1,11 +1,13 @@
 """Tests for agent core functionality."""
 
-import pytest
 from unittest.mock import Mock, patch
 
+import pytest
+
 from nanocode.core import AutonomousAgent
+from nanocode.llm import Message
+from nanocode.llm.base import LLMResponse, ToolCall
 from nanocode.state import AgentState, ExecutionPlan, TaskStep
-from nanocode.llm import Message, LLMResponse, ToolCall
 
 
 class TestAgentState:

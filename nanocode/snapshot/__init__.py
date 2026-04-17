@@ -1,12 +1,12 @@
 """Snapshot/revert system using Git to capture and rollback changes."""
 
+import json
 import os
 import subprocess
-import json
-from pathlib import Path
-from typing import Optional
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
+from typing import Optional
 
 
 @dataclass
@@ -49,7 +49,13 @@ class SnapshotManager:
 
     def _git_args(self, cmd: list[str]) -> list[str]:
         """Wrap git command with git-dir and work-tree args."""
-        return ["--git-dir", str(self._git_dir()), "--work-tree", str(self.base_dir), *cmd]
+        return [
+            "--git-dir",
+            str(self._git_dir()),
+            "--work-tree",
+            str(self.base_dir),
+            *cmd,
+        ]
 
     def _run_git(
         self, cmd: list[str], cwd: Path = None, check: bool = True
@@ -94,7 +100,11 @@ class SnapshotManager:
                 cwd=git_dir,
                 capture_output=True,
                 check=True,
-                env={**os.environ, "GIT_DIR": str(git_dir), "GIT_WORK_TREE": str(self.base_dir)},
+                env={
+                    **os.environ,
+                    "GIT_DIR": str(git_dir),
+                    "GIT_WORK_TREE": str(self.base_dir),
+                },
             )
 
             subprocess.run(
@@ -116,7 +126,7 @@ class SnapshotManager:
         except subprocess.CalledProcessError:
             pass
 
-    async def track(self) -> Optional[str]:
+    async def track(self) -> str | None:
         """Capture current state of files and return snapshot hash.
 
         Uses git write-tree to capture the current state.
@@ -134,7 +144,11 @@ class SnapshotManager:
                 cwd=self.base_dir,
                 capture_output=True,
                 check=True,
-                env={**os.environ, "GIT_DIR": str(git_dir), "GIT_WORK_TREE": str(self.base_dir)},
+                env={
+                    **os.environ,
+                    "GIT_DIR": str(git_dir),
+                    "GIT_WORK_TREE": str(self.base_dir),
+                },
             )
 
             result = subprocess.run(
@@ -190,7 +204,11 @@ class SnapshotManager:
                 cwd=self.base_dir,
                 capture_output=True,
                 check=True,
-                env={**os.environ, "GIT_DIR": str(git_dir), "GIT_WORK_TREE": str(self.base_dir)},
+                env={
+                    **os.environ,
+                    "GIT_DIR": str(git_dir),
+                    "GIT_WORK_TREE": str(self.base_dir),
+                },
             )
 
             result = subprocess.run(
@@ -205,7 +223,14 @@ class SnapshotManager:
                     "-c",
                     "core.quotepath=false",
                     *self._git_args(
-                        ["diff", "--no-ext-diff", "--name-only", snapshot_hash, "--", "."]
+                        [
+                            "diff",
+                            "--no-ext-diff",
+                            "--name-only",
+                            snapshot_hash,
+                            "--",
+                            ".",
+                        ]
                     ),
                 ],
                 cwd=self.base_dir,
@@ -335,7 +360,9 @@ class SnapshotManager:
                             snapshots.append(
                                 {
                                     "hash": snapshot_hash,
-                                    "timestamp": timestamps.get(snapshot_hash, "unknown"),
+                                    "timestamp": timestamps.get(
+                                        snapshot_hash, "unknown"
+                                    ),
                                 }
                             )
         except Exception:
@@ -350,7 +377,7 @@ class SnapshotManager:
         snapshots.sort(key=sort_key, reverse=True)
         return snapshots[:20]
 
-    async def get_snapshot_info(self, snapshot_hash: str) -> Optional[dict]:
+    async def get_snapshot_info(self, snapshot_hash: str) -> dict | None:
         """Get information about a specific snapshot."""
         if not self.enabled:
             return None
@@ -362,7 +389,10 @@ class SnapshotManager:
 
         try:
             result = subprocess.run(
-                ["git", *self._git_args(["show", "-s", "--format=%H %ci", snapshot_hash])],
+                [
+                    "git",
+                    *self._git_args(["show", "-s", "--format=%H %ci", snapshot_hash]),
+                ],
                 cwd=self.base_dir,
                 capture_output=True,
                 text=True,

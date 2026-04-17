@@ -3,11 +3,12 @@
 import asyncio
 import json
 import os
-from abc import ABC, abstractmethod
-from typing import Any, Optional
-from dataclasses import dataclass
-import httpx
 import subprocess
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any, Optional
+
+import httpx
 
 
 @dataclass
@@ -78,9 +79,9 @@ class MCPStdioConnection(MCPConnection):
         self.command = command
         self.args = args or []
         self.env = env or {}
-        self._process: Optional[subprocess.Popen] = None
-        self._reader: Optional[asyncio.StreamReader] = None
-        self._writer: Optional[asyncio.StreamWriter] = None
+        self._process: subprocess.Popen | None = None
+        self._reader: asyncio.StreamReader | None = None
+        self._writer: asyncio.StreamWriter | None = None
         self._request_id = 0
         self._lock = asyncio.Lock()
 
@@ -102,7 +103,9 @@ class MCPStdioConnection(MCPConnection):
         loop = asyncio.get_event_loop()
         self._reader = asyncio.StreamReader()
         protocol = asyncio.StreamReaderProtocol(self._reader)
-        transport, _ = await loop.connect_write_pipe(lambda: protocol, self._process.stdin)
+        transport, _ = await loop.connect_write_pipe(
+            lambda: protocol, self._process.stdin
+        )
         self._writer = asyncio.StreamWriter(transport, protocol, None, loop)
 
     async def send(self, request: dict) -> dict:
@@ -136,7 +139,9 @@ class MCPStdioConnection(MCPConnection):
 
     async def list_tools(self) -> list[MCPTool]:
         """List available tools."""
-        response = await self.send({"jsonrpc": "2.0", "method": "tools/list", "params": {}})
+        response = await self.send(
+            {"jsonrpc": "2.0", "method": "tools/list", "params": {}}
+        )
 
         tools = []
         if result := response.get("result"):
@@ -184,7 +189,7 @@ class MCPSSEConnection(MCPConnection):
     def __init__(self, url: str, headers: dict = None):
         self.url = url
         self.headers = headers or {}
-        self._session_id: Optional[str] = None
+        self._session_id: str | None = None
 
     async def send(self, request: dict) -> dict:
         """Send a request."""
@@ -215,7 +220,9 @@ class MCPSSEConnection(MCPConnection):
 
     async def list_tools(self) -> list[MCPTool]:
         """List available tools."""
-        response = await self.send({"jsonrpc": "2.0", "method": "tools/list", "params": {}})
+        response = await self.send(
+            {"jsonrpc": "2.0", "method": "tools/list", "params": {}}
+        )
 
         tools = []
         if result := response.get("result"):
@@ -355,7 +362,7 @@ class MCPManager:
         """Disconnect all servers."""
         self._clients.clear()
 
-    def get_client(self, name: str) -> Optional[MCPClient]:
+    def get_client(self, name: str) -> MCPClient | None:
         """Get an MCP client by name."""
         return self._clients.get(name)
 
@@ -490,11 +497,17 @@ class GitMCPServer:
             {
                 "name": "git_log",
                 "description": "Get git log",
-                "inputSchema": {"type": "object", "properties": {"count": {"type": "integer"}}},
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"count": {"type": "integer"}},
+                },
             },
             {
                 "name": "git_diff",
                 "description": "Get git diff",
-                "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}},
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                },
             },
         ]

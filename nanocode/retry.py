@@ -3,8 +3,9 @@
 import asyncio
 import logging
 import time
-from typing import Any, Callable, Optional, TypeVar
+from collections.abc import Callable
 from functools import wraps
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,9 @@ class RetryState:
 
     def get_delay(self, error: Exception = None) -> float:
         """Calculate delay for next retry with exponential backoff."""
-        delay = self.config.initial_delay * (self.config.backoff_factor ** (self.attempt - 1))
+        delay = self.config.initial_delay * (
+            self.config.backoff_factor ** (self.attempt - 1)
+        )
 
         if isinstance(error, RateLimitError) and error.retry_after:
             delay = min(error.retry_after, self.config.max_delay)
@@ -130,7 +133,7 @@ async def sleep_with_abort(ms: float, abort_signal: asyncio.Event = None):
             await asyncio.wait_for(asyncio.sleep(ms / 1000), timeout=ms / 1000)
         else:
             await asyncio.sleep(ms / 1000)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         pass
 
 
@@ -174,14 +177,18 @@ def calculate_retry_delay(
     return min(delay, max_delay)
 
 
-def is_retryable_error(error: Exception) -> Optional[str]:
+def is_retryable_error(error: Exception) -> str | None:
     """Check if an error is retryable and return reason if not."""
     if isinstance(error, ContextOverflowError):
         return None
 
     error_msg = str(error).lower()
 
-    if "rate_limit" in error_msg or "too many requests" in error_msg or "rate limit" in error_msg:
+    if (
+        "rate_limit" in error_msg
+        or "too many requests" in error_msg
+        or "rate limit" in error_msg
+    ):
         return "Rate Limited"
 
     if "overloaded" in error_msg:
@@ -294,7 +301,9 @@ def parse_error_type(error: Exception) -> tuple[type, dict]:
     if "overloaded" in error_lower:
         return ProviderOverloadedError, {"message": error_str}
 
-    if "context" in error_lower and ("overflow" in error_lower or "limit" in error_lower):
+    if "context" in error_lower and (
+        "overflow" in error_lower or "limit" in error_lower
+    ):
         return ContextOverflowError, {"message": error_str}
 
     if "free" in error_lower and ("limit" in error_lower or "exceeded" in error_lower):
@@ -322,7 +331,10 @@ def create_error_from_response(response_data: dict) -> Exception:
         if "free" in message.lower() and "limit" in message.lower():
             return FreeUsageLimitError(message)
 
-    if "exhausted" in str(error_code).lower() or "unavailable" in str(error_code).lower():
+    if (
+        "exhausted" in str(error_code).lower()
+        or "unavailable" in str(error_code).lower()
+    ):
         return ProviderOverloadedError(message)
 
     return RetryError(message)

@@ -4,11 +4,9 @@ Supports model ID format: provider/model (e.g., "openai/gpt-4o", "anthropic/clau
 """
 
 import os
-from typing import Optional
 from dataclasses import dataclass
 
 from nanocode.llm.registry import ModelRegistry, get_registry
-
 
 PROVIDER_DEFAULTS = {
     "openai": {
@@ -71,6 +69,16 @@ PROVIDER_DEFAULTS = {
         "api_key_env": "OPENROUTER_API_KEY",
         "model_param": "model",
     },
+    "z-ai": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "model_param": "model",
+    },
+    "opencode": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "model_param": "model",
+    },
     "azure": {
         "base_url": None,
         "api_key_env": "AZURE_OPENAI_API_KEY",
@@ -98,7 +106,7 @@ class ProviderConfig:
 
     provider: str
     base_url: str
-    api_key: Optional[str]
+    api_key: str | None
     model: str
 
 
@@ -158,8 +166,8 @@ class ProviderRouter:
         if model_lower.startswith("mixtral-") or model_lower.startswith("codestral"):
             return "mistral"
 
-        # Default to openai for unknown models
-        return "openai"
+        # Default to openrouter for unknown models (fallback to config default)
+        return "openrouter"
 
     def get_provider_config(
         self,
@@ -204,7 +212,7 @@ class ProviderRouter:
             # Special handling for OpenCode Zen
             base_url = "https://opencode.ai/zen/v1"
 
-        api_key = self._get_api_key(parsed.provider) or defaults.get("api_key_env")
+        api_key = self._get_api_key(parsed.provider) or os.getenv(defaults.get("api_key_env", ""))
 
         return ProviderConfig(
             provider=parsed.provider,
@@ -213,7 +221,7 @@ class ProviderRouter:
             model=parsed.model,
         )
 
-    def _get_api_key(self, provider: str) -> Optional[str]:
+    def _get_api_key(self, provider: str) -> str | None:
         """Get API key from environment."""
         # Check explicit config first
         if provider in self._explicit_providers:
@@ -257,7 +265,7 @@ class ProviderRouter:
 
 
 # Global router instance
-_router: Optional[ProviderRouter] = None
+_router: ProviderRouter | None = None
 
 
 def get_router() -> ProviderRouter:

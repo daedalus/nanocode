@@ -3,13 +3,13 @@
 from dataclasses import dataclass
 
 from nanocode.bus import (
-    EventBus,
     Event,
+    EventBus,
     EventType,
-    get_event_bus,
-    subscribe,
-    publish,
     define_event,
+    get_event_bus,
+    publish,
+    subscribe,
 )
 
 
@@ -194,7 +194,9 @@ def test_event_types_enum():
     received = []
     bus.subscribe(EventType.SESSION_CREATED.value, lambda e: received.append(e))
 
-    bus.publish(Event(type=EventType.SESSION_CREATED.value, properties={"session_id": "abc123"}))
+    bus.publish(
+        Event(type=EventType.SESSION_CREATED.value, properties={"session_id": "abc123"})
+    )
 
     assert len(received) == 1
     assert received[0].properties["session_id"] == "abc123"

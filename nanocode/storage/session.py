@@ -1,14 +1,13 @@
 """Session storage operations."""
 
-import uuid
 import os
+import uuid
 from datetime import datetime
-from typing import Optional
 
-from sqlalchemy import select, delete
+from sqlalchemy import delete, select
 
-from .models import Project, Session, Message, MessagePart, Todo, SessionShare
 from .database import Database, get_db
+from .models import Message, MessagePart, Project, Session, SessionShare, Todo
 
 
 class SessionStorage:
@@ -29,13 +28,15 @@ class SessionStorage:
             await session.flush()
             return project
 
-    async def get_project(self, project_id: str) -> Optional[Project]:
+    async def get_project(self, project_id: str) -> Project | None:
         """Get a project by ID."""
         async with self.db.session() as session:
-            result = await session.execute(select(Project).where(Project.id == project_id))
+            result = await session.execute(
+                select(Project).where(Project.id == project_id)
+            )
             return result.scalar_one_or_none()
 
-    async def get_project_by_directory(self, directory: str) -> Optional[Project]:
+    async def get_project_by_directory(self, directory: str) -> Project | None:
         """Get a project by directory."""
         async with self.db.session() as session:
             result = await session.execute(
@@ -74,10 +75,12 @@ class SessionStorage:
             await session.flush()
             return session_obj
 
-    async def get_session(self, session_id: str) -> Optional[Session]:
+    async def get_session(self, session_id: str) -> Session | None:
         """Get a session by ID."""
         async with self.db.session() as session:
-            result = await session.execute(select(Session).where(Session.id == session_id))
+            result = await session.execute(
+                select(Session).where(Session.id == session_id)
+            )
             return result.scalar_one_or_none()
 
     async def get_sessions(self, project_id: str, limit: int = 50) -> list[Session]:
@@ -94,13 +97,17 @@ class SessionStorage:
     async def get_all_sessions(self) -> list[Session]:
         """Get all sessions."""
         async with self.db.session() as session:
-            result = await session.execute(select(Session).order_by(Session.updated_at.desc()))
+            result = await session.execute(
+                select(Session).order_by(Session.updated_at.desc())
+            )
             return list(result.scalars().all())
 
-    async def update_session(self, session_id: str, **kwargs) -> Optional[Session]:
+    async def update_session(self, session_id: str, **kwargs) -> Session | None:
         """Update a session."""
         async with self.db.session() as session:
-            result = await session.execute(select(Session).where(Session.id == session_id))
+            result = await session.execute(
+                select(Session).where(Session.id == session_id)
+            )
             session_obj = result.scalar_one_or_none()
             if session_obj:
                 for key, value in kwargs.items():
@@ -112,7 +119,9 @@ class SessionStorage:
     async def delete_session(self, session_id: str) -> bool:
         """Delete a session."""
         async with self.db.session() as session:
-            result = await session.execute(delete(Session).where(Session.id == session_id))
+            result = await session.execute(
+                delete(Session).where(Session.id == session_id)
+            )
             return result.rowcount > 0
 
     async def add_message(
@@ -137,7 +146,9 @@ class SessionStorage:
             )
             session.add(message)
 
-            result = await session.execute(select(Session).where(Session.id == session_id))
+            result = await session.execute(
+                select(Session).where(Session.id == session_id)
+            )
             session_obj = result.scalar_one_or_none()
             if session_obj:
                 session_obj.updated_at = datetime.now()
@@ -149,20 +160,26 @@ class SessionStorage:
         """Get all messages for a session."""
         async with self.db.session() as session:
             result = await session.execute(
-                select(Message).where(Message.session_id == session_id).order_by(Message.created_at)
+                select(Message)
+                .where(Message.session_id == session_id)
+                .order_by(Message.created_at)
             )
             return list(result.scalars().all())
 
     async def delete_message(self, message_id: str) -> bool:
         """Delete a message."""
         async with self.db.session() as session:
-            result = await session.execute(delete(Message).where(Message.id == message_id))
+            result = await session.execute(
+                delete(Message).where(Message.id == message_id)
+            )
             return result.rowcount > 0
 
     async def clear_messages(self, session_id: str) -> int:
         """Clear all messages from a session."""
         async with self.db.session() as session:
-            result = await session.execute(delete(Message).where(Message.session_id == session_id))
+            result = await session.execute(
+                delete(Message).where(Message.session_id == session_id)
+            )
             return result.rowcount
 
     async def add_todo(
@@ -189,7 +206,9 @@ class SessionStorage:
         """Get all todos for a session."""
         async with self.db.session() as session:
             result = await session.execute(
-                select(Todo).where(Todo.session_id == session_id).order_by(Todo.position)
+                select(Todo)
+                .where(Todo.session_id == session_id)
+                .order_by(Todo.position)
             )
             return list(result.scalars().all())
 
@@ -199,7 +218,7 @@ class SessionStorage:
         position: int,
         status: str = None,
         content: str = None,
-    ) -> Optional[Todo]:
+    ) -> Todo | None:
         """Update a todo."""
         async with self.db.session() as session:
             result = await session.execute(
@@ -247,7 +266,7 @@ class SessionStorage:
             await session.flush()
             return share
 
-    async def get_share(self, session_id: str) -> Optional[SessionShare]:
+    async def get_share(self, session_id: str) -> SessionShare | None:
         """Get share info for a session."""
         async with self.db.session() as session:
             result = await session.execute(
@@ -263,17 +282,23 @@ class SessionStorage:
             )
             return result.rowcount > 0
 
-    async def fork_session(self, session_id: str, new_title: str = None) -> Optional[Session]:
+    async def fork_session(
+        self, session_id: str, new_title: str = None
+    ) -> Session | None:
         """Fork/duplicate a session with all its messages."""
         async with self.db.session() as session:
-            result = await session.execute(select(Session).where(Session.id == session_id))
+            result = await session.execute(
+                select(Session).where(Session.id == session_id)
+            )
             original_session = result.scalar_one_or_none()
 
             if not original_session:
                 return None
 
             messages_result = await session.execute(
-                select(Message).where(Message.session_id == session_id).order_by(Message.created_at)
+                select(Message)
+                .where(Message.session_id == session_id)
+                .order_by(Message.created_at)
             )
             original_messages = list(messages_result.scalars().all())
 
@@ -320,7 +345,9 @@ class SessionStorage:
                     )
                     session.add(new_part)
 
-            todos_result = await session.execute(select(Todo).where(Todo.session_id == session_id))
+            todos_result = await session.execute(
+                select(Todo).where(Todo.session_id == session_id)
+            )
             original_todos = list(todos_result.scalars().all())
 
             for todo in original_todos:

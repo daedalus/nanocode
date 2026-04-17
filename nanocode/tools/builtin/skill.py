@@ -1,7 +1,7 @@
 """Skill tool for executing custom commands."""
 
-from nanocode.tools import Tool, ToolResult
 from nanocode.skills import SkillsManager
+from nanocode.tools import Tool, ToolResult
 
 
 class SkillTool(Tool):
@@ -28,10 +28,14 @@ class SkillTool(Tool):
         )
         self.skills_manager = skills_manager
 
-    async def execute(self, name: str = None, input: str = None, **kwargs) -> ToolResult:
+    async def execute(
+        self, name: str = None, input: str = None, **kwargs
+    ) -> ToolResult:
         """Execute a skill by name."""
         if not name:
-            return ToolResult(success=False, content=None, error="Skill name is required")
+            return ToolResult(
+                success=False, content=None, error="Skill name is required"
+            )
 
         try:
             self.skills_manager.get_skill(name)
@@ -41,7 +45,9 @@ class SkillTool(Tool):
                 "kwargs": kwargs,
             }
 
-            result = await self.skills_manager.execute_skill(name, {"input": input}, context)
+            result = await self.skills_manager.execute_skill(
+                name, {"input": input}, context
+            )
 
             return ToolResult(success=True, content=result)
         except Exception as e:

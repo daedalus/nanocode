@@ -4,10 +4,10 @@ import asyncio
 import json
 import os
 import shutil
-from pathlib import Path
-from typing import Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
+from typing import Any, Optional
 
 
 class MessageType(Enum):
@@ -26,8 +26,8 @@ class Diagnostic:
     range: dict
     message: str
     severity: int = 1
-    code: Optional[str] = None
-    source: Optional[str] = None
+    code: str | None = None
+    source: str | None = None
 
 
 @dataclass
@@ -36,9 +36,9 @@ class CompletionItem:
 
     label: str
     kind: int
-    detail: Optional[str] = None
-    documentation: Optional[str] = None
-    insert_text: Optional[str] = None
+    detail: str | None = None
+    documentation: str | None = None
+    insert_text: str | None = None
 
 
 @dataclass
@@ -63,7 +63,7 @@ class Hover:
     """LSP hover result."""
 
     contents: Any
-    range: Optional[dict] = None
+    range: dict | None = None
 
 
 @dataclass
@@ -93,7 +93,11 @@ class LSPClient:
 
     @classmethod
     async def spawn(
-        cls, command: list[str], cwd: str = None, env: dict = None, server_id: str = None
+        cls,
+        command: list[str],
+        cwd: str = None,
+        env: dict = None,
+        server_id: str = None,
     ) -> "LSPClient":
         """Spawn an LSP server process."""
         process_env = {**os.environ, **env} if env else None
@@ -186,12 +190,17 @@ class LSPClient:
         await self.process.stdin.drain()
 
     async def initialize(
-        self, root_path: str, capabilities: dict = None, initialization_options: dict = None
+        self,
+        root_path: str,
+        capabilities: dict = None,
+        initialization_options: dict = None,
     ) -> dict:
         """Initialize the LSP session."""
         params = {
             "processId": os.getpid(),
-            "rootUri": root_path if root_path.startswith("file://") else f"file://{root_path}",
+            "rootUri": root_path
+            if root_path.startswith("file://")
+            else f"file://{root_path}",
             "capabilities": capabilities
             or {
                 "textDocument": {
@@ -274,7 +283,9 @@ class LSPClient:
 
     async def text_document__did_close(self, uri: str):
         """Notify server that a document was closed."""
-        await self.send_notification("textDocument/didClose", {"textDocument": {"uri": uri}})
+        await self.send_notification(
+            "textDocument/didClose", {"textDocument": {"uri": uri}}
+        )
         self._open_files.pop(uri, None)
 
     async def text_document__completion(
@@ -483,7 +494,9 @@ class LSPServerManager:
                 available.append(server)
         return available
 
-    def configure_server(self, server_id: str, command: list[str] = None, disabled: bool = False):
+    def configure_server(
+        self, server_id: str, command: list[str] = None, disabled: bool = False
+    ):
         """Configure an LSP server."""
         if disabled:
             self._disabled.add(server_id)
@@ -521,11 +534,13 @@ class LSPServerManager:
         self._servers[name] = client
         return client
 
-    def get_server(self, name: str) -> Optional[LSPClient]:
+    def get_server(self, name: str) -> LSPClient | None:
         """Get an LSP server by name."""
         return self._servers.get(name)
 
-    def get_server_for_file(self, file_path: str) -> Optional[tuple[LSPClient, LSPServerInfo]]:
+    def get_server_for_file(
+        self, file_path: str
+    ) -> tuple[LSPClient, LSPServerInfo] | None:
         """Get an appropriate LSP server for a file."""
         ext = Path(file_path).suffix
 
@@ -547,7 +562,9 @@ class LSPServerManager:
 
         return None
 
-    async def auto_start_for_file(self, file_path: str, cwd: str = None) -> Optional[LSPClient]:
+    async def auto_start_for_file(
+        self, file_path: str, cwd: str = None
+    ) -> LSPClient | None:
         """Auto-start an appropriate LSP server for a file."""
         ext = Path(file_path).suffix
 
@@ -590,7 +607,9 @@ class LSPServerManager:
             status.append(
                 {
                     "id": name,
-                    "status": "running" if client.process.returncode is None else "stopped",
+                    "status": "running"
+                    if client.process.returncode is None
+                    else "stopped",
                 }
             )
         return status

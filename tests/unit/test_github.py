@@ -1,7 +1,8 @@
 """Unit tests for GitHub integration."""
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 
 from nanocode.github import (
     GitHubClient,

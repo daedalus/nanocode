@@ -1,11 +1,11 @@
 """Patch system for code editing utilities."""
 
-import re
 import hashlib
-from pathlib import Path
-from typing import Optional
+import re
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
+from typing import Optional
 
 
 class PatchType(Enum):
@@ -20,7 +20,7 @@ class UpdateFileChunk:
 
     old_lines: list[str] = field(default_factory=list)
     new_lines: list[str] = field(default_factory=list)
-    change_context: Optional[str] = None
+    change_context: str | None = None
     is_end_of_file: bool = False
 
 
@@ -30,9 +30,9 @@ class Hunk:
 
     type: PatchType
     path: str
-    contents: Optional[str] = None
+    contents: str | None = None
     chunks: list[UpdateFileChunk] = field(default_factory=list)
-    move_path: Optional[str] = None
+    move_path: str | None = None
 
 
 @dataclass
@@ -78,7 +78,7 @@ def strip_heredoc(text: str) -> str:
 
 def parse_patch_header(
     lines: list[str], start_idx: int
-) -> Optional[tuple[str, Optional[str], int]]:
+) -> tuple[str, str | None, int] | None:
     """Parse a patch header line."""
     if start_idx >= len(lines):
         return None
@@ -110,7 +110,9 @@ def parse_patch_header(
     return None
 
 
-def parse_update_file_chunks(lines: list[str], start_idx: int) -> tuple[list[UpdateFileChunk], int]:
+def parse_update_file_chunks(
+    lines: list[str], start_idx: int
+) -> tuple[list[UpdateFileChunk], int]:
     """Parse update file chunks from patch."""
     chunks: list[UpdateFileChunk] = []
     i = start_idx
@@ -125,7 +127,9 @@ def parse_update_file_chunks(lines: list[str], start_idx: int) -> tuple[list[Upd
             is_end_of_file = False
 
             while (
-                i < len(lines) and not lines[i].startswith("@@") and not lines[i].startswith("***")
+                i < len(lines)
+                and not lines[i].startswith("@@")
+                and not lines[i].startswith("***")
             ):
                 change_line = lines[i]
 
@@ -185,7 +189,9 @@ def parse_patch(patch_text: str) -> list[Hunk]:
     end_marker = "*** End Patch"
 
     try:
-        begin_idx = next(i for i, line in enumerate(lines) if line.strip() == begin_marker)
+        begin_idx = next(
+            i for i, line in enumerate(lines) if line.strip() == begin_marker
+        )
         end_idx = next(i for i, line in enumerate(lines) if line.strip() == end_marker)
     except StopIteration:
         raise ParseError("Invalid patch format: missing Begin/End markers")
@@ -265,12 +271,16 @@ def seek_sequence(
         return result
 
     # Rstrip (trim trailing whitespace)
-    result = _try_match(lines, pattern, start_index, lambda a, b: a.rstrip() == b.rstrip(), eof)
+    result = _try_match(
+        lines, pattern, start_index, lambda a, b: a.rstrip() == b.rstrip(), eof
+    )
     if result != -1:
         return result
 
     # Trim (both ends)
-    result = _try_match(lines, pattern, start_index, lambda a, b: a.strip() == b.strip(), eof)
+    result = _try_match(
+        lines, pattern, start_index, lambda a, b: a.strip() == b.strip(), eof
+    )
     if result != -1:
         return result
 
@@ -326,9 +336,13 @@ def compute_replacements(
 
     for chunk in chunks:
         if chunk.change_context:
-            context_idx = seek_sequence(original_lines, [chunk.change_context], line_index)
+            context_idx = seek_sequence(
+                original_lines, [chunk.change_context], line_index
+            )
             if context_idx == -1:
-                raise ComputeReplacementsError(f"Failed to find context '{chunk.change_context}'")
+                raise ComputeReplacementsError(
+                    f"Failed to find context '{chunk.change_context}'"
+                )
             line_index = context_idx + 1
 
         if not chunk.old_lines:
@@ -348,7 +362,9 @@ def compute_replacements(
             pattern = pattern[:-1]
             if new_slice and new_slice[-1] == "":
                 new_slice = new_slice[:-1]
-            found = seek_sequence(original_lines, pattern, line_index, chunk.is_end_of_file)
+            found = seek_sequence(
+                original_lines, pattern, line_index, chunk.is_end_of_file
+            )
 
         if found != -1:
             replacements.append((found, len(pattern), new_slice))

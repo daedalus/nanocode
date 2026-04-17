@@ -7,11 +7,12 @@ created, modified, or deleted.
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+
+from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler, FileSystemEvent
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,9 @@ class FileEventHandler(FileSystemEventHandler):
     """Handler for file system events."""
 
     def __init__(
-        self, callback: Callable[[FileWatcherEvent], None], ignore_patterns: list[str] = None
+        self,
+        callback: Callable[[FileWatcherEvent], None],
+        ignore_patterns: list[str] = None,
     ):
         self.callback = callback
         self.ignore_patterns = ignore_patterns or []
@@ -103,8 +106,8 @@ class FileWatcher:
 
     def __init__(
         self,
-        root_dir: Optional[str] = None,
-        ignore_patterns: Optional[list[str]] = None,
+        root_dir: str | None = None,
+        ignore_patterns: list[str] | None = None,
         enabled: bool = True,
     ):
         """Initialize the file watcher.
@@ -118,8 +121,8 @@ class FileWatcher:
         self.ignore_patterns = ignore_patterns or self.DEFAULT_IGNORE_PATTERNS
         self.enabled = enabled
 
-        self._observer: Optional[Observer] = None
-        self._handler: Optional[FileEventHandler] = None
+        self._observer: Observer | None = None
+        self._handler: FileEventHandler | None = None
         self._event_queue: asyncio.Queue[FileWatcherEvent] = asyncio.Queue()
         self._callbacks: list[Callable[[FileWatcherEvent], None]] = []
 
@@ -169,7 +172,7 @@ class FileWatcher:
         """Remove a callback."""
         self._callbacks.remove(callback)
 
-    async def get_event(self, timeout: float = None) -> Optional[FileWatcherEvent]:
+    async def get_event(self, timeout: float = None) -> FileWatcherEvent | None:
         """Get the next file event.
 
         Args:
@@ -182,7 +185,7 @@ class FileWatcher:
             if timeout is not None:
                 return await asyncio.wait_for(self._event_queue.get(), timeout)
             return await self._event_queue.get()
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return None
 
     @property
@@ -200,8 +203,8 @@ class FileWatcherManager:
     def create_watcher(
         self,
         name: str,
-        root_dir: Optional[str] = None,
-        ignore_patterns: Optional[list[str]] = None,
+        root_dir: str | None = None,
+        ignore_patterns: list[str] | None = None,
         enabled: bool = True,
     ) -> FileWatcher:
         """Create and register a new file watcher.
@@ -223,7 +226,7 @@ class FileWatcherManager:
         self._watchers[name] = watcher
         return watcher
 
-    def get_watcher(self, name: str) -> Optional[FileWatcher]:
+    def get_watcher(self, name: str) -> FileWatcher | None:
         """Get a watcher by name."""
         return self._watchers.get(name)
 
@@ -244,7 +247,7 @@ class FileWatcherManager:
             watcher.stop()
 
 
-_watcher_manager: Optional[FileWatcherManager] = None
+_watcher_manager: FileWatcherManager | None = None
 
 
 def get_watcher_manager() -> FileWatcherManager:
@@ -257,8 +260,8 @@ def get_watcher_manager() -> FileWatcherManager:
 
 def create_file_watcher(
     name: str = "default",
-    root_dir: Optional[str] = None,
-    ignore_patterns: Optional[list[str]] = None,
+    root_dir: str | None = None,
+    ignore_patterns: list[str] | None = None,
     enabled: bool = True,
     auto_start: bool = False,
 ) -> FileWatcher:
