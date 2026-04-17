@@ -147,10 +147,6 @@ class NanoCodeApp(App):
         padding: 0 1;
     }
     
-    #status {
-        text-style: normal;
-    }
-    
     .permission-dialog {
         background: $panel;
         border: solid $accent;
