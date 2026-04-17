@@ -127,6 +127,11 @@ def parse_args():
         help="Proxy URL for HTTP requests (e.g., http://localhost:8080)",
     )
     parser.add_argument(
+        "--no-proxy",
+        action="store_true",
+        help="Disable proxy for HTTP requests (override environment settings)",
+    )
+    parser.add_argument(
         "--user-agent",
         type=str,
         help="Custom User-Agent for HTTP requests",
@@ -224,13 +229,14 @@ async def main():
     if args.serve:
         os.chdir(args.cwd)
         config = Config(args.config)
-        if args.proxy:
+        if args.no_proxy:
+            config.set("proxy", None)
+        elif args.proxy:
             config.set("proxy", args.proxy)
         if args.user_agent:
             config.set("user_agent", args.user_agent)
 
         auth_username = None
-        auth_password = None
         if args.serve_auth:
             if ":" in args.serve_auth:
                 auth_username, auth_password = args.serve_auth.split(":", 1)
@@ -262,7 +268,9 @@ async def main():
     if args.acp:
         os.chdir(args.cwd)
         config = Config(args.config)
-        if args.proxy:
+        if args.no_proxy:
+            config.set("proxy", None)
+        elif args.proxy:
             config.set("proxy", args.proxy)
         if args.user_agent:
             config.set("user_agent", args.user_agent)
@@ -273,7 +281,9 @@ async def main():
     if args.admin:
         os.chdir(args.cwd)
         config = Config(args.config)
-        if args.proxy:
+        if args.no_proxy:
+            config.set("proxy", None)
+        elif args.proxy:
             config.set("proxy", args.proxy)
         if args.user_agent:
             config.set("user_agent", args.user_agent)
@@ -294,7 +304,9 @@ async def main():
 
     config = Config(args.config)
 
-    if args.proxy:
+    if args.no_proxy:
+        config.set("proxy", None)
+    elif args.proxy:
         config.set("proxy", args.proxy)
     if args.user_agent:
         config.set("user_agent", args.user_agent)
@@ -323,13 +335,22 @@ async def main():
         )
 
     if getattr(args, "prompt", None):
-        result = await agent.process_input(
-            args.prompt, show_thinking=show_thinking, show_messages=show_messages
-        )
+        import traceback
+        try:
+            result = await agent.process_input(
+                args.prompt, show_thinking=show_thinking, show_messages=show_messages
+            )
+        except Exception as e:
+            traceback.print_exc()
+            result = f"Error: {str(e)}"
         print("\n" + "=" * 60)
         print("AGENT RESPONSE:")
         print("=" * 60)
-        print(result)
+        if isinstance(result, str) and result.startswith("Error:"):
+            print(result)
+            print("\nFull traceback above.")
+        else:
+            print(result)
         return
 
     await run_cli(agent, show_thinking=show_thinking, show_messages=show_messages)
