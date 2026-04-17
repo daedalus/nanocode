@@ -30,6 +30,9 @@ dev = [
     "mypy",
     "hatch",
 ]
+tui = [
+    "textual>=0.90.0",
+]
 test = [
     "pytest>=9.0.0",
     "pytest-asyncio>=0.23.0",

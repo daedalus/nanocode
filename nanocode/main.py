@@ -56,7 +56,7 @@ def parse_args():
     parser.add_argument(
         "--gui",
         "-g",
-        choices=["cli"],
+        choices=["cli", "textual"],
         default="cli",
         help="UI mode (default: cli)",
     )
@@ -202,6 +202,26 @@ async def run_cli(agent, show_thinking: bool = True, show_messages: bool = False
         agent, show_thinking=show_thinking, show_messages=show_messages
     )
     await cli.run()
+
+
+async def run_tui(agent, show_thinking: bool = True, show_messages: bool = False):
+    """Run the Textual TUI interface."""
+    from nanocode.agents.permission import (
+        PermissionReply,
+        PermissionReplyType,
+        PermissionRequest,
+    )
+    from nanocode.tui.app import NanoCodeApp
+
+    async def permission_callback(request: PermissionRequest) -> PermissionReply:
+        """Callback to prompt user for permission in TUI."""
+        # For now, auto-allow - TUI dialog to be implemented
+        return PermissionReply(request_id=request.id, reply=PermissionReplyType.ALWAYS)
+
+    agent.permission_handler.set_callback(permission_callback)
+
+    app = NanoCodeApp(agent=agent, show_thinking=show_thinking)
+    await app.run_async()
 
 
 async def run_acp(agent):
@@ -353,7 +373,11 @@ async def main():
             print(result)
         return
 
-    await run_cli(agent, show_thinking=show_thinking, show_messages=show_messages)
+    gui_mode = getattr(args, "gui", "cli")
+    if gui_mode == "textual":
+        await run_tui(agent, show_thinking=show_thinking, show_messages=show_messages)
+    else:
+        await run_cli(agent, show_thinking=show_thinking, show_messages=show_messages)
 
 
 if __name__ == "__main__":
