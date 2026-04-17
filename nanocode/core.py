@@ -35,35 +35,35 @@ DEFAULT_SYSTEM_PROMPT = """You are nanocode, an autonomous CLI coding agent.
 You MUST use tools to complete tasks. Never describe what you would do - do it.
 
 Examples of correct tool usage:
-- [tool_call: bash for 'find . -name "*.py"']
-- [tool_call: glob for pattern '**/*.py']
-- [tool_call: read for path 'src/main.py']
-- [tool_call: grep for pattern 'def main']
-
-# Critical rules
-1. For ANY task like "find X in Y" - IMMEDIATELY use grep/glob/bash tools to search
-2. NEVER ask for clarification - use tools to explore
-3. If you don't know the answer, use tools to find out
-4. Never say "I need to know" - use tools to find the information
-
-# AVOID DOOM LOOPS - VERY IMPORTANT
-- NEVER repeat the same tool calls in succession (e.g., don't call 'ls' then 'ls' then 'ls')
-- NEVER call ls/glob repeatedly without reading any files - after 2 ls/glob calls you MUST use 'read' or 'grep'
-- If you call 'ls' or 'glob' more than twice consecutively, you are in a doom loop - STOP and use 'read' or 'grep'
-- Make progress with each tool call - don't just explore, actually analyze and complete the task
-- After getting file list, READ files to analyze them - don't just keep listing
-- If stuck, try a DIFFERENT approach instead of repeating the same exploration
+- [tool_call: glob for '**/*.py']
+- [tool_call: read for 'src/main.py']
+- [tool_call: grep for 'def main']
 
 # Available tools
-- bash: Execute shell commands (use 'ls', 'find', 'grep', etc.)
 - glob: Find files by pattern (e.g., pattern='**/*.py')
-- grep: Search file contents
+- grep: Search file contents (use for finding code patterns)
 - read: Read file contents
+- bash: Execute shell commands (ls, find, etc.)
 
-When you need to run shell commands, use the bash tool.
-When searching files, use glob and grep tools.
-When reading files, use the read tool - NOT cat.
-"""
+# CRITICAL: Make progress with each tool call
+- After glob finds files → IMMEDIATELY read one to analyze
+- After grep finds results → IMMEDIATELY read the file to understand
+- NEVER call ls/glob more than twice in a row without reading files
+
+# AVOID DOOM LOOPS - VERY IMPORTANT
+- If you call 'ls', 'glob', or 'bash' twice in a row, you MUST use 'read' or 'grep' next
+- The pattern "glob → glob → glob" with no reading = DOOM LOOP
+- Correct pattern: glob finds files → read one → grep for pattern → read more
+- If stuck exploring, start reading the files you've found instead
+
+# Code analysis workflow for "find bugs":
+1. glob '**/*.py' to find Python files
+2. read the most relevant file (e.g., core.py)
+3. grep for common bug patterns (TODO, FIXME, except, etc.)
+4. read the specific files with issues
+5. analyze and report bugs found
+
+Never ask for clarification - use tools to explore and find the answer yourself."""
 
 logger = logging.getLogger("nanocode.agent")
 tool_logger = logging.getLogger("nanocode.tools")
@@ -341,14 +341,18 @@ class AutonomousAgent:
 
             is_doom_loop = self.doom_loop_handler.check_tool_call(tool_name, args)
             if is_doom_loop:
-                warning = self.doom_loop_handler.get_loop_warning()
-                if warning:
-                    logger.warning(
-                        f"[{agent_name}] DOOM LOOP DETECTED for '{tool_name}': {warning}"
-                    )
-                    print(f"\n\033[91m{warning}\033[0m\n")
+                loop_info = self.doom_loop_handler.detection.get_loop_info()
+                should_show_warning = loop_info.get("show_warning", True) if loop_info else True
                 
-                doom_loop_msg = f"\n[DOOM LOOP WARNING] {warning}\n"
+                if should_show_warning:
+                    warning = self.doom_loop_handler.get_loop_warning()
+                    if warning:
+                        logger.warning(
+                            f"[{agent_name}] DOOM LOOP DETECTED for '{tool_name}': {warning}"
+                        )
+                        print(f"\n\033[91m{warning}\033[0m\n")
+                
+                doom_loop_msg = f"\n[DOOM LOOP WARNING] {self.doom_loop_handler.get_loop_warning()}\n"
 
                 if self.current_agent:
                     doom_action = self.permission_handler.check_permission(
@@ -369,7 +373,33 @@ class AutonomousAgent:
                             }
                         )
                         continue
+                    elif doom_action == PermissionAction.ASK:
+                        logger.info(
+                            f"[{agent_name}] Requesting permission to break doom loop for '{tool_name}'"
+                        )
+                        try:
+                            await self.permission_handler.request_permission(
+                                self.current_agent, "doom_loop", {"tool": tool_name, "args": args}
+                            )
+                            logger.debug(
+                                f"[{agent_name}] Doom loop permission granted for '{tool_name}'"
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"[{agent_name}] Doom loop permission denied for '{tool_name}': {e}"
+                            )
+                            results.append(
+                                {
+                                    "tool_call_id": tc.id,
+                                    "tool_name": tool_name,
+                                    "result": f"Error: Doom loop detected - permission denied by user.{doom_loop_msg}",
+                                    "success": False,
+                                }
+                            )
+                            continue
                     else:
+                        # Permission granted - reset doom loop state for this tool
+                        self.doom_loop_handler.reset(tool_name)
                         results.append(
                             {
                                 "tool_call_id": tc.id,
@@ -959,5 +989,6 @@ class AutonomousAgent:
                 "files": summary.files,
                 "text": summary.text,
             }
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to save session summary: {e}")
             pass

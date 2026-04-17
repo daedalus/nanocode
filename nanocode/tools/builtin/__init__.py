@@ -638,6 +638,28 @@ class ReadFileTool(Tool):
         super().__init__(
             name="read",
             description="Read contents of a file. Use force_refresh=true to bypass cache.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "The path to the file to read (relative or absolute)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of lines to read",
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Line number to start reading from (1-indexed)",
+                    },
+                    "force_refresh": {
+                        "type": "boolean",
+                        "description": "Bypass cache to get fresh content",
+                    },
+                },
+                "required": ["path"],
+            },
         )
         self.root_dir = Path(root_dir) if root_dir else Path.cwd()
         self.file_tracker = file_tracker

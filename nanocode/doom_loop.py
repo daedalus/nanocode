@@ -23,6 +23,7 @@ class DoomLoopDetection:
         default_factory=lambda: defaultdict(list)
     )
     _all_recent_calls: list[ToolCall] = field(default_factory=list)
+    _exploration_warning_shown: bool = field(default=False)
 
     def record_call(self, tool_name: str, arguments: dict, call_id: str = None) -> bool:
         """
@@ -64,11 +65,20 @@ class DoomLoopDetection:
         
         unique_tools = set(recent_tools)
         if not unique_tools.issubset(exploration_tools):
+            # Reset warning flag when non-exploration tools are used
+            self._exploration_warning_shown = False
             return False
         
         if len(unique_tools) <= 2:
             return True
         
+        return False
+
+    def _should_show_exploration_warning(self) -> bool:
+        """Check if exploration warning should be shown (only once per detection)."""
+        if self._is_exploration_loop() and not self._exploration_warning_shown:
+            self._exploration_warning_shown = True
+            return True
         return False
 
     def _is_doom_loop(self, calls: list[ToolCall]) -> bool:
@@ -112,6 +122,7 @@ class DoomLoopDetection:
                 "arguments": {"pattern": "ls/glob repetition without progress"},
                 "count": len(self._all_recent_calls),
                 "type": "exploration",
+                "show_warning": not self._exploration_warning_shown,
             }
         
         return None
@@ -123,6 +134,7 @@ class DoomLoopDetection:
         else:
             self._recent_calls.clear()
             self._all_recent_calls.clear()
+            self._exploration_warning_shown = False
 
     def should_prompt(self, tool_name: str) -> bool:
         """Check if we should prompt for permission for this tool (doom loop detected)."""
@@ -157,10 +169,14 @@ class DoomLoopHandler:
             loop_type = info.get("type", "repeat")
             if loop_type == "exploration":
                 return (
-                    f"Warning: Repetitive exploration detected - "
-                    f"calling ls/glob repeatedly without making progress. "
-                    f"Total calls: {info['count']}. "
-                    f"STOP exploring and start reading/analyzing files with 'read' or 'grep'."
+                    f"⚠️ DOOM LOOP DETECTED: Repetitive exploration!\n\n"
+                    f"You've called exploration tools (ls/glob) {info['count']} times without analyzing any files.\n\n"
+                    f"✅ MUST DO NOW:\n"
+                    f"1. IMMEDIATELY stop calling ls/glob/bash\n"
+                    f"2. Use 'grep' or 'read' to analyze the files you've found\n"
+                    f"3. If you don't have files to analyze, use 'glob' ONCE to find them, then read them\n\n"
+                    f"Example correct pattern: glob '*.py' -> read file -> grep 'bug' -> read another file\n"
+                    f"❌ Wrong pattern: ls -> glob -> ls -> glob -> ls (no reading!)"
                 )
             return (
                 f"Warning: The tool '{info['tool']}' has been called "

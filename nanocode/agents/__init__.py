@@ -260,7 +260,7 @@ def create_default_agents() -> AgentRegistry:
             native=True,
             permission=[
                 PermissionRule(permission="*", action=PermissionAction.ALLOW),
-                PermissionRule(permission="doom_loop", action=PermissionAction.DENY),
+                PermissionRule(permission="doom_loop", action=PermissionAction.ASK),
                 PermissionRule(
                     permission="external_directory",
                     pattern=glob_pattern,
@@ -300,7 +300,7 @@ def create_default_agents() -> AgentRegistry:
             native=True,
             permission=[
                 PermissionRule(permission="*", action=PermissionAction.ALLOW),
-                PermissionRule(permission="doom_loop", action=PermissionAction.DENY),
+                PermissionRule(permission="doom_loop", action=PermissionAction.ASK),
                 PermissionRule(
                     permission="external_directory",
                     pattern=f"{home}/.opencode/plans/*",
@@ -342,7 +342,7 @@ def create_default_agents() -> AgentRegistry:
             native=True,
             permission=[
                 PermissionRule(permission="*", action=PermissionAction.ALLOW),
-                PermissionRule(permission="doom_loop", action=PermissionAction.DENY),
+                PermissionRule(permission="doom_loop", action=PermissionAction.ASK),
                 PermissionRule(
                     permission="external_directory",
                     pattern=glob_pattern,
