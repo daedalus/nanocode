@@ -468,9 +468,6 @@ class AutonomousAgent:
         if not self.prompt_cache:
             return None
 
-        if tools:
-            return None
-
         cache_key = self._get_cache_key(messages, tools)
         cached = self.prompt_cache.get(cache_key)
 
@@ -496,9 +493,6 @@ class AutonomousAgent:
         if not self.prompt_cache:
             return
 
-        if tools:
-            return
-
         cache_key = self._get_cache_key(messages, tools)
 
         cached = CachedResponse(
@@ -522,6 +516,17 @@ class AutonomousAgent:
         self, user_input: str, show_thinking: bool = True, show_messages: bool = False
     ) -> str:
         """Process a user input through the agent."""
+        import traceback
+        try:
+            return await self._process_input_impl(user_input, show_thinking, show_messages)
+        except Exception as e:
+            traceback.print_exc()
+            raise
+
+    async def _process_input_impl(
+        self, user_input: str, show_thinking: bool = True, show_messages: bool = False
+    ) -> str:
+        """Process a user input through the agent."""
         agent_name = self.current_agent.name if self.current_agent else "unknown"
         logger.info(f"[{agent_name}] Processing input: {user_input[:100]}...")
 
@@ -539,6 +544,9 @@ class AutonomousAgent:
         try:
             tools = self.tool_registry.get_schemas()
             logger.debug(f"[{agent_name}] Total tools available: {len(tools)}")
+
+            # DEBUG: Print what we send to LLM
+            logger.debug(f"[{agent_name}] === FIRST LLM REQUEST ===")
 
             messages = self.context_manager.prepare_messages()
             logger.debug(f"[{agent_name}] Context has {len(messages)} messages")
@@ -630,13 +638,14 @@ class AutonomousAgent:
                     result_content = self.context_manager.truncate_tool_result(
                         result_content
                     )
-                    self.context_manager.add_message(
-                        "tool",
+                    self.context_manager.add_tool_result(
+                        tr["tool_name"],
+                        tr["tool_call_id"],
                         result_content,
-                        tool_call_id=tr["tool_call_id"],
                     )
 
                 messages = self.context_manager.prepare_messages()
+                logger.debug(f"[{agent_name}] Second call: {len(messages)} messages after tool result")
                 final_response = await self.llm.chat(messages=messages)
                 content = final_response.content
             else:

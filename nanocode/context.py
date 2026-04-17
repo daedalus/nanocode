@@ -2,11 +2,12 @@
 
 import json
 import os
+import sys
 import tempfile
-from typing import Any, Optional
 from dataclasses import dataclass, field
-from enum import Enum
 from datetime import datetime
+from enum import Enum
+from typing import Any
 
 
 class ContextStrategy(Enum):
@@ -43,9 +44,9 @@ class MessagePart:
 
     part_type: MessagePartType
     content: str
-    tool_name: Optional[str] = None
-    tool_call_id: Optional[str] = None
-    provider_metadata: Optional[dict] = None
+    tool_name: str | None = None
+    tool_call_id: str | None = None
+    provider_metadata: dict | None = None
     tokens: int = 0
 
     def to_dict(self) -> dict:
@@ -68,7 +69,7 @@ class Message:
     parts: list[MessagePart] = field(default_factory=list)
     timestamp: datetime = field(default_factory=datetime.now)
     importance: float = 0.5
-    summary: Optional[str] = None
+    summary: str | None = None
     tokens: int = 0
 
     @staticmethod
@@ -79,7 +80,9 @@ class Message:
         return msg
 
     @staticmethod
-    def create_tool_result(tool_name: str, tool_call_id: str, content: str) -> "Message":
+    def create_tool_result(
+        tool_name: str, tool_call_id: str, content: str
+    ) -> "Message":
         """Create a tool result message."""
         msg = Message(role="tool")
         msg.add_tool_result(tool_name, tool_call_id, content)
@@ -140,13 +143,19 @@ class Message:
 
     def get_text_content(self) -> str:
         """Get combined text content."""
-        return " ".join(p.content for p in self.parts if p.part_type == MessagePartType.TEXT)
+        return " ".join(
+            p.content for p in self.parts if p.part_type == MessagePartType.TEXT
+        )
 
     def get_tool_results(self) -> list[tuple[str, str, str]]:
         """Get all tool results as (tool_name, tool_call_id, content)."""
         results = []
         for p in self.parts:
-            if p.part_type == MessagePartType.TOOL_RESULT and p.tool_name and p.tool_call_id:
+            if (
+                p.part_type == MessagePartType.TOOL_RESULT
+                and p.tool_name
+                and p.tool_call_id
+            ):
                 results.append((p.tool_name, p.tool_call_id, p.content))
         return results
 
@@ -168,7 +177,7 @@ class MessageToken:
 
     role: str
     content: str
-    tool_call_id: Optional[str] = None
+    tool_call_id: str | None = None
     tokens: int = 0
     timestamp: datetime = field(default_factory=datetime.now)
     importance: float = 0.5
@@ -239,6 +248,8 @@ class ModelLimits:
                     output_limit = min(context_limit // 8, 16384)
                     return {"context": context_limit, "output": output_limit}
 
+        if model is None:
+            return cls.DEFAULT_LIMITS["default"].copy()
         model_lower = model.lower()
         for key, limits in cls.DEFAULT_LIMITS.items():
             if key in model_lower:
@@ -296,7 +307,9 @@ class TokenCounter:
             content_tokens = TokenCounter.count_tokens(content)
         elif isinstance(content, list):
             content_tokens = sum(
-                TokenCounter.count_tokens(c.get("text", "")) for c in content if isinstance(c, dict)
+                TokenCounter.count_tokens(c.get("text", ""))
+                for c in content
+                if isinstance(c, dict)
             )
         else:
             content_tokens = TokenCounter.count_tokens(str(content))
@@ -307,7 +320,9 @@ class ScrapManager:
     """Manages scrap files for large tool outputs."""
 
     def __init__(self, scrap_dir: str = None):
-        self.scrap_dir = scrap_dir or os.path.join(tempfile.gettempdir(), "nanocode", "scrap")
+        self.scrap_dir = scrap_dir or os.path.join(
+            tempfile.gettempdir(), "nanocode", "scrap"
+        )
         os.makedirs(self.scrap_dir, exist_ok=True)
 
     def save(self, content: str, extension: str = "txt") -> str:
@@ -328,7 +343,7 @@ class ScrapManager:
         """Read content from scrap file."""
         if not os.path.exists(filepath):
             return ""
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             return f.read()
 
     def delete(self, filepath: str):
@@ -434,7 +449,11 @@ class ContextManager:
             self._persist_message(msg)
 
     def add_tool_result(
-        self, tool_name: str, tool_call_id: str, content: str, max_scrap_size: int = 10000
+        self,
+        tool_name: str,
+        tool_call_id: str,
+        content: str,
+        max_scrap_size: int = 10000,
     ):
         """Add a tool result message, using scrap for large content."""
         tokens = TokenCounter.count_tokens(content)
@@ -622,7 +641,9 @@ class ContextManager:
         else:
             system_tokens = 0
 
-        recent_messages = self._messages[-self.preserve_last_n :] if self._messages else []
+        recent_messages = (
+            self._messages[-self.preserve_last_n :] if self._messages else []
+        )
 
         result_messages = []
         current_tokens = system_tokens
@@ -690,11 +711,15 @@ class ContextManager:
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    summary_text = f"[{len(older)} messages from earlier in the conversation]"
+                    summary_text = (
+                        f"[{len(older)} messages from earlier in the conversation]"
+                    )
                 else:
                     summary_text = loop.run_until_complete(self._create_summary(older))
             except Exception:
-                summary_text = f"[{len(older)} messages from earlier in the conversation]"
+                summary_text = (
+                    f"[{len(older)} messages from earlier in the conversation]"
+                )
 
             summary_msg = Message(role="system")
             summary_msg.add_text(f"[Previous conversation summary]\n{summary_text}")
@@ -715,7 +740,9 @@ class ContextManager:
 
     async def _create_summary(self, messages: list[Message]) -> str:
         """Create summary of older messages using LLM."""
-        conversation = "\n".join(f"{m.role}: {m.get_text_content()[:500]}" for m in messages)
+        conversation = "\n".join(
+            f"{m.role}: {m.get_text_content()[:500]}" for m in messages
+        )
 
         prompt = f"""Summarize this conversation concisely, preserving key information:
         
@@ -795,7 +822,9 @@ Summary:"""
             "usable_context": usable,
             "output_limit": self._output_limit,
             "reserved_tokens": self._reserved_tokens,
-            "usage_percent": (total / self.max_tokens) * 100 if self.max_tokens > 0 else 0,
+            "usage_percent": (total / self.max_tokens) * 100
+            if self.max_tokens > 0
+            else 0,
             "context_usage_percent": (total / usable) * 100 if usable > 0 else 0,
             "message_count": len(self._messages),
         }
@@ -808,7 +837,9 @@ Summary:"""
         """Save context to file."""
         data = {
             "system": (
-                " ".join(p.content for p in self._system_parts) if self._system_parts else None
+                " ".join(p.content for p in self._system_parts)
+                if self._system_parts
+                else None
             ),
             "messages": [
                 {
@@ -825,7 +856,9 @@ Summary:"""
                 "output": self._output_limit,
             },
         }
-        os.makedirs(os.path.dirname(path) if os.path.dirname(path) else ".", exist_ok=True)
+        os.makedirs(
+            os.path.dirname(path) if os.path.dirname(path) else ".", exist_ok=True
+        )
         with open(path, "w") as f:
             json.dump(data, f, indent=2)
 

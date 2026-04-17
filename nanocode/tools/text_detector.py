@@ -172,22 +172,21 @@ def format_detected_commands_message(commands: list[DetectedCommand]) -> str:
     return "\n".join(lines)
 
 
-def should_reprompt_for_tools(response_text: str, tools_were_expected: bool = True) -> tuple[bool, str]:
-    """Determine if we should re-prompt the model to use tools.
-
-    This helps handle cases where:
-    1. Model didn't use any tools
-    2. Response looks like it should have used tools
-    3. Model is not properly trained for tool calling
+def should_reprompt_for_tools(response_text: str | None, tools_were_expected: bool = True) -> tuple[bool, str]:
+    """Check if model should have used tools instead of describing them in text.
 
     Args:
-        response_text: The model's text response
-        tools_were_expected: Whether tools were available
+        response_text: The model's text response (can be None)
+        tools_were_expected: Whether tools were available (default True)
 
     Returns:
         Tuple of (should_reprompt, reason)
     """
-    # Indicators that model should have used tools
+    if not response_text:
+        return False, ""
+
+    response_text = str(response_text)
+
     tool_indicators = [
         "find ", "search ", "look for", "grep ", "list ",
         "read the", "view the", "show the", "check the",
