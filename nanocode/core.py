@@ -3,32 +3,35 @@
 import json
 import logging
 import traceback
-from typing import Optional
 
-from nanocode.llm import create_llm
-from nanocode.tools import ToolRegistry, ToolExecutor
-from nanocode.tools.builtin import register_builtin_tools
-from nanocode.tools.file_tracker import FileTracker
-from nanocode.state import AgentState, AgentStateData
-from nanocode.planning import TaskPlanner, PlanExecutor, PlanMonitor, PlanningContext
-from nanocode.mcp import MCPManager
-from nanocode.multimodal import MultimodalManager
-from nanocode.lsp import LSPServerManager
-from nanocode.context import ContextManager, ContextStrategy
-from nanocode.config import get_config
-from nanocode.agents import AgentInfo, get_agent_registry, PermissionAction
+from nanocode.agents import AgentInfo, PermissionAction, get_agent_registry
 from nanocode.agents.permission import (
     PermissionHandler,
 )
+from nanocode.config import get_config
+from nanocode.context import ContextManager, ContextStrategy
+from nanocode.llm import create_llm
+from nanocode.llm.base import LLMResponse
+from nanocode.lsp import LSPServerManager
+from nanocode.mcp import MCPManager
+from nanocode.multimodal import MultimodalManager
+from nanocode.planning import PlanExecutor, PlanMonitor, PlanningContext, TaskPlanner
 from nanocode.session_summary import SessionSummaryGenerator
+from nanocode.state import AgentState, AgentStateData
+from nanocode.storage.cache import CachedResponse, PromptCache, get_prompt_cache
+from nanocode.tools import ToolExecutor, ToolRegistry
+from nanocode.tools.builtin import register_builtin_tools
+from nanocode.tools.file_tracker import FileTracker
 
+logger = logging.getLogger("nanocode.agent")
 tool_logger = logging.getLogger("nanocode.tools")
+cache_logger = logging.getLogger("nanocode.cache")
 
 
 class AutonomousAgent:
     """Main autonomous agent class."""
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: dict | None = None):
         self.config = config or get_config()
         self.state = AgentStateData()
         self.debug = False
@@ -43,12 +46,29 @@ class AutonomousAgent:
         self._init_mcp()
         self._init_planning()
         self._init_multimodal()
+        self._init_cache()
+
+    def _init_cache(self):
+        """Initialize the prompt cache."""
+        self.prompt_cache: PromptCache | None = None
+        if self.config.cache_enabled:
+            try:
+                cache_dir = self.config.cache_dir
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                self.prompt_cache = get_prompt_cache()
+                cache_logger.info(f"Prompt cache enabled: {self.prompt_cache.db_path}")
+            except Exception as e:
+                cache_logger.warning(f"Failed to initialize prompt cache: {e}")
 
     def _init_agents(self):
         """Initialize agent system."""
+        logger.info("Initializing agent system")
         self.nanocode_registry = get_agent_registry()
         self.current_agent = self.nanocode_registry.get_default()
         self.permission_handler = PermissionHandler()
+        logger.info(
+            f"Agent system initialized: current_agent={self.current_agent.name if self.current_agent else None}"
+        )
 
     def _init_lsp(self):
         """Initialize LSP server manager."""
@@ -68,15 +88,44 @@ class AutonomousAgent:
 
     def switch_agent(self, agent_name: str) -> bool:
         """Switch to a different agent."""
+        old_agent = self.current_agent.name if self.current_agent else None
         agent = self.nanocode_registry.get(agent_name)
         if agent is None:
+            logger.warning(f"switch_agent('{agent_name}') failed: agent not found")
             return False
         self.current_agent = agent
+        logger.info(
+            f"Switched agent: {old_agent} -> {agent.name} "
+            f"(mode={agent.mode.value}, native={agent.native})"
+        )
         if agent.system_prompt:
-            self.context_manager.set_system_prompt(agent.system_prompt)
+            logger.debug(f"Agent '{agent.name}' has custom system prompt")
+            if hasattr(self, "context_manager"):
+                self.context_manager.set_system_prompt(agent.system_prompt)
         return True
 
-    def get_current_agent(self) -> Optional[AgentInfo]:
+    def get_agent_temperature(self) -> float | None:
+        """Get the temperature for the current agent (if configured)."""
+        if self.current_agent and self.current_agent.temperature is not None:
+            return self.current_agent.temperature
+        return None
+
+    def get_agent_model(self) -> tuple[str, str] | None:
+        """Get the model configuration for the current agent (provider_id, model_id)."""
+        if self.current_agent and self.current_agent.model is not None:
+            return (
+                self.current_agent.model.provider_id,
+                self.current_agent.model.model_id,
+            )
+        return None
+
+    def get_agent_steps(self) -> int | None:
+        """Get the max steps for the current agent (if configured)."""
+        if self.current_agent and self.current_agent.steps is not None:
+            return self.current_agent.steps
+        return None
+
+    def get_current_agent(self) -> AgentInfo | None:
         """Get the current agent."""
         return self.current_agent
 
@@ -160,13 +209,17 @@ class AutonomousAgent:
                 )
             else:
                 self.llm = create_llm(
-                    "openai", api_key="dummy", model="gpt-4", user_agent=user_agent, proxy=proxy
+                    "openai",
+                    api_key="dummy",
+                    model="gpt-4",
+                    user_agent=user_agent,
+                    proxy=proxy,
                 )
 
     def _init_tools(self):
         """Initialize tool system."""
-        from nanocode.tools.task import create_task_tool
         from nanocode.doom_loop import create_doom_loop_handler
+        from nanocode.tools.task import create_task_tool
 
         self.tool_registry = ToolRegistry()
         self.tool_executor = ToolExecutor(self.tool_registry)
@@ -175,7 +228,10 @@ class AutonomousAgent:
             self.tool_registry, self.config.tools, self.file_tracker, self.lsp_manager
         )
 
-        self.task_tool = create_task_tool(self.nanocode_registry, self.permission_handler)
+        self.task_tool = create_task_tool(
+            self.nanocode_registry, self.permission_handler
+        )
+        self.task_tool.set_parent_agent(self)
         self.tool_registry.register(self.task_tool)
 
         self.tool_registry.register_handler("mcp", self._handle_mcp_tool)
@@ -228,22 +284,36 @@ class AutonomousAgent:
 
     async def _handle_tool_calls(self, tool_calls: list) -> list[dict]:
         """Handle tool calls from LLM with permission checking and doom loop detection."""
+        agent_name = self.current_agent.name if self.current_agent else "unknown"
+        logger.info(f"[{agent_name}] Handling {len(tool_calls)} tool call(s)")
+
         results = []
-        for tc in tool_calls:
+        for i, tc in enumerate(tool_calls):
             tool_name = tc.name
             args = tc.arguments
+            logger.debug(
+                f"[{agent_name}] Tool call {i + 1}/{len(tool_calls)}: {tool_name}({args})"
+            )
 
             is_doom_loop = self.doom_loop_handler.check_tool_call(tool_name, args)
             if is_doom_loop:
                 warning = self.doom_loop_handler.get_loop_warning()
                 if warning:
+                    logger.warning(
+                        f"[{agent_name}] DOOM LOOP DETECTED for '{tool_name}': {warning}"
+                    )
                     print(f"\n\033[91m{warning}\033[0m\n")
 
                 if self.current_agent:
                     doom_action = self.permission_handler.check_permission(
-                        self.current_agent, "doom_loop", {"tool": tool_name, "args": args}
+                        self.current_agent,
+                        "doom_loop",
+                        {"tool": tool_name, "args": args},
                     )
                     if doom_action == PermissionAction.DENY:
+                        logger.warning(
+                            f"[{agent_name}] Doom loop permission DENIED for '{tool_name}'"
+                        )
                         results.append(
                             {
                                 "tool_call_id": tc.id,
@@ -254,12 +324,23 @@ class AutonomousAgent:
                         )
                         self.doom_loop_handler.reset(tool_name)
                         continue
+                    elif doom_action == PermissionAction.ASK:
+                        logger.debug(
+                            f"[{agent_name}] Doom loop permission ASK for '{tool_name}'"
+                        )
 
             if self.current_agent:
                 action = self.permission_handler.check_permission(
                     self.current_agent, tool_name, args
                 )
+                logger.debug(
+                    f"[{agent_name}] Permission check for '{tool_name}': {action.value}"
+                )
+
                 if action == PermissionAction.DENY:
+                    logger.warning(
+                        f"[{agent_name}] Permission DENIED for '{tool_name}'"
+                    )
                     results.append(
                         {
                             "tool_call_id": tc.id,
@@ -270,11 +351,20 @@ class AutonomousAgent:
                     )
                     continue
                 if action == PermissionAction.ASK:
+                    logger.info(
+                        f"[{agent_name}] Requesting permission for '{tool_name}'"
+                    )
                     try:
                         await self.permission_handler.request_permission(
                             self.current_agent, tool_name, args
                         )
+                        logger.debug(
+                            f"[{agent_name}] Permission granted for '{tool_name}'"
+                        )
                     except Exception as e:
+                        logger.error(
+                            f"[{agent_name}] Permission request failed for '{tool_name}': {e}"
+                        )
                         results.append(
                             {
                                 "tool_call_id": tc.id,
@@ -285,9 +375,19 @@ class AutonomousAgent:
                         )
                         continue
 
+            logger.debug(f"[{agent_name}] Executing tool: {tool_name}")
             result = await self.tool_executor.execute(tool_name, args)
 
-            tool_logger.debug(f"Tool call: {tool_name}({args}) -> success={result.success}")
+            if result.success:
+                logger.info(f"[{agent_name}] Tool '{tool_name}' succeeded")
+            else:
+                logger.warning(
+                    f"[{agent_name}] Tool '{tool_name}' failed: {result.error}"
+                )
+
+            tool_logger.debug(
+                f"[{agent_name}] Tool call: {tool_name}({args}) -> success={result.success}"
+            )
 
             results.append(
                 {
@@ -298,6 +398,7 @@ class AutonomousAgent:
                 }
             )
 
+        logger.debug(f"[{agent_name}] Finished handling {len(tool_calls)} tool call(s)")
         return results
 
     def _format_thinking(self, thinking: str) -> str:
@@ -306,8 +407,97 @@ class AutonomousAgent:
         formatted = "\n".join(f"  {line}" for line in lines)
         return f"\033[90m\033[3mThinking:\n{formatted}\033[0m"
 
-    async def process_input(self, user_input: str, show_thinking: bool = True) -> str:
+    def _get_cache_key(self, messages: list, tools: list[dict] | None) -> str:
+        """Generate a cache key from messages and tools."""
+        import hashlib
+
+        parts = []
+        for msg in messages:
+            if hasattr(msg, "to_dict"):
+                parts.append(json.dumps(msg.to_dict(), sort_keys=True))
+            elif isinstance(msg, dict):
+                parts.append(json.dumps(msg, sort_keys=True))
+
+        if tools:
+            parts.append(json.dumps(tools, sort_keys=True))
+
+        key = "".join(parts)
+        return hashlib.sha256(key.encode()).hexdigest()
+
+    def _messages_to_text(self, messages: list) -> str:
+        """Convert messages to a text string for caching."""
+        parts = []
+        for msg in messages:
+            if hasattr(msg, "content"):
+                parts.append(f"{msg.role}: {msg.content}")
+            elif isinstance(msg, dict):
+                parts.append(f"{msg.get('role', 'unknown')}: {msg.get('content', '')}")
+        return "\n".join(parts)
+
+    def _check_cache(
+        self, messages: list, tools: list[dict] | None
+    ) -> LLMResponse | None:
+        """Check if we have a cached response for these messages."""
+        if not self.prompt_cache:
+            return None
+
+        if tools:
+            return None
+
+        cache_key = self._get_cache_key(messages, tools)
+        cached = self.prompt_cache.get(cache_key)
+
+        if cached:
+            cache_logger.info(
+                f"Cache HIT: {len(messages)} messages, {len(cached.content)} chars"
+            )
+            return LLMResponse(
+                content=cached.content,
+                thinking=cached.thinking,
+                tool_calls=[
+                    type("ToolCall", (), tc)() for tc in (cached.tool_calls or [])
+                ]
+                if cached.tool_calls
+                else [],
+            )
+        return None
+
+    def _put_cache(
+        self, messages: list, tools: list[dict] | None, response: LLMResponse
+    ) -> None:
+        """Store the response in cache."""
+        if not self.prompt_cache:
+            return
+
+        if tools:
+            return
+
+        cache_key = self._get_cache_key(messages, tools)
+
+        cached = CachedResponse(
+            content=response.content,
+            thinking=response.thinking,
+            tool_calls=[
+                {"name": tc.name, "arguments": tc.arguments}
+                for tc in response.tool_calls
+            ]
+            if response.tool_calls
+            else [],
+            model=getattr(self.llm, "model", None),
+        )
+
+        self.prompt_cache.put(cache_key, cached)
+        cache_logger.info(
+            f"Cached: {len(messages)} messages, {len(response.content) if response.content else 0} chars"
+        )
+
+    async def process_input(
+        self, user_input: str, show_thinking: bool = True, show_messages: bool = False
+    ) -> str:
         """Process a user input through the agent."""
+        agent_name = self.current_agent.name if self.current_agent else "unknown"
+        logger.info(f"[{agent_name}] Processing input: {user_input[:100]}...")
+
         self.state.state = AgentState.EXECUTING
         self.state.task = user_input
 
@@ -315,15 +505,21 @@ class AutonomousAgent:
             self.task_tool.update_description(self.current_agent)
 
         self.context_manager.add_message("user", user_input)
+        logger.debug(f"[{agent_name}] User message added to context")
 
         tool_results_history = []
 
         try:
             tools = self.tool_registry.get_schemas()
+            logger.debug(f"[{agent_name}] Total tools available: {len(tools)}")
+
             messages = self.context_manager.prepare_messages()
+            logger.debug(f"[{agent_name}] Context has {len(messages)} messages")
 
             if self.debug:
-                print(f"\n\033[96m[DEBUG] Sending {len(messages)} messages to LLM...\033[0m")
+                print(
+                    f"\n\033[96m[DEBUG] Sending {len(messages)} messages to LLM...\033[0m"
+                )
                 for i, msg in enumerate(messages):
                     content = (
                         msg.content
@@ -333,24 +529,64 @@ class AutonomousAgent:
                     role = msg.role if hasattr(msg, "role") else msg.get("role", "?")
                     print(f"  \033[90m{i}: {role}: {content}...\033[0m")
 
-            response = await self.llm.chat(
-                messages=messages,
-                tools=tools if tools else None,
-            )
+            if show_messages:
+                print("\n\033[96m=== LLM REQUEST ===\033[0m")
+                for i, msg in enumerate(messages):
+                    content = (
+                        msg.content
+                        if hasattr(msg, "content")
+                        else str(msg.get("content", ""))
+                    )
+                    role = msg.role if hasattr(msg, "role") else msg.get("role", "?")
+                    print(f"\n[{i}] {role.upper()}:")
+                    print(content[:500] if len(content) > 500 else content)
+                print("\n")
+
+            logger.debug(f"[{agent_name}] Sending request to LLM...")
+
+            cached_response = self._check_cache(messages, tools)
+            if cached_response:
+                cache_logger.info(f"[{agent_name}] Using cached response")
+                response = cached_response
+            else:
+                response = await self.llm.chat(
+                    messages=messages,
+                    tools=tools if tools else None,
+                )
+                self._put_cache(messages, tools, response)
+                logger.info(f"[{agent_name}] LLM response received")
 
             if self.debug:
                 print("\n\033[96m[DEBUG] LLM Response:\033[0m")
                 if response.thinking:
                     print(f"  \033[93mThinking: {response.thinking[:200]}...\033[0m")
                 if response.has_tool_calls:
-                    print(f"  \033[91mTool Calls: {[tc.name for tc in response.tool_calls]}\033[0m")
+                    print(
+                        f"  \033[91mTool Calls: {[tc.name for tc in response.tool_calls]}\033[0m"
+                    )
                 else:
                     print(f"  \033[92mContent: {response.content[:200]}...\033[0m")
+
+            if show_messages:
+                print("\n\033[96m=== LLM RESPONSE ===\033[0m")
+                if response.thinking:
+                    print(f"\nThinking:\n{response.thinking[:500]}")
+                if response.has_tool_calls:
+                    print(f"\nTool Calls:")
+                    for tc in response.tool_calls:
+                        print(f"  - {tc.name}: {tc.arguments}")
+                print(
+                    f"\nContent:\n{response.content[:500] if response.content else '(empty)'}"
+                )
+                print()
 
             if response.thinking and show_thinking:
                 print(f"\n{self._format_thinking(response.thinking)}")
 
             if response.has_tool_calls:
+                logger.info(
+                    f"[{agent_name}] LLM requested {len(response.tool_calls)} tool call(s): {[tc.name for tc in response.tool_calls]}"
+                )
                 if self.debug:
                     print(
                         f"\n\033[96m[DEBUG] Handling {len(response.tool_calls)} tool calls...\033[0m"
@@ -364,7 +600,9 @@ class AutonomousAgent:
                             f"\n\033[96m[DEBUG] Tool {tr['tool_name']} result:\033[0m {tr['result'][:200]}..."
                         )
                     result_content = tr["result"]
-                    result_content = self.context_manager.truncate_tool_result(result_content)
+                    result_content = self.context_manager.truncate_tool_result(
+                        result_content
+                    )
                     self.context_manager.add_message(
                         "tool",
                         result_content,
@@ -398,11 +636,16 @@ class AutonomousAgent:
 
         tools = self.tool_registry.get_schemas()
 
-        history = [{"role": m.role, "content": m.content} for m in self.context_manager._messages]
+        history = [
+            {"role": m.role, "content": m.content}
+            for m in self.context_manager._messages
+        ]
 
         context = PlanningContext(
             task=task,
-            tools=[json.loads(t.get("function", {}).get("parameters", "{}")) for t in tools],
+            tools=[
+                json.loads(t.get("function", {}).get("parameters", "{}")) for t in tools
+            ],
             history=history,
         )
 
@@ -448,7 +691,24 @@ class AutonomousAgent:
 
     def get_state(self) -> dict:
         """Get current agent state."""
-        return self.state.to_dict()
+        state = self.state.to_dict()
+        if self.prompt_cache:
+            state["cache_stats"] = self.prompt_cache.get_stats()
+        return state
+
+    def get_cache_stats(self) -> dict | None:
+        """Get prompt cache statistics."""
+        if self.prompt_cache:
+            return self.prompt_cache.get_stats()
+        return None
+
+    def clear_cache(self) -> bool:
+        """Clear the prompt cache."""
+        if self.prompt_cache:
+            self.prompt_cache.clear()
+            cache_logger.info("Prompt cache cleared")
+            return True
+        return False
 
     async def _generate_summary(self, tool_results: list = None):
         """Generate a session summary after processing."""
@@ -461,7 +721,9 @@ class AutonomousAgent:
                 {
                     "role": msg.role,
                     "content": (
-                        msg.get_text_content() if hasattr(msg, "get_text_content") else str(msg)
+                        msg.get_text_content()
+                        if hasattr(msg, "get_text_content")
+                        else str(msg)
                     ),
                 }
             )
