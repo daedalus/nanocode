@@ -161,8 +161,7 @@ class NanoCodeApp(App):
     """
     
     BINDINGS = [
-        Binding("enter", "send", "Send", show=False),
-        Binding("ctrl+c", "cancel", "Cancel", show=False),
+        Binding("enter", "send", "Send"),
         Binding("ctrl+l", "clear_output", "Clear Output"),
         Binding("escape", "quit", "Quit", show=True),
     ]
@@ -178,7 +177,7 @@ class NanoCodeApp(App):
         with Vertical(id="main-container"):
             yield OutputLog(id="output-log")
             with Horizontal(id="input-container"):
-                yield TextArea(id="input", placeholder="Enter your task...")
+                yield TextArea(id="input", placeholder="Enter your task...", multiline=False)
                 yield Button("Send", id="send-btn", variant="primary")
         yield Static("", id="status-bar")
         yield Footer()
@@ -195,13 +194,6 @@ class NanoCodeApp(App):
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
         """Handle text area changes."""
         pass
-    
-    def on_text_areaSubmitted(self, event: TextArea.Submitted) -> None:
-        """Handle text area submission (Enter key)."""
-        text = event.text_area.text.strip()
-        if text:
-            event.text_area.text = ""
-            self._process_input(text)
     
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
