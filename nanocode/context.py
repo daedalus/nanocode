@@ -187,17 +187,19 @@ class Message:
         
         # Add tool_calls if present
         if self.tool_calls:
-            result["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.name,
-                        "arguments": json.dumps(tc.arguments),
-                    },
-                }
-                for tc in self.tool_calls
-            ]
+            result["tool_calls"] = []
+            for tc in self.tool_calls:
+                if isinstance(tc, dict):
+                    result["tool_calls"].append(tc)
+                else:
+                    result["tool_calls"].append({
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.name,
+                            "arguments": json.dumps(tc.arguments),
+                        },
+                    })
 
         return result
 
