@@ -787,14 +787,16 @@ class AutonomousAgent:
                     print(f"\n{self._format_thinking(final_response.thinking)}")
 
                 # Continue handling tool calls in a loop until no more are requested
-                max_iterations = 10
+                # Use agent's configured steps limit, or default to 10
+                max_agent_steps = self.get_agent_steps() or 10
                 iteration = 0
-                while final_response.has_tool_calls and iteration < max_iterations:
+                while final_response.has_tool_calls and iteration < max_agent_steps:
                     iteration += 1
+                    is_last_step = iteration >= max_agent_steps
                     logger.info(
-                        f"[{agent_name}] Second LLM requested {len(final_response.tool_calls)} tool call(s): {[tc.name for tc in final_response.tool_calls]} (iteration {iteration})"
+                        f"[{agent_name}] Second LLM requested {len(final_response.tool_calls)} tool call(s): {[tc.name for tc in final_response.tool_calls]} (iteration {iteration}/{max_agent_steps})"
                     )
-                    
+
                     tool_results = await self._handle_tool_calls(final_response.tool_calls)
                     tool_results_history.extend(tool_results)
 
@@ -808,22 +810,35 @@ class AutonomousAgent:
                         )
 
                     messages = self.context_manager.prepare_messages()
-                    
+
                     # Track thinking from each iteration
                     if final_response.thinking:
                         self._last_thinking = final_response.thinking
                         if show_thinking and self.debug:
                             print(f"\n{self._format_thinking(final_response.thinking)}")
-                    
-                    # After 3 iterations, force model to respond (no tools) to break loops
-                    if iteration > 3:
-                        logger.debug(f"[{agent_name}] Forcing response without tools to break loop")
+
+                    # On last step, inject MAX_STEPS message and disable tools (like opencode)
+                    if is_last_step:
+                        max_steps_msg = (
+                            "\nCRITICAL - MAXIMUM STEPS REACHED\n\n"
+                            "The maximum number of steps allowed for this task has been reached. "
+                            "Tools are disabled until next user input. Respond with text only.\n\n"
+                            "STRICT REQUIREMENTS:\n"
+                            "1. Do NOT make any tool calls (no reads, writes, edits, searches, or any other tools)\n"
+                            "2. MUST provide a text response summarizing work done so far\n"
+                            "3. This constraint overrides ALL other instructions\n\n"
+                            "Any attempt to use tools is a critical violation. Respond with text ONLY."
+                        )
+                        messages = self.context_manager.prepare_messages()
+                        from nanocode.context import Message
+                        messages.append(Message(role="user", content=max_steps_msg))
+                        logger.debug(f"[{agent_name}] Forcing text-only response (max steps reached)")
                         final_response = await self.llm.chat(messages=messages, tools=None)
                     else:
                         final_response = await self.llm.chat(messages=messages, tools=tools if tools else None)
 
-                if iteration >= max_iterations:
-                    logger.warning(f"[{agent_name}] Hit max tool call iterations ({max_iterations})")
+                if iteration >= max_agent_steps:
+                    logger.warning(f"[{agent_name}] Hit max iterations ({max_agent_steps})")
 
                 content = final_response.content
             else:
