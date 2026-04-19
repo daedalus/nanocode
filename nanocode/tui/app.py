@@ -206,9 +206,9 @@ class OutputArea(RichLog):
             
             bold_text = match.group(1)
             if base_color:
-                self.write(Text(bold_text, style=base_color + " bold"))
+                self.write(Text(bold_text, style=base_color + " bold gold"))
             else:
-                self.write(Text(bold_text, style="bold"))
+                self.write(Text(bold_text, style="bold gold"))
             last_end = match.end()
         
         if last_end < len(text):
