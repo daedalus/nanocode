@@ -230,17 +230,7 @@ async def main():
     """Main entry point."""
     args = parse_args()
     
-    # Suppress stdout/stderr in TUI mode as early as possible
     gui_mode = getattr(args, "gui", "cli")
-    is_tui = gui_mode == "textual"
-    if is_tui:
-        import sys
-        import io
-        # Redirect stdout/stderr to suppress all print statements
-        old_stdout = sys.stdout
-        old_stderr = sys.stderr
-        sys.stdout = io.StringIO()
-        sys.stderr = io.StringIO()
 
     if args.install_skills:
         from nanocode.skills import install_skills

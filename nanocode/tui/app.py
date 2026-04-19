@@ -165,6 +165,16 @@ class OutputArea(RichLog):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._lines: list[str] = []
+        self._md_theme: object = None
+
+    def _render_markdown(self, text: str) -> object:
+        """Get a markdown renderer with gruvbox theme."""
+        from rich.markdown import Markdown
+        if self._md_theme is None:
+            self._md_theme = Markdown(text)
+        else:
+            self._md_theme = Markdown(text)
+        return self._md_theme
 
     def add_line(self, text: str, style: str = ""):
         """Add a line to output with Rich color and syntax highlighting."""
