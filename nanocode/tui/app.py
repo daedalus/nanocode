@@ -17,6 +17,7 @@ from rich.theme import Theme
 from rich.console import Console
 from rich.text import Text
 from rich.console import Console
+from rich.syntax import Syntax
 
 
 # Gruvbox Dark Theme Colors
@@ -147,11 +148,10 @@ class OutputArea(RichLog):
         self._lines: list[str] = []
     
     def add_line(self, text: str, style: str = ""):
-        """Add a line to output with Rich color."""
+        """Add a line to output with Rich color and syntax highlighting."""
+        import re
         from rich.text import Text
-        from rich.style import Style as RichStyle
         
-        # Map style to Rich style name (use lowercase for Rich)
         style_map = {
             "user": "green",
             "assistant": "magenta",
@@ -164,12 +164,32 @@ class OutputArea(RichLog):
             "info": "blue",
         }
         
-        rich_style_name = style_map.get(style, "")
-        if rich_style_name:
-            rich_text = Text(text, style=rich_style_name)
-            self.write(rich_text)
-        else:
-            self.write(text)
+        base_color = style_map.get(style, "")
+        
+        code_block_pattern = re.compile(r'```(\w*)\n(.*?)```', re.DOTALL)
+        
+        last_end = 0
+        for match in code_block_pattern.finditer(text):
+            if match.start() > last_end:
+                text_part = text[last_end:match.start()]
+                if base_color:
+                    self.write(Text(text_part, style=base_color))
+                else:
+                    self.write(text_part)
+            
+            lang = match.group(1) or "python"
+            code = match.group(2).rstrip()
+            
+            syntax = Syntax(code, lang, theme="gruvbox-dark", line_numbers=False)
+            self.write(syntax)
+            last_end = match.end()
+        
+        if last_end < len(text):
+            text_part = text[last_end:]
+            if base_color:
+                self.write(Text(text_part, style=base_color))
+            else:
+                self.write(text_part)
         
         self._lines.append(text)
     
@@ -578,8 +598,8 @@ Footer {
                         icon = self._get_tool_icon(tool_name)
                         self._print_line(f"{icon} {tool_name}", Style.TOOL_MESSAGE)
                         if success:
-                            for line in tool_result.strip().split('\n')[:20]:
-                                self._print_line(f"  {line}", Style.TEXT_DIM)
+                            output = self.query_one("#output-area")
+                            output.add_line(tool_result[:1000], "tool")
                         else:
                             self._print_error(f"  {tool_result[:100]}", True)
                         self._print_empty()
@@ -591,11 +611,11 @@ Footer {
                         self._print_line(f"Thinking: {thinking}", Style.THINKING)
                         self._print_empty()
                 
-                # Display final response with role coloring
+                # Display final response with role coloring and syntax highlighting
                 if result and len(result) > 10:
-                    # Show full response (or up to 10000 chars)
                     max_display = 10000
-                    self._print_line(result[:max_display], Style.ASSISTANT_MESSAGE)
+                    output_area = self.query_one("#output-area")
+                    output_area.add_content(result[:max_display], "assistant")
                     if len(result) > max_display:
                         self._print_line(f"... [{len(result) - max_display} more chars]", Style.TEXT_DIM)
                     self._print_empty()
