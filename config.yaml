@@ -1,14 +1,14 @@
 llm:
   default_provider: openrouter
   use_model_registry: false
-  default_model: "openrouter/auto"
+  default_model: "openrouter/free"
   user_agent: "opencode/1.4.8"
   
   providers:
     openrouter:
       api_key: ${OPENROUTER_API_KEY}
       base_url: https://openrouter.ai/api/v1
-      model: openrouter/auto
+      model: openrouter/free
      
     openai:
       api_key: ${OPENAI_API_KEY}

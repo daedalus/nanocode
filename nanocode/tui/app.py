@@ -327,14 +327,8 @@ Footer {
         self._print_empty()
     
     def _print_logo(self):
-        """Print ASCII logo."""
-        logo = [
-            "█▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█",
-            "█  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀",
-            "▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀",
-        ]
-        for line in logo:
-            self._print_line(f"  {line}", Style.TEXT_NORMAL)
+        """Print simple banner."""
+        self._print_line("NanoCode", Style.TEXT_INFO_BOLD)
     
     def _print_line(self, text: str, style: str = ""):
         """Print a line with optional style."""
