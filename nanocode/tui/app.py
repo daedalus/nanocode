@@ -151,6 +151,7 @@ class OutputArea(RichLog):
         """Add a line to output with Rich color and syntax highlighting."""
         import re
         from rich.text import Text
+        from rich.style import Style
         
         style_map = {
             "user": "green",
@@ -167,15 +168,13 @@ class OutputArea(RichLog):
         base_color = style_map.get(style, "")
         
         code_block_pattern = re.compile(r'```(\w*)\n(.*?)```', re.DOTALL)
+        bold_pattern = re.compile(r'\*\*([^*]+)\*\*')
         
         last_end = 0
         for match in code_block_pattern.finditer(text):
             if match.start() > last_end:
                 text_part = text[last_end:match.start()]
-                if base_color:
-                    self.write(Text(text_part, style=base_color))
-                else:
-                    self.write(text_part)
+                self._write_formatted(text_part, base_color)
             
             lang = match.group(1) or "python"
             code = match.group(2).rstrip()
@@ -186,10 +185,38 @@ class OutputArea(RichLog):
         
         if last_end < len(text):
             text_part = text[last_end:]
+            self._write_formatted(text_part, base_color)
+    
+    def _write_formatted(self, text: str, base_color: str):
+        """Write formatted text with bold and links."""
+        import re
+        from rich.text import Text
+        from rich.style import Style
+        
+        bold_pattern = re.compile(r'\*\*([^*]+)\*\*')
+        last_end = 0
+        
+        for match in bold_pattern.finditer(text):
+            if match.start() > last_end:
+                plain = text[last_end:match.start()]
+                if base_color:
+                    self.write(Text(plain, style=base_color))
+                else:
+                    self.write(plain)
+            
+            bold_text = match.group(1)
             if base_color:
-                self.write(Text(text_part, style=base_color))
+                self.write(Text(bold_text, style=base_color + " bold"))
             else:
-                self.write(text_part)
+                self.write(Text(bold_text, style="bold"))
+            last_end = match.end()
+        
+        if last_end < len(text):
+            plain = text[last_end:]
+            if base_color:
+                self.write(Text(plain, style=base_color))
+            else:
+                self.write(plain)
         
         self._lines.append(text)
     
