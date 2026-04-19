@@ -830,8 +830,7 @@ class AutonomousAgent:
                             "Any attempt to use tools is a critical violation. Respond with text ONLY."
                         )
                         messages = self.context_manager.prepare_messages()
-                        from nanocode.context import Message
-                        messages.append(Message(role="user", content=max_steps_msg))
+                        messages.append({"role": "user", "content": max_steps_msg})
                         logger.debug(f"[{agent_name}] Forcing text-only response (max steps reached)")
                         final_response = await self.llm.chat(messages=messages, tools=None)
                     else:
@@ -849,8 +848,7 @@ class AutonomousAgent:
                 logger.info(f"[{agent_name}] Empty response - forcing NO-TOOLS retry")
                 messages = self.context_manager.prepare_messages()
                 # Add explicit instruction not to call tools
-                from nanocode.context import Message
-                messages.append(Message(role="user", content="DO NOT call any more tools. Analyze the tool results above and provide your final answer to the user."))
+                messages.append({"role": "user", "content": "DO NOT call any more tools. Analyze the tool results above and provide your final answer to the user."})
                 retry_response = await self.llm.chat(messages=messages, tools=None)
                 content = retry_response.content
                 
