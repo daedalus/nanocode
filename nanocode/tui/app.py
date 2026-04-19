@@ -567,7 +567,7 @@ Footer {
                 
                 # Use process_input - let agent handle tool execution normally
                 result = await self.agent.process_input(
-                    text, show_thinking=False  # TUI handles output display
+                    text, show_thinking=True  # Enable to capture thinking for display
                 )
 
                 # Restore debug setting
