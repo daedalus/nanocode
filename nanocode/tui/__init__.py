@@ -1,5 +1,5 @@
 """Textual TUI for nanocode."""
 
-from nanocode.tui.app import NanoCodeApp
+from nanocode.tui.app import NanoCodeTUI, run_tui
 
-__all__ = ["NanoCodeApp"]
+__all__ = ["NanoCodeTUI", "run_tui"]

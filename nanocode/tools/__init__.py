@@ -245,6 +245,9 @@ class ToolExecutor:
     def format_result(self, result: ToolResult) -> str:
         """Format tool result for LLM consumption."""
         if result.success:
+            # Preserve string output as-is to avoid JSON encoding artifacts
+            if isinstance(result.content, str):
+                return result.content
             return json.dumps(result.content, default=str)
         else:
             return f"Error: {result.error}"

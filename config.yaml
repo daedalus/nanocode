@@ -1,20 +1,20 @@
 llm:
   default_provider: openrouter
-  use_model_registry: true  # Use models.dev for model discovery
-  default_model: "z-ai/glm-5.1"  # Free model via OpenCode Zen
-  user_agent: "opencode/1.4.8"  # Custom User-Agent for HTTP requests  
-  # proxy: http://localhost:8080  # Proxy for HTTP requests
+  use_model_registry: false
+  default_model: "anthropic/claude-opus-4.6-fast"
+  user_agent: "opencode/1.4.8"
+  
   providers:
-    opencode:
-      api_key: ${OPENROUTER_API_KEY}  # Use "public" for free models
-      base_url: https://openrouter.ai/v1
-      model: z-ai/glm-5.1
-    
+    openrouter:
+      api_key: ${OPENROUTER_API_KEY}
+      base_url: https://openrouter.ai/api/v1
+      model: anthropic/claude-opus-4.6-fast
+     
     openai:
       api_key: ${OPENAI_API_KEY}
       base_url: https://api.openai.com/v1
       model: gpt-4o
-    
+     
     anthropic:
       api_key: ${ANTHROPIC_API_KEY}
       model: claude-3-5-sonnet-20241022

@@ -152,6 +152,12 @@ def parse_args():
         help="Enable debug logging",
     )
     parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Log to file (default: /tmp/nanocode.log)",
+    )
+    parser.add_argument(
         "--cache",
         action="store_true",
         help="Enable prompt/completion caching",
@@ -159,7 +165,7 @@ def parse_args():
     return parser.parse_args()
 
 
-async def run_cli(agent, show_thinking: bool = True, show_messages: bool = False):
+async def run_cli(agent, show_thinking: bool = False, show_messages: bool = False):
     """Run the CLI interface."""
     from nanocode.agents.permission import (
         PermissionCallback,
@@ -206,22 +212,9 @@ async def run_cli(agent, show_thinking: bool = True, show_messages: bool = False
 
 async def run_tui(agent, show_thinking: bool = True, show_messages: bool = False):
     """Run the Textual TUI interface."""
-    from nanocode.agents.permission import (
-        PermissionReply,
-        PermissionReplyType,
-        PermissionRequest,
-    )
-    from nanocode.tui.app import NanoCodeApp
+    from nanocode.tui import run_tui as run_textual_tui
 
-    async def permission_callback(request: PermissionRequest) -> PermissionReply:
-        """Callback to prompt user for permission in TUI."""
-        # For now, auto-allow - TUI dialog to be implemented
-        return PermissionReply(request_id=request.id, reply=PermissionReplyType.ALWAYS)
-
-    agent.permission_handler.set_callback(permission_callback)
-
-    app = NanoCodeApp(agent=agent, show_thinking=show_thinking)
-    await app.run_async()
+    await run_textual_tui(agent=agent, show_thinking=show_thinking)
 
 
 async def run_acp(agent):
@@ -236,6 +229,18 @@ async def run_acp(agent):
 async def main():
     """Main entry point."""
     args = parse_args()
+    
+    # Suppress stdout/stderr in TUI mode as early as possible
+    gui_mode = getattr(args, "gui", "cli")
+    is_tui = gui_mode == "textual"
+    if is_tui:
+        import sys
+        import io
+        # Redirect stdout/stderr to suppress all print statements
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        sys.stdout = io.StringIO()
+        sys.stderr = io.StringIO()
 
     if args.install_skills:
         from nanocode.skills import install_skills
@@ -343,15 +348,21 @@ async def main():
 
     agent = AutonomousAgent(config)
 
-    show_thinking = getattr(args, "thinking", True)
+    show_thinking = getattr(args, "thinking", False)  # Default: disabled (use --thinking to enable)
     show_messages = getattr(args, "show_messages", False)
 
-    if getattr(args, "debug_logging", False):
+    log_file = getattr(args, "log_file", None)
+    if log_file or getattr(args, "debug_logging", False):
         import logging
 
+        handlers = [logging.FileHandler(log_file) if log_file else logging.FileHandler("/tmp/nanocode.log")]
+        if getattr(args, "debug_logging", False):
+            handlers.append(logging.StreamHandler())
+        
         logging.basicConfig(
             level=logging.DEBUG,
-            format="%(name)s - %(levelname)s - %(message)s",
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            handlers=handlers,
         )
 
     if getattr(args, "prompt", None):
@@ -374,8 +385,12 @@ async def main():
         return
 
     gui_mode = getattr(args, "gui", "cli")
+    
+    # For TUI, always enable thinking display
+    gui_show_thinking = True if gui_mode == "textual" else show_thinking
+    
     if gui_mode == "textual":
-        await run_tui(agent, show_thinking=show_thinking, show_messages=show_messages)
+        await run_tui(agent, show_thinking=gui_show_thinking, show_messages=show_messages)
     else:
         await run_cli(agent, show_thinking=show_thinking, show_messages=show_messages)
 

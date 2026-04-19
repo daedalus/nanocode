@@ -19,10 +19,10 @@ from nanocode.retry import (
 class ToolCall:
     """Represents a tool call from the LLM."""
 
-    def __init__(self, name: str, arguments: dict):
+    def __init__(self, name: str, arguments: dict, id: str = None):
         self.name = name
         self.arguments = arguments
-        self.id = f"call_{name}_{hash(str(arguments))}"
+        self.id = id or f"call_{name}_{hash(str(arguments))}"
 
     def __repr__(self):
         return f"ToolCall({self.name}, {self.arguments})"
@@ -50,6 +50,7 @@ class Message:
             result["tool_calls"] = [
                 {
                     "id": tc.id,
+                    "type": "function",
                     "function": {
                         "name": tc.name,
                         "arguments": json.dumps(tc.arguments),
@@ -70,14 +71,26 @@ class Message:
                 func = tc.get("function", {})
                 tool_calls.append(
                     ToolCall(
-                        func.get("name", ""), json.loads(func.get("arguments", "{}"))
+                        name=func.get("name", ""),
+                        arguments=json.loads(func.get("arguments", "{}")),
+                        id=tc.get("id"),
                     )
                 )
+        
+        # Extract tool_call_id from content parts if present (for tool role messages)
+        tool_call_id = data.get("tool_call_id")
+        content = data.get("content", "")
+        if tool_call_id is None and isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "tool_result":
+                    tool_call_id = part.get("tool_call_id")
+                    break
+        
         return cls(
             role=data.get("role", "user"),
-            content=data.get("content", ""),
+            content=content,
             tool_calls=tool_calls,
-            tool_call_id=data.get("tool_call_id"),
+            tool_call_id=tool_call_id,
         )
 
 
@@ -117,6 +130,7 @@ class LLMBase(ABC):
         self.api_key = api_key or os.getenv("API_KEY")
         self.base_url = base_url
         self.model = model
+        self.max_tokens = None  # Will be set from config
         self.extra_kwargs = kwargs
         self.retry_config = retry_config or RetryConfig.default()
         self.user_agent = user_agent or "nanocode/1.0"
@@ -157,7 +171,7 @@ class LLMBase(ABC):
         json: dict = None,
         on_retry: callable = None,
         **kwargs,
-    ) -> httpx.Response:
+) -> httpx.Response:
         """Make an HTTP request with retry logic."""
 
         if headers is None:

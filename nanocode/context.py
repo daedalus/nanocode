@@ -71,6 +71,7 @@ class Message:
     importance: float = 0.5
     summary: str | None = None
     tokens: int = 0
+    tool_calls: list = field(default_factory=list)
 
     @staticmethod
     def create_text(role: str, content: str) -> "Message":
@@ -167,6 +168,20 @@ class Message:
             result["content"] = self.parts[0].content
         else:
             result["content"] = [p.to_dict() for p in self.parts]
+        
+        # Add tool_calls if present
+        if self.tool_calls:
+            result["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.name,
+                        "arguments": json.dumps(tc.arguments),
+                    },
+                }
+                for tc in self.tool_calls
+            ]
 
         return result
 
@@ -416,7 +431,7 @@ class ContextManager:
             )
         )
 
-    def add_message(self, role: str, content: Any = None, tool_call_id: str = None):
+    def add_message(self, role: str, content: Any = None, tool_call_id: str = None, tool_calls: list = None):
         """Add a message to context."""
         msg = Message(role=role)
 
@@ -441,6 +456,10 @@ class ContextManager:
                                 c.get("text", ""),
                                 c.get("provider_metadata"),
                             )
+        
+        # Handle tool_calls for assistant messages
+        if tool_calls:
+            msg.tool_calls = tool_calls
 
         msg.importance = self._calculate_importance(role, msg.get_text_content())
         self._messages.append(msg)

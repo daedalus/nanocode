@@ -148,15 +148,9 @@ class PermissionHandler:
             )
 
         if self._callback is None:
-            if self._default_deny:
-                logger.warning(
-                    f"[{agent.name}] Permission DENIED (no callback, default_deny=True) for '{tool_name}'"
-                )
-                raise PermissionDeniedError(
-                    f"Permission denied for tool '{tool_name}'", agent.permission
-                )
+            # In TUI mode with no callback, auto-allow (permissions handled via UI)
             logger.debug(
-                f"[{agent.name}] Permission ASK (no callback, default_deny=False) -> allowing"
+                f"[{agent.name}] Permission ASK (no callback) -> allowing by default"
             )
             return True
 

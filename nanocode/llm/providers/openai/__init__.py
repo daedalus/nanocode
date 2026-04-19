@@ -39,6 +39,9 @@ class OpenAILLM(LLMBase):
             "OPENAI_BASE_URL", "https://api.openai.com/v1"
         )
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "dummy")
+        if self.api_key and self.api_key.startswith("${") and self.api_key.endswith("}"):
+            env_var = self.api_key[2:-1]
+            self.api_key = os.getenv(env_var, self.api_key)
 
     async def chat(
         self, messages: list, tools: list[dict] = None, **kwargs
@@ -46,9 +49,7 @@ class OpenAILLM(LLMBase):
         """Send a chat completion request."""
         messages = self._normalize_messages(messages)
 
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        if self.base_url and "openai" not in self.base_url:
-            headers["Content-Type"] = "application/json"
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
         payload = {
             "model": self.model,
@@ -56,8 +57,17 @@ class OpenAILLM(LLMBase):
             **kwargs,
         }
 
+        # Add max_tokens - default to 4096 for OpenRouter to avoid 402
+        max_tokens = kwargs.get("max_tokens", self.max_tokens)
+        if not max_tokens:
+            max_tokens = 4096
+        payload["max_tokens"] = max_tokens
+
         if tools:
             payload["tools"] = tools
+
+        def on_retry(error: Exception, attempt: int):
+            print(f"\n  \033[93mRate limited, retrying (attempt {attempt})...\033[0m")
 
         def on_retry(error: Exception, attempt: int):
             print(f"\n  \033[93mRate limited, retrying (attempt {attempt})...\033[0m")
@@ -86,6 +96,7 @@ class OpenAILLM(LLMBase):
                     ToolCall(
                         name=func.get("name", ""),
                         arguments=json.loads(func.get("arguments", "{}")),
+                        id=tc.get("id"),
                     )
                 )
 
@@ -103,9 +114,7 @@ class OpenAILLM(LLMBase):
 
         Yields StreamEvent objects for text, tool calls, and metadata.
         """
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        if self.base_url and "openai" not in self.base_url:
-            headers["Content-Type"] = "application/json"
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
         payload = {
             "model": self.model,

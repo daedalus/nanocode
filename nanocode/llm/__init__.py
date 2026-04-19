@@ -14,6 +14,9 @@ def create_llm(provider: str, **config) -> LLMBase:
         "anthropic": AnthropicLLM,
         "ollama": OllamaLLM,
         "lm-studio": OpenAILLM,
+        # OpenAI-compatible APIs (use OpenAILLM)
+        "opencode": OpenAILLM,
+        "openrouter": OpenAILLM,
     }
 
     if provider not in providers:

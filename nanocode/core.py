@@ -45,6 +45,12 @@ Examples of correct tool usage:
 - read: Read file contents
 - bash: Execute shell commands (ls, find, etc.)
 
+# CRITICAL: After using tools, ALWAYS respond
+- After executing ANY tool, you MUST respond with analysis/results
+- The response is REQUIRED - don't call more tools after getting results
+- If tool results are returned, analyze them and give a FINAL ANSWER
+- End your turn with your analysis - don't keep calling tools
+
 # CRITICAL: Make progress with each tool call
 - After glob finds files → IMMEDIATELY read one to analyze
 - After grep finds results → IMMEDIATELY read the file to understand
@@ -62,6 +68,12 @@ Examples of correct tool usage:
 3. grep for common bug patterns (TODO, FIXME, except, etc.)
 4. read the specific files with issues
 5. analyze and report bugs found
+
+# RESPONSE REQUIREMENT
+After executing tools, ALWAYS respond with:
+- Summary of what you found/did
+- Answer to the user's question
+- Or state if you need more information (rare)
 
 Never ask for clarification - use tools to explore and find the answer yourself."""
 
@@ -200,10 +212,29 @@ class AutonomousAgent:
         """Initialize LLM provider."""
         use_registry = self.config.get("llm.use_model_registry", False)
         default_model = self.config.get("llm.default_model")
+        default_provider = self.config.default_provider
         user_agent = self.config.get("llm.user_agent", "nanocode/1.0")
         proxy = self.config.proxy
 
-        if use_registry and default_model:
+        # FIRST: Use default_provider from config when set (before registry logic)
+        if default_provider:
+            providers = self.config.providers
+            if default_provider in providers:
+                provider_config = providers[default_provider].copy()
+                model = provider_config.pop("model", default_model)
+                max_tokens = provider_config.pop("max_tokens", None)
+                logger.info(f"Using default_provider: {default_provider}, model: {model}")
+                logger.info(f"URL: {provider_config.get('base_url')}")
+                from nanocode.llm import create_llm
+                llm = create_llm(default_provider, model=model, user_agent=user_agent, proxy=proxy, **provider_config)
+                if max_tokens:
+                    llm.max_tokens = max_tokens
+                self.llm = llm
+                return
+            else:
+                logger.warning(f"Provider {default_provider} not in providers: {list(providers.keys())}")
+
+        # Only use registry if no default_provider
             from nanocode.llm.router import get_router
 
             providers = self.config.get("llm.providers", {})
@@ -213,6 +244,7 @@ class AutonomousAgent:
                 router.add_explicit_provider(provider, config)
 
             provider_config = router.get_provider_config(default_model)
+            logger.info(f"Model: {default_model} -> Provider: {provider_config.provider}, URL: {provider_config.base_url}")
 
             from nanocode.llm import OpenAILLM
             from nanocode.llm.providers.anthropic import AnthropicLLM
@@ -350,7 +382,8 @@ class AutonomousAgent:
                         logger.warning(
                             f"[{agent_name}] DOOM LOOP DETECTED for '{tool_name}': {warning}"
                         )
-                        print(f"\n\033[91m{warning}\033[0m\n")
+                        if self.debug:
+                            print(f"\n\033[91m{warning}\033[0m\n")
                 
                 doom_loop_msg = f"\n[DOOM LOOP WARNING] {self.doom_loop_handler.get_loop_warning()}\n"
 
@@ -384,6 +417,8 @@ class AutonomousAgent:
                             logger.debug(
                                 f"[{agent_name}] Doom loop permission granted for '{tool_name}'"
                             )
+                            # Reset doom loop state after permission granted
+                            self.doom_loop_handler.reset()  # Reset all, not just tool_name
                         except Exception as e:
                             logger.error(
                                 f"[{agent_name}] Doom loop permission denied for '{tool_name}': {e}"
@@ -631,6 +666,10 @@ class AutonomousAgent:
                     print(content[:500] if len(content) > 500 else content)
                 print("\n")
 
+            # Track for show_thinking/show_messages output
+            self._last_tool_results = []
+            self._last_thinking = None
+
             logger.debug(f"[{agent_name}] Sending request to LLM...")
 
             cached_response = self._check_cache(messages, tools)
@@ -644,6 +683,10 @@ class AutonomousAgent:
                 )
                 self._put_cache(messages, tools, response)
                 logger.info(f"[{agent_name}] LLM response received")
+
+            # Track thinking for output
+            if hasattr(self, '_last_thinking') and response.thinking:
+                self._last_thinking = response.thinking
 
             if self.debug:
                 print("\n\033[96m[DEBUG] LLM Response:\033[0m")
@@ -669,7 +712,8 @@ class AutonomousAgent:
                 )
                 print()
 
-            if response.thinking and show_thinking:
+            if response.thinking and show_thinking and self.debug:
+                # Only print thinking when debug is explicitly enabled
                 print(f"\n{self._format_thinking(response.thinking)}")
 
             if response.has_tool_calls:
@@ -683,12 +727,29 @@ class AutonomousAgent:
                 
                 tool_results = await self._handle_tool_calls(response.tool_calls)
                 tool_results_history.extend(tool_results)
+                if hasattr(self, '_last_tool_results'):
+                    self._last_tool_results.extend(tool_results)
 
                 for tr in tool_results:
                     if self.debug:
                         print(
                             f"\n\033[96m[DEBUG] Tool {tr['tool_name']} result:\033[0m {tr['result'][:200]}..."
                         )
+                    result_content = tr["result"]
+                    result_content = self.context_manager.truncate_tool_result(
+                        result_content
+                    )
+                
+                # Add assistant message with tool_calls FIRST (before tool results)
+                # This ensures correct order: user → assistant → tool result
+                self.context_manager.add_message(
+                    "assistant",
+                    None,
+                    tool_calls=response.tool_calls,
+                )
+                
+                # Then add tool results
+                for tr in tool_results:
                     result_content = tr["result"]
                     result_content = self.context_manager.truncate_tool_result(
                         result_content
@@ -700,8 +761,16 @@ class AutonomousAgent:
                     )
 
                 messages = self.context_manager.prepare_messages()
-                logger.debug(f"[{agent_name}] Second call: {len(messages)} messages after tool result")
+                # Debug: log tool result in messages
+                for i, m in enumerate(messages):
+                    if m.get("role") == "tool":
+                        logger.info(f"[{agent_name}] Message {i} tool result: {m.get('content', '')[:100]}...")
                 final_response = await self.llm.chat(messages=messages, tools=tools if tools else None)
+
+                # Track thinking from second response
+                if final_response.thinking and show_thinking and self.debug:
+                    self._last_thinking = final_response.thinking
+                    print(f"\n{self._format_thinking(final_response.thinking)}")
 
                 # Continue handling tool calls in a loop until no more are requested
                 max_iterations = 10
@@ -726,6 +795,12 @@ class AutonomousAgent:
 
                     messages = self.context_manager.prepare_messages()
                     
+                    # Track thinking from each iteration
+                    if final_response.thinking:
+                        self._last_thinking = final_response.thinking
+                        if show_thinking and self.debug:
+                            print(f"\n{self._format_thinking(final_response.thinking)}")
+                    
                     # After 3 iterations, force model to respond (no tools) to break loops
                     if iteration > 3:
                         logger.debug(f"[{agent_name}] Forcing response without tools to break loop")
@@ -740,12 +815,22 @@ class AutonomousAgent:
             else:
                 content = response.content
 
-            # Ensure we have valid content (not None or empty after tool calls)
+            # Force retry WITHOUT tools - explicitly tell model to respond, not call more tools
             if not content and tool_results_history:
-                # If content is empty but we have tool results, summarize them
-                content = "Tool execution completed. Results shown above."
-            elif not content:
-                content = "(no response)"
+                logger.info(f"[{agent_name}] Empty response - forcing NO-TOOLS retry")
+                messages = self.context_manager.prepare_messages()
+                # Add explicit instruction not to call tools
+                from nanocode.context import Message
+                messages.append(Message(role="user", content="DO NOT call any more tools. Analyze the tool results above and provide your final answer to the user."))
+                retry_response = await self.llm.chat(messages=messages, tools=None)
+                content = retry_response.content
+                
+            # Final fallback
+            if not content:
+                if tool_results_history:
+                    content = "Tools executed successfully. Results shown above."
+                else:
+                    content = "(no response)"
 
                 # Text-to-Tool Detection: Handle model outputs text that looks like commands
                 detected = detect_commands_in_text(content)
@@ -779,9 +864,32 @@ class AutonomousAgent:
 
             await self._generate_summary(tool_results_history)
 
+            # Build augmented content with thinking and tool use info
+            augmented = content
+            
+            # Always include thinking if available
+            if show_thinking and hasattr(self, '_last_thinking') and self._last_thinking:
+                augmented += f"\n\n[Thinking]\n{self._last_thinking[:500]}..."
+            
+            # Include tool use info (full output, not truncated)
+            if tool_results_history:
+                if show_thinking:
+                    tool_info = "\n\n[Tool Use]"
+                    for tr in tool_results_history:
+                        result_str = str(tr['result'])
+                        # Include full result for display
+                        tool_info += f"\n- {tr['tool_name']}:\n{result_str}"
+                    augmented += tool_info
+                    
+                if show_messages:
+                    tool_summary = "\n\n[Tool Summary]"
+                    for tr in tool_results_history:
+                        tool_summary += f"\n- {tr['tool_name']}: executed"
+                    augmented += tool_summary
+            
             self.state.state = AgentState.COMPLETE
 
-            return content
+            return augmented
 
         except Exception as e:
             self.state.state = AgentState.ERROR
