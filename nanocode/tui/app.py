@@ -61,25 +61,25 @@ class PermissionScreen(ModalScreen):
     PermissionScreen > #dialog {
         width: 50;
         height: auto;
-        border: solid $primary;
-        background: $surface;
+        border: solid #458588;
+        background: #282828;
         padding: 1 2;
     }
     
     #dialog-title {
         text-align: center;
         text-style: bold;
-        color: $warning;
+        color: #d79921;
         margin-bottom: 1;
     }
     
     #dialog-info {
-        color: $text;
+        color: #ebdbb2;
         margin-bottom: 1;
     }
     
     #dialog-args {
-        color: $text-muted;
+        color: #928374;
         margin-bottom: 1;
     }
     
@@ -181,21 +181,11 @@ class ToolCall:
 class NanoCodeTUI(App):
     """Main TUI application for NanoCode matching opencode style."""
     
-    CSS = f"""
+    CSS = """
     /* Gruvbox Dark Theme */
-    $primary: {GRUVBOX["blue"]};
-    $surface: {GRUVBOX["bg"]};
-    $background: {GRUVBOX["bg_soft"]};
-    $text: {GRUVBOX["fg"]};
-    $text-muted: {GRUVBOX["gray"]};
-    $warning: {GRUVBOX["yellow"]};
-    $error: {GRUVBOX["red"]};
-    $success: {GRUVBOX["green"]};
-    $accent: {GRUVBOX["aqua"]};
-    
-    Screen {{
-        background: $surface;
-    }}
+    Screen {
+        background: #282828;
+    }
     
     #main-container {
         height: 100%;
@@ -203,7 +193,7 @@ class NanoCodeTUI(App):
     
     #output-area {
         height: 1fr;
-        border: solid $primary;
+        border: solid #458588;
         margin: 1;
         padding: 0 1;
     }
@@ -216,38 +206,38 @@ class NanoCodeTUI(App):
     #input-prompt {
         width: 2;
         text-align: right;
-        color: $text;
+        color: #ebdbb2;
     }
-    
-#input {
+
+    #input {
         height: auto;
         border: none;
         width: 2fr;
     }
     
     .tool-title {
-        color: $text;
+        color: #ebdbb2;
     }
     
     .tool-description {
-        color: $text-muted;
+        color: #928374;
     }
     
     .thinking {
-        color: $text-muted;
+        color: #928374;
         text-style: italic;
     }
     
     .error {
-        color: $error;
+        color: #cc241d;
     }
     
     .success {
-        color: $success;
+        color: #98971f;
     }
     
-    .tool-output {
-        color: $text-muted;
+.tool-output {
+        color: #928374;
         padding-left: 2;
     }
     """
