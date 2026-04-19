@@ -155,7 +155,7 @@ class OutputArea(RichLog):
         
         style_map = {
             "user": "green",
-            "assistant": "magenta",
+            "assistant": "white",
             "tool": "cyan",
             "dim": "dim",
             "success": "green",
