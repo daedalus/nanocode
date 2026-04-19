@@ -599,12 +599,11 @@ Footer {
                 
                 # Display final response with role coloring
                 if result and len(result) > 10:
-                    # Debug: show context state
-                    msg_count = len(self.agent.context_manager._messages) if hasattr(self.agent, 'context_manager') else 0
-                    self._print_line(f"[DEBUG ctx msgs={msg_count}, result len={len(result)}]", Style.TEXT_DIM)
-                    self._print_line(result[:300], Style.ASSISTANT_MESSAGE)
-                    if len(result) > 300:
-                        self._print_line("...", Style.TEXT_DIM)
+                    # Show full response (or up to 10000 chars)
+                    max_display = 10000
+                    self._print_line(result[:max_display], Style.ASSISTANT_MESSAGE)
+                    if len(result) > max_display:
+                        self._print_line(f"... [{len(result) - max_display} more chars]", Style.TEXT_DIM)
                     self._print_empty()
                 else:
                     self._print_line("(waiting for model response...)", Style.TEXT_DIM)
