@@ -275,7 +275,10 @@ class AutonomousAgent:
     def _init_cache(self):
         """Initialize the prompt cache."""
         self.prompt_cache: PromptCache | None = None
-        if self.config.cache_enabled:
+        cache_enabled = self.config.cache_enabled
+        if self._session_logger:
+            self._session_logger.info(f"Cache: {'enabled' if cache_enabled else 'disabled'}")
+        if cache_enabled:
             try:
                 cache_dir = self.config.cache_dir
                 cache_dir.mkdir(parents=True, exist_ok=True)
