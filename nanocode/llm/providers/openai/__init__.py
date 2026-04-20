@@ -101,11 +101,11 @@ class OpenAILLM(LLMBase):
         print(f"  Message order:")
         for i, m in enumerate(payload['messages']):
             role = m.get('role', '?')
-            content = str(m.get('content', ''))[:80]
+            content = str(m.get('content', ''))
             tc = m.get('tool_calls')
             tid = m.get('tool_call_id')
-            print(f"    [{i}] {role}: {content}... tool_calls={bool(tc)} tool_call_id={tid}")
-        print(f"  Full messages JSON: {json.dumps(payload['messages'], indent=2)[:3000]}")
+            print(f"    [{i}] {role}: {content} tool_calls={bool(tc)} tool_call_id={tid}")
+        print(f"  Full messages JSON: {json.dumps(payload['messages'], indent=2)}")
         if payload.get('tools'):
             print(f"  Tools: {len(payload['tools'])} (first: {payload['tools'][0].get('name', 'unknown')})")
         print(f"  max_tokens: {payload.get('max_tokens')}")

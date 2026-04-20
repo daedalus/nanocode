@@ -785,12 +785,8 @@ Footer {
 
                 # Display final response with role coloring and syntax highlighting
                 if result and len(result) > 10:
-                    max_display = 10000
                     output_area = self.query_one("#output-area")
-                    output_area.add_line(result[:max_display], "assistant")
-                    if len(result) > max_display:
-                        self._print_line(f"... [{len(result) - max_display} more chars]", Style.TEXT_DIM)
-                    self._print_empty()
+                    output_area.add_line(result, "assistant")
                 else:
                     self._print_line("(waiting for model response...)", Style.TEXT_DIM)
 

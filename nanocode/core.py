@@ -679,7 +679,7 @@ class AutonomousAgent:
         """Format thinking content for display."""
         lines = thinking.strip().split("\n")
         formatted = "\n".join(f"  {line}" for line in lines)
-        return f"\033[93m\033[1m\033[3mThinking:\n{formatted}\033[0m"
+        return f"\033[93m\033[1m\033[3m| Thinking:\n{formatted}\033[0m"
 
     def _get_cache_key(self, messages: list, tools: list[dict] | None) -> str:
         """Generate a cache key from messages and tools."""
@@ -806,10 +806,10 @@ class AutonomousAgent:
                     content = (
                         msg.content
                         if hasattr(msg, "content")
-                        else str(msg.get("content", ""))[:100]
+                        else str(msg.get("content", ""))
                     )
                     role = msg.role if hasattr(msg, "role") else msg.get("role", "?")
-                    print(f"  \033[90m{i}: {role}: {content}...\033[0m")
+                    print(f"  \033[90m{i}: {role}: {content}\033[0m")
 
             if show_messages:
                 print("\n\033[96m=== LLM REQUEST ===\033[0m")
@@ -821,7 +821,7 @@ class AutonomousAgent:
                     )
                     role = msg.role if hasattr(msg, "role") else msg.get("role", "?")
                     print(f"\n[{i}] {role.upper()}:")
-                    print(content[:500] if len(content) > 500 else content)
+                    print(content if len(content) > 0 else content)
                 print("\n")
 
             # Track for show_thinking/show_messages output
@@ -849,24 +849,24 @@ class AutonomousAgent:
             if self.debug:
                 print("\n\033[96m[DEBUG] LLM Response:\033[0m")
                 if response.thinking:
-                    print(f"  \033[93m\033[1m\033[3mThinking:\n{response.thinking}\033[0m")
+                    print(f"  \033[93m\033[1m\033[3m| Thinking:\n{response.thinking}\033[0m")
                 if response.has_tool_calls:
                     print(
                         f"  \033[91mTool Calls: {[tc.name for tc in response.tool_calls]}\033[0m"
                     )
                 else:
-                    print(f"  \033[92mContent: {response.content[:200]}...\033[0m")
+                    print(f"  \033[92mContent: {response.content}\033[0m")
 
             if show_messages:
                 print("\n\033[96m=== LLM RESPONSE ===\033[0m")
                 if response.thinking:
-                    print(f"\n\033[93m\033[1m\033[3mThinking:\n{response.thinking}\033[0m")
+                    print(f"\n\033[93m\033[1m\033[3m| Thinking:\n{response.thinking}\033[0m")
                 if response.has_tool_calls:
                     print(f"\nTool Calls:")
                     for tc in response.tool_calls:
                         print(f"  - {tc.name}: {tc.arguments}")
                 print(
-                    f"\nContent:\n{response.content[:500] if response.content else '(empty)'}"
+                    f"\nContent:\n{response.content if response.content else '(empty)'}"
                 )
                 print()
 
@@ -891,7 +891,7 @@ class AutonomousAgent:
                 for tr in tool_results:
                     if self.debug:
                         print(
-                            f"\n\033[96m[DEBUG] Tool {tr['tool_name']} result:\033[0m {tr['result'][:200]}..."
+                            f"\n\033[96m[DEBUG] Tool {tr['tool_name']} result:\033[0m {tr['result']}"
                         )
                     result_content = tr["result"]
                     result_content = self.context_manager.truncate_tool_result(
@@ -1040,7 +1040,7 @@ class AutonomousAgent:
             
             # Always include thinking if available
             if show_thinking and hasattr(self, '_last_thinking') and self._last_thinking:
-                augmented += f"\n\n[Thinking]\n{self._last_thinking[:500]}..."
+                augmented += f"\n\n| Thinking:\n{self._last_thinking}"
             
             # Include tool use info (full output, not truncated)
             if tool_results_history:

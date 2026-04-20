@@ -837,7 +837,7 @@ class ContextManager:
     async def _create_summary(self, messages: list[Message]) -> str:
         """Create summary of older messages using LLM."""
         conversation = "\n".join(
-            f"{m.role}: {m.get_text_content()[:500]}" for m in messages
+            f"{m.role}: {m.get_text_content()}" for m in messages
         )
 
         prompt = f"""Summarize this conversation concisely, preserving key information:
@@ -850,7 +850,7 @@ Summary:"""
             from nanocode.llm import Message as LLMMessage
 
             response = await self.llm.chat([LLMMessage("user", prompt)])
-            return response.content[:1500]
+            return response.content
         except Exception:
             return f"[{len(messages)} messages from earlier in the conversation]"
 

@@ -302,7 +302,7 @@ class ConsoleUI:
         prefix = "✓" if success else "✗"
         print(f"\n{self.color(color, prefix)} Result:")
         print(self.color("gray", "─" * 40))
-        print(result[:2000] if len(result) > 2000 else result)
+        print(result)
         if len(result) > 2000:
             print(self.color("yellow", f" ... ({len(result) - 2000} more chars)"))
 

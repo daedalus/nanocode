@@ -481,7 +481,7 @@ class GrepTool(Tool):
                             results.append(
                                 {
                                     "file": str(file_path.relative_to(search_path)),
-                                    "matches": matches[:10],
+                                    "matches": matches,
                                 }
                             )
                     except Exception:
@@ -837,7 +837,7 @@ class WebFetchTool(Tool):
                 response.raise_for_status()
 
                 if format == "text":
-                    content = response.text[:50000]
+                    content = response.text
                 elif format == "html":
                     content = response.text
                 else:
@@ -883,7 +883,7 @@ class WebSearchTool(Tool):
                         {
                             "title": r.get("title"),
                             "url": r.get("url"),
-                            "snippet": r.get("snippet", "")[:200],
+                            "snippet": r.get("snippet", ""),
                         }
                     )
 

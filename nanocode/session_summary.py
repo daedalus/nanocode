@@ -224,12 +224,10 @@ class SessionSummaryGenerator:
                 continue
 
             if isinstance(content, str):
-                content = content[:1000]
                 conversation_parts.append(f"{role}: {content}")
             elif isinstance(content, dict):
                 text = content.get("content", "")
                 if text:
-                    text = text[:1000]
                     conversation_parts.append(f"{role}: {text}")
 
         conversation = "\n\n".join(conversation_parts)
