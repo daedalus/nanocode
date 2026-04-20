@@ -91,7 +91,7 @@ class OpenAILLM(LLMBase):
             payload["tools"] = tools
 
         def on_retry(error: Exception, attempt: int):
-            print(f"\n  \033[93mRate limited, retrying (attempt {attempt})...\033[0m")
+            print(f"\n{CLI_COLORS.get('yellow', '')}Rate limited, retrying (attempt {attempt})...{CLI_COLORS.get('reset', '')}")
 
         # DEBUG: Log full request payload
         logger.debug(f"[OpenAI] Request payload: {json.dumps(payload)}")

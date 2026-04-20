@@ -3,11 +3,34 @@
 import json
 import logging
 import traceback
+from enum import Enum
 
 from nanocode.agents import AgentInfo, PermissionAction, get_agent_registry
 from nanocode.agents.permission import (
     PermissionHandler,
 )
+
+
+class ANSI(Enum):
+    """ANSI color and style codes for terminal output."""
+    
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    ITALIC = "\033[3m"
+    RED = "\033[91m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    MAGENTA = "\033[95m"
+    CYAN = "\033[96m"
+    GRAY = "\033[90m"
+    
+    THOUGHT = "\033[93m\033[1m\033[3m"
+    TOOL_CALL = "\033[91m"
+    TOOL_RESULT = "\033[96m"
+    CONTENT = "\033[92m"
+    DEBUG = "\033[96m"
+    WARNING = "\033[93m"
 from nanocode.config import get_config
 from nanocode.context import ContextManager, ContextStrategy
 from nanocode.llm import create_llm
@@ -541,7 +564,7 @@ class AutonomousAgent:
                             f"[{agent_name}] DOOM LOOP DETECTED for '{tool_name}': {warning}"
                         )
                         if self.debug:
-                            print(f"\n\033[91m{warning}\033[0m\n")
+                            print(f"\n{ANSI.RED.value}{warning}{ANSI.RESET.value}\n")
                 
                 doom_loop_msg = f"\n[DOOM LOOP WARNING] {self.doom_loop_handler.get_loop_warning()}\n"
 
@@ -679,7 +702,7 @@ class AutonomousAgent:
         """Format thinking content for display."""
         lines = thinking.strip().split("\n")
         formatted = "\n".join(f"  {line}" for line in lines)
-        return f"\033[93m\033[1m\033[3m| Thinking:\n{formatted}\033[0m"
+        return f"{ANSI.THOUGHT.value}| Thinking:\n{formatted}{ANSI.RESET.value}"
 
     def _get_cache_key(self, messages: list, tools: list[dict] | None) -> str:
         """Generate a cache key from messages and tools."""
@@ -800,7 +823,7 @@ class AutonomousAgent:
 
             if self.debug:
                 print(
-                    f"\n\033[96m[DEBUG] Sending {len(messages)} messages to LLM...\033[0m"
+                    f"\n{ANSI.DEBUG.value}[DEBUG] Sending {len(messages)} messages to LLM...{ANSI.RESET.value}"
                 )
                 for i, msg in enumerate(messages):
                     content = (
@@ -809,10 +832,10 @@ class AutonomousAgent:
                         else str(msg.get("content", ""))
                     )
                     role = msg.role if hasattr(msg, "role") else msg.get("role", "?")
-                    print(f"  \033[90m{i}: {role}: {content}\033[0m")
+                    print(f"  {ANSI.GRAY.value}{i}: {role}: {content}{ANSI.RESET.value}")
 
             if show_messages:
-                print("\n\033[96m=== LLM REQUEST ===\033[0m")
+                print(f"\n{ANSI.DEBUG.value}=== LLM REQUEST ==={ANSI.RESET.value}")
                 for i, msg in enumerate(messages):
                     content = (
                         msg.content
@@ -847,20 +870,20 @@ class AutonomousAgent:
                 self._last_thinking = response.thinking
 
             if self.debug:
-                print("\n\033[96m[DEBUG] LLM Response:\033[0m")
+                print(f"\n{ANSI.DEBUG.value}[DEBUG] LLM Response:{ANSI.RESET.value}")
                 if response.thinking:
-                    print(f"  \033[93m\033[1m\033[3m| Thinking:\n{response.thinking}\033[0m")
+                    print(f"  {ANSI.THOUGHT.value}| Thinking:\n{response.thinking}{ANSI.RESET.value}")
                 if response.has_tool_calls:
                     print(
-                        f"  \033[91mTool Calls: {[tc.name for tc in response.tool_calls]}\033[0m"
+                        f"  {ANSI.TOOL_CALL.value}Tool Calls: {[tc.name for tc in response.tool_calls]}{ANSI.RESET.value}"
                     )
                 else:
-                    print(f"  \033[92mContent: {response.content}\033[0m")
+                    print(f"  {ANSI.CONTENT.value}Content: {response.content}{ANSI.RESET.value}")
 
             if show_messages:
-                print("\n\033[96m=== LLM RESPONSE ===\033[0m")
+                print(f"\n{ANSI.DEBUG.value}=== LLM RESPONSE ==={ANSI.RESET.value}")
                 if response.thinking:
-                    print(f"\n\033[93m\033[1m\033[3m| Thinking:\n{response.thinking}\033[0m")
+                    print(f"\n{ANSI.THOUGHT.value}| Thinking:\n{response.thinking}{ANSI.RESET.value}")
                 if response.has_tool_calls:
                     print(f"\nTool Calls:")
                     for tc in response.tool_calls:
@@ -880,7 +903,7 @@ class AutonomousAgent:
                 )
                 if self.debug:
                     print(
-                        f"\n\033[96m[DEBUG] Handling {len(response.tool_calls)} tool calls...\033[0m"
+                        f"\n{ANSI.DEBUG.value}[DEBUG] Handling {len(response.tool_calls)} tool calls...{ANSI.RESET.value}"
                     )
                 
                 tool_results = await self._handle_tool_calls(response.tool_calls)
@@ -891,7 +914,7 @@ class AutonomousAgent:
                 for tr in tool_results:
                     if self.debug:
                         print(
-                            f"\n\033[96m[DEBUG] Tool {tr['tool_name']} result:\033[0m {tr['result']}"
+                            f"\n{ANSI.DEBUG.value}[DEBUG] Tool {tr['tool_name']} result:{ANSI.RESET.value} {tr['result']}"
                         )
                     result_content = tr["result"]
                     result_content = self.context_manager.truncate_tool_result(
@@ -1010,7 +1033,7 @@ class AutonomousAgent:
                         f"[{agent_name}] Detected {len(detected)} command(s) in text that were not executed"
                     )
                     if self.debug:
-                        print(f"\n\033[93m[WARN] Detected unexecuted commands:\033[0m")
+                        print(f"\n{ANSI.WARNING.value}[WARN] Detected unexecuted commands:{ANSI.RESET.value}")
                         for cmd in detected:
                             print(f"  - [{cmd.tool_name}] {cmd.command[:60]}...")
 
@@ -1024,7 +1047,7 @@ class AutonomousAgent:
                 if should_reprompt:
                     logger.warning(f"[{agent_name}] Model didn't use tools: {reason}")
                     if self.debug:
-                        print(f"\n\033[93m[WARN] {reason}\033[0m")
+                        print(f"\n{ANSI.WARNING.value}[WARN] {reason}{ANSI.RESET.value}")
 
                     # Add detected commands warning to content
                     warning_msg = format_detected_commands_message(detected)
@@ -1040,12 +1063,12 @@ class AutonomousAgent:
             
             # Always include thinking if available
             if show_thinking and hasattr(self, '_last_thinking') and self._last_thinking:
-                augmented += f"\n\n\033[93m\033[1m\033[3m| Thinking:\033[0m\n{self._last_thinking}"
+                augmented += f"\n\n{ANSI.THOUGHT.value}| Thinking:{ANSI.RESET.value}\n{self._last_thinking}"
             
             # Include tool use info (full output, not truncated)
             if tool_results_history:
                 if show_thinking:
-                    tool_info = f"\n\n\033[93m\033[1m\033[3m| Tool Use:\033[0m"
+                    tool_info = f"\n\n{ANSI.THOUGHT.value}| Tool Use:{ANSI.RESET.value}"
                     for tr in tool_results_history:
                         result_str = str(tr['result'])
                         # Include full result for display
@@ -1205,7 +1228,7 @@ class AutonomousAgent:
             )
 
             if self.debug:
-                print(f"\n\033[93m[WARN] Re-prompting for tools (attempt {attempt}/{max_retries}):\033[0m")
+                print(f"\n{ANSI.WARNING.value}[WARN] Re-prompting for tools (attempt {attempt}/{max_retries}):{ANSI.RESET.value}")
                 print(f"  Reason: {reason}")
                 if detected:
                     print(f"  Detected commands: {len(detected)}")
