@@ -945,6 +945,7 @@ Footer {
     async def _handle_command(self, command: str):
         """Handle slash-prefixed commands locally."""
         cmd = command.lower()
+        parts = command.split()
 
         if cmd in ("/exit", "/quit", "/q"):
             self.exit()
@@ -974,8 +975,54 @@ Footer {
                     self._print_line(f"  {t.name}: {t.description}")
             return
 
+        if cmd == "/provider":
+            self._print_line("Use --provider flag to set provider")
+            return
+
+        if cmd == "/plan":
+            self._print_line("Planning not yet implemented in TUI")
+            return
+
+        if cmd.startswith("/resume"):
+            self._print_line("Use nanocode -r <session_id> to resume")
+            return
+
+        if cmd == "/checkpoint":
+            self._print_line("Checkpoints not yet implemented in TUI")
+            return
+
+        if cmd == "/skills":
+            if self.agent and hasattr(self.agent, "skills_manager"):
+                skills = self.agent.skills_manager.list_skills()
+                self._print_line("Available skills:")
+                for s in skills:
+                    self._print_line(f"  {s.name}: {s.description}")
+            else:
+                self._print_line("No skills found")
+            return
+
         if cmd == "/snapshot":
-            self._print_line("Use /snapshot to create a snapshot")
+            self._print_line("Snapshots not yet implemented in TUI")
+            return
+
+        if cmd == "/snapshots":
+            self._print_line("Snapshots not yet implemented in TUI")
+            return
+
+        if cmd == "/trace":
+            if self.agent:
+                self._print_line("Trace not yet implemented")
+            return
+
+        if cmd == "/compact":
+            if self.agent and hasattr(self.agent, "context_manager"):
+                self.agent.context_manager.compact()
+                self._print_line("Context compacted")
+            return
+
+        if cmd == "/show_thinking":
+            self.show_thinking = not self.show_thinking
+            self._print_line(f"Show thinking: {self.show_thinking}")
             return
 
         if cmd == "/agents":
@@ -984,6 +1031,18 @@ Footer {
                 self._print_line("Available agents:")
                 for a in agents:
                     self._print_line(f"  {a.name}: {a.description}")
+            return
+
+        if cmd.startswith("/agent "):
+            agent_name = parts[1] if len(parts) > 1 else None
+            if agent_name and self.agent and hasattr(self.agent, "switch_agent"):
+                success = self.agent.switch_agent(agent_name)
+                if success:
+                    self._print_line(f"Switched to agent: {agent_name}")
+                else:
+                    self._print_error(f"Unknown agent: {agent_name}")
+            else:
+                self._print_line("Use /agents to list available agents")
             return
 
         if cmd == "/debug":
