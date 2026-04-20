@@ -340,6 +340,7 @@ async def main():
 
     show_thinking = getattr(args, "thinking", False)  # Default: disabled (use --thinking to enable)
     show_messages = getattr(args, "show_messages", False)
+    gui_show_thinking = True if gui_mode == "textual" else show_thinking
 
     log_file = getattr(args, "log_file", None)
     if log_file or getattr(args, "debug_logging", False):
@@ -364,6 +365,7 @@ async def main():
         except Exception as e:
             traceback.print_exc()
             result = f"Error: {str(e)}"
+
         print("\n" + "=" * 60)
         print("AGENT RESPONSE:")
         print("=" * 60)
@@ -371,18 +373,26 @@ async def main():
             print(result)
             print("\nFull traceback above.")
         else:
-            print(result)
+            formatted = _format_markdown(result)
+            print(formatted)
         return
 
-    gui_mode = getattr(args, "gui", "cli")
-    
-    # For TUI, always enable thinking display
-    gui_show_thinking = True if gui_mode == "textual" else show_thinking
-    
     if gui_mode == "textual":
         await run_tui(agent, show_thinking=gui_show_thinking, show_messages=show_messages)
     else:
         await run_cli(agent, show_thinking=show_thinking, show_messages=show_messages)
+
+
+def _format_markdown(text: str) -> str:
+    """Format markdown bold (**text**) as bold + magenta."""
+    import re
+    MAGENTA_BOLD = "\033[38;5;95;1m"
+    RESET = "\033[0m"
+
+    def replace_bold(match):
+        return f"{MAGENTA_BOLD}{match.group(1)}{RESET}"
+
+    return re.sub(r'\*\*(.+?)\*\*', replace_bold, text)
 
 
 if __name__ == "__main__":

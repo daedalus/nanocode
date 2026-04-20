@@ -536,7 +536,7 @@ class AutonomousAgent:
         """Format thinking content for display."""
         lines = thinking.strip().split("\n")
         formatted = "\n".join(f"  {line}" for line in lines)
-        return f"\033[90m\033[3mThinking:\n{formatted}\033[0m"
+        return f"\033[93m\033[1m\033[3mThinking:\n{formatted}\033[0m"
 
     def _get_cache_key(self, messages: list, tools: list[dict] | None) -> str:
         """Generate a cache key from messages and tools."""
@@ -706,7 +706,7 @@ class AutonomousAgent:
             if self.debug:
                 print("\n\033[96m[DEBUG] LLM Response:\033[0m")
                 if response.thinking:
-                    print(f"  \033[93mThinking: {response.thinking[:200]}...\033[0m")
+                    print(f"  \033[93m\033[1m\033[3mThinking:\n{response.thinking}\033[0m")
                 if response.has_tool_calls:
                     print(
                         f"  \033[91mTool Calls: {[tc.name for tc in response.tool_calls]}\033[0m"
@@ -717,7 +717,7 @@ class AutonomousAgent:
             if show_messages:
                 print("\n\033[96m=== LLM RESPONSE ===\033[0m")
                 if response.thinking:
-                    print(f"\nThinking:\n{response.thinking[:500]}")
+                    print(f"\n\033[93m\033[1m\033[3mThinking:\n{response.thinking}\033[0m")
                 if response.has_tool_calls:
                     print(f"\nTool Calls:")
                     for tc in response.tool_calls:

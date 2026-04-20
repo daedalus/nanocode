@@ -186,11 +186,19 @@ class OutputArea(RichLog):
             "success": self.GRUVBOX["green"],
             "warning": self.GRUVBOX["yellow"],
             "danger": self.GRUVBOX["fg"],
-            "thinking": self.GRUVBOX["gray"],
+            "thinking": self.GRUVBOX["yellow"],
             "info": self.GRUVBOX["blue_bright"],
         }
 
         base_color = style_map.get(style, "")
+
+        # Handle Rich markup only for thinking style (e.g., [bold italic yellow]| Thinking:[/])
+        if style == "thinking" and "[" in text and "]" in text:
+            from rich.text import Text as RichText
+            rich_text = RichText.from_markup(text)
+            self.write(rich_text)
+            self._lines.append(text)
+            return
 
         # Use markdown rendering for non-code-block text
         if '```' in text:
@@ -327,8 +335,8 @@ Footer {
     color: #928374;
 }
 .thinking {
-    color: #928374;
-    text-style: italic;
+    color: #d79921;
+    text-style: bold italic;
 }
 .error {
     color: #cc241d;
@@ -347,7 +355,7 @@ Footer {
     color: #458588;
 }
 .thinking {
-    color: #928374;
+    color: #d79921;
 }
 .success {
     color: #98971f;
@@ -428,8 +436,30 @@ Footer {
             Style.TEXT_SUCCESS_BOLD: "success",
             Style.TEXT_INFO: "info",
             Style.TEXT_INFO_BOLD: "info",
-            Style.THINKING: "thinking",
         }
+        
+        if style == Style.THINKING:
+            # Split: "Thinking:" gets bold italic yellow, rest gets white
+            prefix = ""
+            rest = text
+            if "| Thinking:" in text:
+                parts = text.split("| Thinking:", 1)
+                prefix = parts[0] + "| Thinking:"
+                rest = parts[1] if len(parts) > 1 else ""
+            
+            from rich.text import Text as RichText
+            if prefix and rest:
+                full_text = RichText()
+                full_text.append(prefix + " ", style="bold italic yellow")
+                full_text.append(rest, style="white")
+            elif prefix:
+                full_text = RichText(prefix, style="bold italic yellow")
+            else:
+                full_text = RichText.from_markup(text)
+            
+            output.write(full_text)
+            output._lines.append(text)
+            return
         
         rich_style = style_map.get(style, "")
         output.add_line(text, rich_style)
@@ -696,7 +726,7 @@ Footer {
                 if self.show_thinking and hasattr(self.agent, '_last_thinking'):
                     thinking = getattr(self.agent, '_last_thinking', None)
                     if thinking and thinking not in (result or ""):
-                        self._print_line(f"| _Thinking: {thinking}", Style.THINKING)
+                        self._print_line(f"| Thinking: {thinking}", Style.THINKING)
                         self._print_empty()
 
                 # Display final response with role coloring and syntax highlighting
