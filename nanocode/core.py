@@ -481,7 +481,7 @@ class AutonomousAgent:
         if self.tool_registry:
             for name, tool in self.tool_registry._tools.items():
                 desc = getattr(tool, 'description', '') or ''
-                tools_info.append(f"- {name}: {desc[:100]}")
+                tools_info.append(f"- {name}: {desc}")
         
         # Get MCP servers
         mcp_info = []
@@ -500,7 +500,7 @@ class AutonomousAgent:
         if hasattr(self, 'skills_manager') and self.skills_manager:
             for name, skill in self.skills_manager.skills.items():
                 desc = getattr(skill, 'description', '') or ''
-                skill_info.append(f"- {name}: {desc[:80]}")
+                skill_info.append(f"- {name}: {desc}")
         
         # Get current directory and config
         cwd = os.getcwd()
@@ -512,23 +512,23 @@ class AutonomousAgent:
         if system_prompts_dir.exists():
             for f in sorted(system_prompts_dir.glob("*.md")):
                 extra_prompts += f"\n\n# From {f.name}\n"
-                extra_prompts += f.read_text()[:2000]
+                extra_prompts += f.read_text()
             for f in sorted(system_prompts_dir.glob("*.txt")):
                 extra_prompts += f"\n\n# From {f.name}\n"
-                extra_prompts += f.read_text()[:2000]
-        
+                extra_prompts += f.read_text()
+
         # Check for AGENTS.md in cwd or parent
         for agents_file in [Path(cwd) / "AGENTS.md", Path(cwd).parent / "AGENTS.md"]:
             if agents_file.exists():
                 extra_prompts += f"\n\n# From {agents_file.name}\n"
-                extra_prompts += agents_file.read_text()[:3000]
+                extra_prompts += agents_file.read_text()
                 break
-        
+
         # Check for GEMINI.md
         for gemini_file in [Path(cwd) / "GEMINI.md", Path(cwd).parent / "GEMINI.md"]:
             if gemini_file.exists():
                 extra_prompts += f"\n\n# From {gemini_file.name}\n"
-                extra_prompts += gemini_file.read_text()[:2000]
+                extra_prompts += gemini_file.read_text()
                 break
         
         # Format template
@@ -823,7 +823,7 @@ class AutonomousAgent:
     ) -> str:
         """Process a user input through the agent."""
         agent_name = self.current_agent.name if self.current_agent else "unknown"
-        logger.info(f"[{agent_name}] Processing input: {user_input[:100]}...")
+        logger.info(f"[{agent_name}] Processing input: {user_input}")
 
         self.state.state = AgentState.EXECUTING
         self.state.task = user_input

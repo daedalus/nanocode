@@ -114,13 +114,13 @@ class TopicExtractor:
                 continue
 
             if "file" in content.lower() or "path" in content.lower():
-                topics.append({"description": content[:100], "type": "place"})
+                topics.append({"description": content, "type": "place"})
             elif "function" in content.lower() or "def " in content:
-                topics.append({"description": content[:100], "type": "code"})
+                topics.append({"description": content, "type": "code"})
             elif any(word in content.lower() for word in ["user", "person", "role"]):
-                topics.append({"description": content[:100], "type": "persona"})
+                topics.append({"description": content, "type": "persona"})
 
-        return topics[:10]
+        return topics
 
     def _format_messages(self, messages: list[dict]) -> str:
         """Format messages for LLM prompt."""
@@ -129,7 +129,7 @@ class TopicExtractor:
             role = msg.get("role", "unknown")
             content = msg.get("content", "")
             if content:
-                lines.append(f"{role}: {content[:500]}")
+                lines.append(f"{role}: {content}")
         return "\n".join(lines)
 
     def _parse_response(self, response: str) -> list[dict]:

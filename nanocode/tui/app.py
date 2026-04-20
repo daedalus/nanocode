@@ -114,7 +114,7 @@ class PermissionScreen(ModalScreen):
         self._result = None
     
     def compose(self) -> ComposeResult:
-        args_str = f"Args: {str(self.request.arguments)[:40]}" if self.request.arguments else ""
+        args_str = f"Args: {str(self.request.arguments)}" if self.request.arguments else ""
         yield Vertical(
             Static("⚠️ Permission Request", id="dialog-title"),
             Static(f"Tool: {self.request.tool_name}", id="dialog-info"),
@@ -973,7 +973,7 @@ Footer {
                 self._print_line("Available tools:")
                 for t in tools:
                     name = t.name if hasattr(t, "name") else "unknown"
-                    desc = t.description[:60] if hasattr(t, "description") else ""
+                    desc = t.description if hasattr(t, "description") else ""
                     self._print_line(f"  {name}: {desc}")
             else:
                 self._print_line("No tools available")
@@ -1001,7 +1001,7 @@ Footer {
                 self._print_line("Available skills:")
                 for s in skills:
                     name = s.get("name", "unknown") if isinstance(s, dict) else getattr(s, "name", "unknown")
-                    desc = s.get("description", "")[:60] if isinstance(s, dict) else getattr(s, "description", "")[:60]
+                    desc = s.get("description", "") if isinstance(s, dict) else getattr(s, "description", "")
                     self._print_line(f"  {name}: {desc}")
             else:
                 self._print_line("No skills found")
@@ -1037,7 +1037,7 @@ Footer {
                 self._print_line("Available agents:")
                 for a in agents:
                     name = a.name if hasattr(a, "name") else "unknown"
-                    desc = a.description[:60] if hasattr(a, "description") else ""
+                    desc = a.description if hasattr(a, "description") else ""
                     self._print_line(f"  {name}: {desc}")
             return
 

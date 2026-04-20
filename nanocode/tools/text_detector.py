@@ -124,7 +124,7 @@ def detect_commands_in_text(text: str) -> list[DetectedCommand]:
     seen = set()
     unique_detected = []
     for cmd in detected:
-        key = (cmd.tool_name, cmd.command[:50])
+        key = (cmd.tool_name, cmd.command)
         if key not in seen:
             seen.add(key)
             unique_detected.append(cmd)
@@ -164,7 +164,7 @@ def format_detected_commands_message(commands: list[DetectedCommand]) -> str:
 
     lines = ["\n⚠ Detected commands in response that were not executed:\n"]
     for i, cmd in enumerate(commands, 1):
-        lines.append(f"{i}. [{cmd.tool_name}] {cmd.command[:80]}")
+        lines.append(f"{i}. [{cmd.tool_name}] {cmd.command}")
         if len(cmd.command) > 80:
             lines[-1] += "..."
 
@@ -248,7 +248,7 @@ def create_reprompt_message(commands: list[DetectedCommand] = None) -> str:
             "Please execute the necessary commands using the appropriate tools. "
             "Here are commands that were detected in your previous response:\n"
         )
-        for cmd in commands[:3]:  # Limit to 3
+        for cmd in commands:
             message += f"- [{cmd.tool_name}] {cmd.command}\n"
         message += "\n"
 

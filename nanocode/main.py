@@ -212,8 +212,6 @@ async def run_cli(agent, show_thinking: bool = False, show_messages: bool = Fals
             print(f"  {ui.color('cyan', 'Arguments:')}")
             for k, v in request.arguments.items():
                 v_str = str(v)
-                if len(v_str) > 50:
-                    v_str = v_str[:50] + "..."
                 print(f"    {k}: {v_str}")
         print(f"  {ui.color('magenta', '➜')} Allow? (y/n/a=always): ", end="")
 

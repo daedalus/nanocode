@@ -894,32 +894,8 @@ Summary:"""
         return self._messages_to_dict(result_messages)
 
     def truncate_tool_result(self, content: str, max_tokens: int = None) -> str:
-        """Truncate long tool results intelligently.
-        
-        If tool_truncation is disabled (None or 0), returns content unchanged.
-        """
-        effective_max = max_tokens if max_tokens is not None else self.tool_truncation
-        if effective_max is None or effective_max == 0:
-            return content
-            
-        tokens = TokenCounter.count_tokens(content)
-
-        if tokens <= effective_max:
-            return content
-
-        lines = content.split("\n")
-        result_lines = []
-        current_tokens = 0
-
-        for line in lines:
-            line_tokens = TokenCounter.count_tokens(line)
-            if current_tokens + line_tokens > effective_max - 50:
-                result_lines.append(f"... [truncated {tokens - current_tokens} tokens]")
-                break
-            result_lines.append(line)
-            current_tokens += line_tokens
-
-        return "\n".join(result_lines)
+        """Tool result truncation is disabled - return content unchanged."""
+        return content
 
     def get_token_usage(self) -> dict:
         """Get current token usage statistics."""

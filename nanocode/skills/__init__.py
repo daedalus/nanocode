@@ -129,7 +129,7 @@ class SkillsManager:
             if not name:
                 name = os.path.basename(os.path.dirname(path))
             if not description:
-                description = body[:100] if body else ""
+                description = body if body else ""
 
             return Skill(
                 name=name,

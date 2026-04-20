@@ -338,8 +338,6 @@ class ConsoleUI:
             print(f"  {self.color('cyan', 'Arguments:')}")
             for k, v in arguments.items():
                 v_str = str(v)
-                if len(v_str) > 50:
-                    v_str = v_str[:50] + "..."
                 print(f"    {k}: {v_str}")
         print(f"  {self.color('magenta', '➜')} ", end="")
 
@@ -908,7 +906,7 @@ class InteractiveCLI:
         recent_models.insert(0, model_full_id)
 
         # Keep only last 5
-        recent_models = recent_models[:5]
+        recent_models = recent_models
 
         # Save back
         try:
@@ -1038,7 +1036,7 @@ class InteractiveCLI:
             snapshot_hash = await manager.track()
 
             if snapshot_hash:
-                self.ui.print_success(f"Snapshot created: {snapshot_hash[:8]}")
+                self.ui.print_success(f"Snapshot created: {snapshot_hash}")
             else:
                 self.ui.print_error("Failed to create snapshot")
         except Exception as e:
@@ -1067,7 +1065,7 @@ class InteractiveCLI:
             success = await manager.restore(snapshot_hash)
 
             if success:
-                self.ui.print_success(f"Reverted to snapshot: {snapshot_hash[:8]}")
+                self.ui.print_success(f"Reverted to snapshot: {snapshot_hash}")
             else:
                 self.ui.print_error("Failed to revert snapshot")
         except Exception as e:
@@ -1090,7 +1088,7 @@ class InteractiveCLI:
             print(self.ui.color("gray", "─" * 40))
             for s in snapshots:
                 print(
-                    f"  • {self.ui.color('magenta', s['hash'][:8])} ({s['timestamp']})"
+                    f"  • {self.ui.color('magenta', s['hash'])} ({s['timestamp']})"
                 )
         except Exception as e:
             self.ui.print_error(f"Error: {e}")

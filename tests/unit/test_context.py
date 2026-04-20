@@ -236,12 +236,12 @@ class TestContextManager:
         assert len(manager._messages) == 0
 
     def test_truncate_tool_result(self, manager):
-        """Test tool result truncation."""
+        """Test tool result truncation is disabled - content returned unchanged."""
         long_content = "line " * 1000
 
-        truncated = manager.truncate_tool_result(long_content, max_tokens=100)
+        result = manager.truncate_tool_result(long_content, max_tokens=100)
 
-        assert "truncated" in truncated.lower()
+        assert result == long_content
 
     def test_preserve_system_message(self, manager):
         """Test preserving system message."""
