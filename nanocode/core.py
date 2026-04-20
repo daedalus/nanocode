@@ -781,7 +781,25 @@ class AutonomousAgent:
             parts.append(json.dumps(tools, sort_keys=True))
 
         key = "".join(parts)
-        return hashlib.sha256(key.encode()).hexdigest()
+        
+        # DEBUG: Log what we're hashing
+        logger.warning(f"[CACHE KEY DEBUG] Number of messages: {len(messages)}")
+        for i, msg in enumerate(messages):
+            if hasattr(msg, "to_dict"):
+                d = msg.to_dict()
+            elif isinstance(msg, dict):
+                d = msg
+            else:
+                d = {}
+            role = d.get("role", "?")
+            content = d.get("content", "") or ""
+            if isinstance(content, list):
+                content = str(content[:2])  # First 2 items only
+            logger.warning(f"[CACHE KEY DEBUG] Msg {i}: role={role}, content_len={len(str(content))}, content_preview={str(content)[:80]}")
+        
+        cache_key = hashlib.sha256(key.encode()).hexdigest()
+        logger.warning(f"[CACHE KEY DEBUG] Final cache key: {cache_key}")
+        return cache_key
 
     def _messages_to_text(self, messages: list) -> str:
         """Convert messages to a text string for caching."""
@@ -916,6 +934,8 @@ class AutonomousAgent:
             logger.debug(f"[{agent_name}] Sending request to LLM...")
 
             cached_response = self._check_cache(messages, tools)
+            logger.warning(f"[DEBUG] User input: '{user_input}'")
+            logger.warning(f"[DEBUG] Context messages before LLM: {len(messages)}")
             if cached_response:
                 cache_logger.warning(f"[{agent_name}] Using CACHED response (this is a bug if input changed!)")
                 logger.warning(f"[{agent_name}] Cache hit! Messages: {len(messages)}, User input: {user_input[:50]}")
