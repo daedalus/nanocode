@@ -1040,12 +1040,12 @@ class AutonomousAgent:
             
             # Always include thinking if available
             if show_thinking and hasattr(self, '_last_thinking') and self._last_thinking:
-                augmented += f"\n\n| Thinking:\n{self._last_thinking}"
+                augmented += f"\n\n\033[93m\033[1m\033[3m| Thinking:\033[0m\n{self._last_thinking}"
             
             # Include tool use info (full output, not truncated)
             if tool_results_history:
                 if show_thinking:
-                    tool_info = "\n\n[Tool Use]"
+                    tool_info = f"\n\n\033[93m\033[1m\033[3m| Tool Use:\033[0m"
                     for tr in tool_results_history:
                         result_str = str(tr['result'])
                         # Include full result for display
