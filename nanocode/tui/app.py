@@ -463,6 +463,8 @@ Footer {
         Binding("escape", "quit", "Quit", show=True),
         Binding("ctrl+c", "interrupt", "Interrupt", show=False),
         Binding("f1", "show_command_palette", "Commands", show=True),
+        Binding("up", "history_up", "History Up"),
+        Binding("down", "history_down", "History Down"),
     ]
 
     # CLI commands list (not Textual CommandPalette)
@@ -493,6 +495,8 @@ Footer {
         self.agent = agent
         self.show_thinking = show_thinking
         self._processing = False
+        self._input_history: list[str] = []
+        self._history_index = -1
     
     def compose(self) -> ComposeResult:
         yield Header()
@@ -789,8 +793,30 @@ Footer {
         """Handle input submission."""
         text = event.value.strip()
         if text:
+            self._input_history.append(text)
+            self._history_index = len(self._input_history)
             event.input.value = ""
             self._process_input(text)
+
+    def _history_up(self):
+        """Navigate history up (previous command)."""
+        input_widget = self.query_one("#input", Input)
+        if self._input_history and self._history_index > 0:
+            self._history_index -= 1
+            input_widget.value = self._input_history[self._history_index]
+            input_widget.cursor_position = len(input_widget.value)
+
+    def _history_down(self):
+        """Navigate history down (next command)."""
+        input_widget = self.query_one("#input", Input)
+        if self._history_index < len(self._input_history) - 1:
+            self._history_index += 1
+            input_widget.value = self._input_history[self._history_index]
+            input_widget.cursor_position = len(input_widget.value)
+        elif self._history_index == len(self._input_history) - 1:
+            self._history_index += 1
+            input_widget.value = ""
+            input_widget.cursor_position = 0
     
     @work(exclusive=True)
     async def _process_input(self, text: str):
