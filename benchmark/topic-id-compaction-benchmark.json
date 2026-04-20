@@ -1,0 +1,261 @@
+{
+  "strategies": [
+    {
+      "strategy": "sliding_window",
+      "input_tokens": 52,
+      "max_tokens": 8000,
+      "usage_percent": 0.7,
+      "message_count": 5,
+      "output_count": 6
+    },
+    {
+      "strategy": "summary",
+      "input_tokens": 52,
+      "max_tokens": 8000,
+      "usage_percent": 0.7,
+      "message_count": 5,
+      "output_count": 6
+    },
+    {
+      "strategy": "importance",
+      "input_tokens": 52,
+      "max_tokens": 8000,
+      "usage_percent": 0.7,
+      "message_count": 5,
+      "output_count": 6
+    },
+    {
+      "strategy": "compaction",
+      "input_tokens": 52,
+      "max_tokens": 8000,
+      "usage_percent": 0.7,
+      "message_count": 5,
+      "output_count": 6
+    },
+    {
+      "strategy": "topic_id",
+      "input_tokens": 52,
+      "max_tokens": 8000,
+      "usage_percent": 0.7,
+      "message_count": 5,
+      "output_count": 6
+    },
+    {
+      "strategy": "sliding_window",
+      "input_tokens": 446,
+      "max_tokens": 8000,
+      "usage_percent": 5.6,
+      "message_count": 20,
+      "output_count": 21
+    },
+    {
+      "strategy": "summary",
+      "input_tokens": 446,
+      "max_tokens": 8000,
+      "usage_percent": 5.6,
+      "message_count": 20,
+      "output_count": 21
+    },
+    {
+      "strategy": "importance",
+      "input_tokens": 446,
+      "max_tokens": 8000,
+      "usage_percent": 5.6,
+      "message_count": 20,
+      "output_count": 21
+    },
+    {
+      "strategy": "compaction",
+      "input_tokens": 446,
+      "max_tokens": 8000,
+      "usage_percent": 5.6,
+      "message_count": 20,
+      "output_count": 21
+    },
+    {
+      "strategy": "topic_id",
+      "input_tokens": 446,
+      "max_tokens": 8000,
+      "usage_percent": 5.6,
+      "message_count": 20,
+      "output_count": 21
+    },
+    {
+      "strategy": "sliding_window",
+      "input_tokens": 1246,
+      "max_tokens": 8000,
+      "usage_percent": 15.6,
+      "message_count": 50,
+      "output_count": 51
+    },
+    {
+      "strategy": "summary",
+      "input_tokens": 1246,
+      "max_tokens": 8000,
+      "usage_percent": 15.6,
+      "message_count": 50,
+      "output_count": 51
+    },
+    {
+      "strategy": "importance",
+      "input_tokens": 1246,
+      "max_tokens": 8000,
+      "usage_percent": 15.6,
+      "message_count": 50,
+      "output_count": 51
+    },
+    {
+      "strategy": "compaction",
+      "input_tokens": 1246,
+      "max_tokens": 8000,
+      "usage_percent": 15.6,
+      "message_count": 50,
+      "output_count": 51
+    },
+    {
+      "strategy": "topic_id",
+      "input_tokens": 1246,
+      "max_tokens": 8000,
+      "usage_percent": 15.6,
+      "message_count": 50,
+      "output_count": 51
+    }
+  ],
+  "conversations": [
+    {
+      "length": 5,
+      "results": {
+        "sliding_window": {
+          "strategy": "sliding_window",
+          "input_tokens": 52,
+          "max_tokens": 8000,
+          "usage_percent": 0.7,
+          "message_count": 5,
+          "output_count": 6
+        },
+        "summary": {
+          "strategy": "summary",
+          "input_tokens": 52,
+          "max_tokens": 8000,
+          "usage_percent": 0.7,
+          "message_count": 5,
+          "output_count": 6
+        },
+        "importance": {
+          "strategy": "importance",
+          "input_tokens": 52,
+          "max_tokens": 8000,
+          "usage_percent": 0.7,
+          "message_count": 5,
+          "output_count": 6
+        },
+        "compaction": {
+          "strategy": "compaction",
+          "input_tokens": 52,
+          "max_tokens": 8000,
+          "usage_percent": 0.7,
+          "message_count": 5,
+          "output_count": 6
+        },
+        "topic_id": {
+          "strategy": "topic_id",
+          "input_tokens": 52,
+          "max_tokens": 8000,
+          "usage_percent": 0.7,
+          "message_count": 5,
+          "output_count": 6
+        }
+      }
+    },
+    {
+      "length": 20,
+      "results": {
+        "sliding_window": {
+          "strategy": "sliding_window",
+          "input_tokens": 446,
+          "max_tokens": 8000,
+          "usage_percent": 5.6,
+          "message_count": 20,
+          "output_count": 21
+        },
+        "summary": {
+          "strategy": "summary",
+          "input_tokens": 446,
+          "max_tokens": 8000,
+          "usage_percent": 5.6,
+          "message_count": 20,
+          "output_count": 21
+        },
+        "importance": {
+          "strategy": "importance",
+          "input_tokens": 446,
+          "max_tokens": 8000,
+          "usage_percent": 5.6,
+          "message_count": 20,
+          "output_count": 21
+        },
+        "compaction": {
+          "strategy": "compaction",
+          "input_tokens": 446,
+          "max_tokens": 8000,
+          "usage_percent": 5.6,
+          "message_count": 20,
+          "output_count": 21
+        },
+        "topic_id": {
+          "strategy": "topic_id",
+          "input_tokens": 446,
+          "max_tokens": 8000,
+          "usage_percent": 5.6,
+          "message_count": 20,
+          "output_count": 21
+        }
+      }
+    },
+    {
+      "length": 50,
+      "results": {
+        "sliding_window": {
+          "strategy": "sliding_window",
+          "input_tokens": 1246,
+          "max_tokens": 8000,
+          "usage_percent": 15.6,
+          "message_count": 50,
+          "output_count": 51
+        },
+        "summary": {
+          "strategy": "summary",
+          "input_tokens": 1246,
+          "max_tokens": 8000,
+          "usage_percent": 15.6,
+          "message_count": 50,
+          "output_count": 51
+        },
+        "importance": {
+          "strategy": "importance",
+          "input_tokens": 1246,
+          "max_tokens": 8000,
+          "usage_percent": 15.6,
+          "message_count": 50,
+          "output_count": 51
+        },
+        "compaction": {
+          "strategy": "compaction",
+          "input_tokens": 1246,
+          "max_tokens": 8000,
+          "usage_percent": 15.6,
+          "message_count": 50,
+          "output_count": 51
+        },
+        "topic_id": {
+          "strategy": "topic_id",
+          "input_tokens": 1246,
+          "max_tokens": 8000,
+          "usage_percent": 15.6,
+          "message_count": 50,
+          "output_count": 51
+        }
+      }
+    }
+  ]
+}

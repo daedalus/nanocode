@@ -1,0 +1,44 @@
+{
+  "evals": [
+    {
+      "name": "ContextStrategy.TOPIC_ID enum",
+      "passed": true,
+      "detail": {
+        "passed": true,
+        "value": "topic_id"
+      }
+    },
+    {
+      "name": "ID format (topic_8hex)",
+      "passed": true,
+      "detail": {
+        "passed": true,
+        "ids_checked": 100
+      }
+    },
+    {
+      "name": "Empty content filtering",
+      "passed": true,
+      "detail": {
+        "passed": true,
+        "topics_created": 0
+      }
+    },
+    {
+      "name": "Corrupt JSON handling",
+      "passed": true,
+      "detail": {
+        "passed": true,
+        "result": null
+      }
+    },
+    {
+      "name": "Idempotent hashing",
+      "passed": true,
+      "detail": {
+        "passed": true,
+        "all_equal": true
+      }
+    }
+  ]
+}

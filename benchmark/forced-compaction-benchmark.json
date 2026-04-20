@@ -1,0 +1,127 @@
+{
+  "forced_compaction": [
+    {
+      "msg_count": 20,
+      "strategies": {
+        "sliding_window": {
+          "strategy": "sliding_window",
+          "input_msgs": 20,
+          "output_msgs": 13,
+          "original_tokens": 583,
+          "output_tokens": 613,
+          "usage_pct": 122.6,
+          "compaction": false
+        },
+        "summary": {
+          "strategy": "summary",
+          "input_msgs": 20,
+          "output_msgs": 13,
+          "original_tokens": 583,
+          "output_tokens": 613,
+          "usage_pct": 122.6,
+          "compaction": false
+        },
+        "compaction": {
+          "strategy": "compaction",
+          "input_msgs": 20,
+          "output_msgs": 20,
+          "original_tokens": 583,
+          "output_tokens": 613,
+          "usage_pct": 122.6,
+          "compaction": false
+        },
+        "topic_id": {
+          "strategy": "topic_id",
+          "input_msgs": 20,
+          "output_msgs": 20,
+          "original_tokens": 583,
+          "output_tokens": 613,
+          "usage_pct": 122.6,
+          "compaction": false
+        }
+      }
+    },
+    {
+      "msg_count": 50,
+      "strategies": {
+        "sliding_window": {
+          "strategy": "sliding_window",
+          "input_msgs": 50,
+          "output_msgs": 13,
+          "original_tokens": 1693,
+          "output_tokens": 1693,
+          "usage_pct": 338.6,
+          "compaction": false
+        },
+        "summary": {
+          "strategy": "summary",
+          "input_msgs": 50,
+          "output_msgs": 13,
+          "original_tokens": 1693,
+          "output_tokens": 1693,
+          "usage_pct": 338.6,
+          "compaction": false
+        },
+        "compaction": {
+          "strategy": "compaction",
+          "input_msgs": 50,
+          "output_msgs": 50,
+          "original_tokens": 1693,
+          "output_tokens": 1693,
+          "usage_pct": 338.6,
+          "compaction": false
+        },
+        "topic_id": {
+          "strategy": "topic_id",
+          "input_msgs": 50,
+          "output_msgs": 50,
+          "original_tokens": 1693,
+          "output_tokens": 1693,
+          "usage_pct": 338.6,
+          "compaction": false
+        }
+      }
+    },
+    {
+      "msg_count": 100,
+      "strategies": {
+        "sliding_window": {
+          "strategy": "sliding_window",
+          "input_msgs": 100,
+          "output_msgs": 13,
+          "original_tokens": 3543,
+          "output_tokens": 3493,
+          "usage_pct": 698.6,
+          "compaction": true
+        },
+        "summary": {
+          "strategy": "summary",
+          "input_msgs": 100,
+          "output_msgs": 13,
+          "original_tokens": 3543,
+          "output_tokens": 3493,
+          "usage_pct": 698.6,
+          "compaction": true
+        },
+        "compaction": {
+          "strategy": "compaction",
+          "input_msgs": 100,
+          "output_msgs": 100,
+          "original_tokens": 3543,
+          "output_tokens": 3493,
+          "usage_pct": 698.6,
+          "compaction": true
+        },
+        "topic_id": {
+          "strategy": "topic_id",
+          "input_msgs": 100,
+          "output_msgs": 100,
+          "original_tokens": 3543,
+          "output_tokens": 3493,
+          "usage_pct": 698.6,
+          "compaction": true
+        }
+      }
+    }
+  ]
+}
