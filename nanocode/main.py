@@ -56,9 +56,9 @@ def parse_args():
     parser.add_argument(
         "--gui",
         "-g",
-        choices=["cli", "textual"],
-        default="cli",
-        help="UI mode (default: cli)",
+        choices=["textual", "cli"],
+        default="textual",
+        help="UI mode (default: textual)",
     )
     parser.add_argument(
         "--acp",
@@ -377,10 +377,10 @@ async def main():
             print(formatted)
         return
 
-    if gui_mode == "textual":
-        await run_tui(agent, show_thinking=gui_show_thinking, show_messages=show_messages)
-    else:
+    if gui_mode == "cli":
         await run_cli(agent, show_thinking=show_thinking, show_messages=show_messages)
+    else:
+        await run_tui(agent, show_thinking=gui_show_thinking, show_messages=show_messages)
 
 
 def _format_markdown(text: str) -> str:
