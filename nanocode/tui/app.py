@@ -144,6 +144,10 @@ class PermissionScreen(ModalScreen):
 class CommandPaletteScreen(ModalScreen):
     """Modal screen for command palette."""
     
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+    ]
+    
     CSS = """
     CommandPaletteScreen {
         align: center middle;
@@ -219,6 +223,10 @@ class CommandPaletteScreen(ModalScreen):
         if 0 <= row_index < len(self._filtered):
             cmd, _ = self._filtered[row_index]
             self.dismiss(cmd)
+    
+    def action_cancel(self):
+        """Close the palette without selecting."""
+        self.dismiss(None)
 
 
 class OutputArea(RichLog):
