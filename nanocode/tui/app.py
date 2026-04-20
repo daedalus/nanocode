@@ -798,6 +798,11 @@ Footer {
         self._print_line(f"> {text}", Style.USER_MESSAGE)
         self._print_empty()
 
+        # Handle slash-prefixed commands locally before sending to agent
+        if text.startswith("/"):
+            await self._handle_command(text)
+            return
+
         self._processing = True
 
         input_widget = self.query_one("#input", Input)
@@ -936,6 +941,59 @@ Footer {
             self._processing = False
             input_widget.disabled = False
             input_widget.focus()
+
+    async def _handle_command(self, command: str):
+        """Handle slash-prefixed commands locally."""
+        cmd = command.lower()
+
+        if cmd in ("/exit", "/quit", "/q"):
+            self.exit()
+            return
+
+        if cmd == "/help":
+            self._print_line("Available commands:")
+            for c, desc in self.CLI_COMMANDS:
+                self._print_line(f"  {c:<20} {desc}")
+            return
+
+        if cmd == "/clear":
+            output = self.query_one("#output-area")
+            output.clear_lines()
+            self._show_welcome()
+            return
+
+        if cmd == "/history":
+            self._print_line("Use Ctrl+H for history")
+            return
+
+        if cmd == "/tools":
+            if self.agent:
+                tools = self.agent.tool_registry.list_tools()
+                self._print_line("Available tools:")
+                for t in tools:
+                    self._print_line(f"  {t.name}: {t.description}")
+            return
+
+        if cmd == "/snapshot":
+            self._print_line("Use /snapshot to create a snapshot")
+            return
+
+        if cmd == "/agents":
+            if self.agent and hasattr(self.agent, "nanocode_registry"):
+                agents = self.agent.nanocode_registry.list_primary()
+                self._print_line("Available agents:")
+                for a in agents:
+                    self._print_line(f"  {a.name}: {a.description}")
+            return
+
+        if cmd == "/debug":
+            if self.agent:
+                self.agent.debug = not getattr(self.agent, "debug", False)
+                self._print_line(f"Debug: {self.agent.debug}")
+            return
+
+        # Unknown command
+        self._print_error(f"Unknown command: {command}. Type /help for available commands.")
 
 
 async def run_tui(agent=None, show_thinking: bool = True):
