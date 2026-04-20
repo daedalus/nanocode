@@ -37,8 +37,14 @@ Experimental. It might be buggy.
 ### Multi-Agent System
 - Build, Plan, General, and Explore agents with different permission levels
 - Fine-grained permission controls: `allow`, `deny`, `ask`
-- Agent switching support
+- Agent switching support (`/agent <name>` and `/agents` commands)
 - Subagent support for specialized tasks
+- Doom loop detection with DENY permission
+
+### TUI (Terminal User Interface)
+- Textual-based terminal UI with Gruvbox dark theme
+- Command palette (press F1 to open)
+- Keyboard shortcuts: Enter (send), Ctrl+L (clear), Escape (quit), Ctrl+C (interrupt)
 
 ### Permission System
 - Tool execution control with allow/deny/ask actions
@@ -298,11 +304,46 @@ result = await tool_executor.execute("lsp", {
 
 ## Usage
 
-### Interactive Mode (CLI)
+### Command-Line Options
+
+```
+nanocode [-h] [--config CONFIG] [--provider PROVIDER] [--model MODEL]
+         [--no-planning] [--verbose] [--thinking] [--gui {textual,cli}]
+         [--acp] [--serve] [--serve-host SERVE_HOST] [--serve-port SERVE_PORT]
+         [--serve-auth SERVE_AUTH] [--mdns] [--admin] [--admin-host ADMIN_HOST]
+         [--admin-port ADMIN_PORT] [--cwd CWD] [--install-skills SKILL]
+         [--proxy PROXY] [--no-proxy] [--user-agent USER_AGENT]
+         [--show-messages] [--prompt PROMPT] [--debug-logging]
+         [--log-file LOG_FILE] [--cache]
+```
+
+Key options:
+- `-g, --gui {textual,cli}` - Choose UI mode (default: textual)
+- `--thinking, -t` - Show thinking/reasoning blocks
+- `-v, --verbose` - Verbose output
+- `--proxy PROXY` - HTTP proxy for API requests
+- `--model, -m MODEL` - Model to use
+- `--provider, -p PROVIDER` - LLM provider (openai, anthropic, ollama, etc.)
+- `--acp` - Start ACP server for IDE integration
+- `--serve` - Start HTTP server for remote operation
+
+### Interactive Mode (CLI or TUI)
 
 ```bash
 python3 main.py
+python3 main.py -g textual  # Use TUI (Textual) mode
 ```
+
+#### TUI Features
+
+The Textual TUI provides an enhanced terminal interface with:
+- **Command Palette** - Press `F1` to open the command palette
+- **Gruvbox Dark Theme** - Beautiful terminal colors
+- **Keyboard Shortcuts**:
+  - `Enter` - Send message
+  - `Ctrl+L` - Clear output
+  - `Escape` - Quit
+  - `Ctrl+C` - Interrupt current operation
 
 #### Install Skills
 
@@ -332,6 +373,30 @@ Special Commands (prefix with '/'):
 - `/debug` - Toggle HTTP debug logging
 - `/compact` - Compact context (summarize old messages)
 - `/show_thinking` - Toggle thinking display
+- `/agents` - List available agents
+- `/agent <name>` - Switch to a different agent
+
+### Command Palette (TUI)
+
+Press `F1` to open the command palette in TUI mode:
+- Search/filter commands
+- Navigate with arrow keys
+- Press Enter to select
+- Press Escape to cancel
+
+### Thinking Display
+
+The agent can display thinking/reasoning blocks with visual styling:
+- Uses `| Thinking:` prefix with gold ANSI color
+- Toggle with `/show_thinking` or `--thinking` flag
+
+### Doom Loop Detection
+
+Prevents infinite exploration loops by detecting:
+- Repeated tool call patterns
+- Failed iterations without progress
+- DENY permission for continuing loops
+- Tracks iteration count and tool history
 
 Regular Input:
 - Any text NOT starting with '/' is sent directly to the AI agent for processing
@@ -507,7 +572,23 @@ OLLAMA_BASE_URL=http://localhost:11434
 OPENCODE_ZEN_API_KEY=sk-...  # OpenCode Zen API key (optional)
 AGENT_CONFIG=config.yaml      # Custom config path
 HTTP_PROXY=http://localhost:8080  # Proxy for HTTP requests (also via --proxy flag)
+ANTHROPY_LICENSE_KEY=...     # Anthropic license key (optional)
 ```
+
+## ANSI Color Codes
+
+For terminal styling, the agent uses ANSI escape codes:
+
+| Code | Color | Usage |
+|------|-------|-------|
+| `\033[90m` | Gray | Dim text |
+| `\033[91m` | Red | Errors |
+| `\033[92m` | Green | Success |
+| `\033[93m` | Gold | Thinking |
+| `\033[94m` | Blue | Info |
+| `\033[95m` | Magenta | Commands |
+| `\033[96m` | Cyan | Links |
+| `\033[97m` | White | Default |
 
 ## Running Tests
 
