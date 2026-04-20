@@ -465,6 +465,16 @@ class InteractiveCLI:
                     command = user_input.lower()
                     if command in ("/exit", "/quit", "/q"):
                         self.ui.save_history()
+                        session_id = getattr(self.nanocode, '_session_id', 'unknown')
+                        print()
+                        print(self.ui.color("cyan", "░██████╗ ███████╗████████╗██████╗  ██████╗ ██████╗  █████╗ ██████╗ ██████╗ "))
+                        print(self.ui.color("cyan", "██╔════╝ ██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██╔══██╗██╔══██╗██╔══██╗██╔══██╗"))
+                        print(self.ui.color("cyan", "██║  ███╗█████╗     ██║   ██████╔╝██║   ██║██████╔╝███████║██████╔╝███████║"))
+                        print(self.ui.color("cyan", "██║   ██║██╔══╝     ██║   ██╔══██╗██║   ██║██╔══██╗██╔══██║██╔══██╗██╔══██║"))
+                        print(self.ui.color("cyan", "╚██████╔╝███████╗   ██║   ██║  ██║╚██████╔╝██████╔╝██║  ██║██║  ██║██║  ██║"))
+                        print(self.ui.color("cyan", " ╚═════╝ ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝"))
+                        print()
+                        print(f"Session: {session_id}")
                         print(self.ui.color("green", "Goodbye!"))
                         break
 
@@ -561,7 +571,17 @@ class InteractiveCLI:
 
             except KeyboardInterrupt:
                 self.ui.save_history()
-                print("\n" + self.ui.color("yellow", "Use 'exit' to quit"))
+                session_id = getattr(self.nanocode, '_session_id', 'unknown')
+                print()
+                print("\033[96m" + "░██████╗ ███████╗████████╗██████╗  ██████╗ ██████╗  █████╗ ██████╗ ██████╗ " + "\033[0m")
+                print("\033[96m" + "██╔════╝ ██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██╔══██╗██╔══██╗██╔══██╗██╔══██╗" + "\033[0m")
+                print("\033[96m" + "██║  ███╗█████╗     ██║   ██████╔╝██║   ██║██████╔╝███████║██████╔╝███████║" + "\033[0m")
+                print("\033[96m" + "██║   ██║██╔══╝     ██║   ██╔══██╗██║   ██║██╔══██╗██╔══██║██╔══██╗██╔══██║" + "\033[0m")
+                print("\033[96m" + "╚██████╔╝███████╗   ██║   ██║  ██║╚██████╔╝██████╔╝██║  ██║██║  ██║██║  ██║" + "\033[0m")
+                print("\033[96m" + " ╚═════╝ ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝" + "\033[0m")
+                print()
+                print(f"Session: {session_id}")
+                break
             except Exception as e:
                 self.last_error_trace = traceback.format_exc()
                 self.ui.print_error(str(e))
