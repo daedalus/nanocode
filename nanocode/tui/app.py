@@ -463,9 +463,18 @@ Footer {
         Binding("escape", "quit", "Quit", show=True),
         Binding("ctrl+c", "interrupt", "Interrupt", show=False),
         Binding("f1", "show_command_palette", "Commands", show=True),
-        Binding("up", "history_up", "History Up"),
-        Binding("down", "history_down", "History Down"),
     ]
+
+    def on_key(self, event) -> None:
+        """Capture arrow keys when Input is focused."""
+        input_widget = self.query_one("#input", Input)
+        if self.focused == input_widget:
+            if event.key == "up":
+                self._history_up()
+                event.prevent_default()
+            elif event.key == "down":
+                self._history_down()
+                event.prevent_default()
 
     # CLI commands list (not Textual CommandPalette)
     CLI_COMMANDS = [
