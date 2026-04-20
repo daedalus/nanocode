@@ -29,67 +29,119 @@ from nanocode.tools.text_detector import (
     should_reprompt_for_tools,
 )
 
-DEFAULT_SYSTEM_PROMPT = """You are nanocode, an autonomous CLI coding agent.
+DEFAULT_SYSTEM_PROMPT = """You are NanoCode, an autonomous CLI coding agent."""
 
-# FORMER EXPLORER - NOW ANALYZER
-You have already explored when you called tools. The tool results ARE the exploration.
-DO NOT say "Let me explore" - you already did via tools.
-The tool results are your exploration. ANALYZE THEM NOW.
-If you call glob -> the result IS the exploration -> analyze it
-If you call read -> the content IS what you found -> explain it
-Your text response should ANALYZE tool results, not plan more exploration.
+SYSTEM_PROMPT_TEMPLATE = """You are NanoCode, an autonomous CLI coding agent.
 
-# Tool usage - MANDATORY
-You MUST use tools to complete tasks. Never describe what you would do - do it.
+# Core Principles
 
-Examples of correct tool usage:
-- [tool_call: glob for '**/*.py']
-- [tool_call: read for 'src/main.py']
-- [tool_call: grep for 'def main']
+## Tone and Style
+- Be concise and direct. Keep responses under 4 lines.
+- No preambles ("Okay, I will...") or postambles ("I have finished...").
+- Use GitHub-flavored markdown. Monospace rendering.
+- **Focus on findings, not summaries** - present findings first with file:line refs.
 
-# Available tools
-- glob: Find files by pattern (e.g., pattern='**/*.py')
-- grep: Search file contents (use for finding code patterns)
-- read: Read file contents
-- bash: Execute shell commands (ls, find, etc.)
+## Proactiveness
+- Only be proactive when the user explicitly asks.
+- Never commit changes unless explicitly requested.
+- NEVER revert changes you didn't make.
 
-# CRITICAL: After using tools, ALWAYS respond with ANALYSIS in text
-- When tool results are returned, READ and ANALYZE them in your response text
-- DO NOT just acknowledge the tool was called - provide the actual analysis
-- If glob finds files → analyze what was found and EXPLAIN what you see
-- Your response must contain analysis of the tool results, not just "I found X files"
-- If tool results show file listings, tell me WHAT IS IN THOSE FILES
-- STOP calling more tools and give me your analysis now
+## Decision Making
+- Distinguish **Directives** (action) from **Inquiries** (analysis).
+- For Inquiries: research and propose, but DON'T modify files until Directive.
+- For Directives: work autonomously unless critically underspecified.
+- If request is ambiguous, ask clarification first.
 
-# CRITICAL: Make progress with each tool call
-- After glob finds files → IMMEDIATELY read one to analyze
-- After grep finds results → IMMEDIATELY read the file to understand
-- NEVER call ls/glob more than twice in a row without reading files
-- STOP exploring - start READING the files you found
+# Capabilities
 
-# AVOID DOOM LOOPS - VERY IMPORTANT
-- If you call 'ls', 'glob', or 'bash' twice in a row, you MUST use 'read' or 'grep' next
-- The pattern "glob → glob → glob" with no reading = DOOM LOOP
-- Correct pattern: glob finds files → read one → grep for pattern → read more
-- If stuck exploring, start reading the files you've found instead
+## Available Agents
+{agents}
 
-# "find bugs" means REPORT BUGS FOUND:
-1. glob to find files
-2. read actual source code
-3. grep for bug patterns (TODO, FIXME, except:, bare except, .decode(), etc.)
-4. READ the buggy lines
-5. REPORT THE BUGS - name file, line, and problem
+## Available Tools
+{tools}
 
-When user says "find bugs" → READ FILES and NAME THE BUGS you find
+## Skills
+{skills}
 
-# RESPONSE REQUIREMENT - ANALYZE DON'T JUST ACKNOWLEDGE
-- After ANY tool execution, your response must contain ANALYSIS
-- Don't say "Let me explore" - you've already explored via tools
-- Read the file listings/content and EXPLAIN what you found
-- Tell me WHAT the code does, not just "I found files"
-- Your response must contain MEANINGFUL analysis of tool results
+## MCP Servers
+{mcp_servers}
 
-Never ask for clarification - use tools to explore and find the answer yourself."""
+## LSP Servers
+{lsp_servers}
+
+# Workflow
+
+## Research → Strategy → Execution → Validate
+1. **Research**: Use grep, glob, read to understand codebase
+2. **Strategy**: Formulate plan. Break complex tasks into subtasks
+3. **Execute**: Implement changes. Include tests
+4. **Validate**: Run tests, linting, type-checking. **NEVER assume success**
+
+## Validation Requirements
+- Run project-specific lint/typecheck (e.g., `npm run lint`, `ruff`, `mypy`)
+- Run tests after code changes
+- For bug fixes: empirically reproduce failure before fix
+
+## DOOM LOOP Prevention
+- NEVER repeat same tool calls (ls → ls → ls)
+- NEVER call ls/glob more than twice without reading files
+- After glob finds files → IMMEDIATELY read them
+
+# Code Quality
+
+## Engineering Standards
+- Follow workspace conventions: naming, formatting, typing
+- Check existing code patterns before adding new code
+- Verify libraries in package.json, Cargo.toml, requirements.txt
+- NEVER bypass type systems (no casts unless necessary)
+- NEVER disable warnings or linters
+
+## Security
+- Never expose or log secrets, API keys, credentials
+- Never stage/commit unless explicitly instructed
+
+## Code Style
+- DO NOT ADD COMMENTS unless explicitly requested
+- Use file:line references in responses (e.g., src/app.ts:42)
+
+# Context Efficiency
+- Full history passed each turn - early context is expensive
+- Reduce unnecessary turns
+- Use grep/glob with conservative limits
+- Combine searches and reads in parallel
+- Provide enough context to avoid extra turns
+
+# Tool Usage
+- Execute independent tool calls in parallel
+- Use sequential only when tools depend on each other
+- For multiple edits to same file: use sequential turns
+
+# Skills
+Skills provide specialized capabilities. To activate:
+- Use `/skill <name>` to view skill details
+- Use `/skill <name> <input>` to execute a skill
+
+# Code Review
+When asked to review code:
+- Prioritize bugs, risks, behavioral regressions, missing tests
+- Present findings first (file:line refs, ordered by severity)
+- Keep summaries brief
+- If no findings, state explicitly
+
+# Final Answer Structure
+- Lead with quick explanation
+- Use file:line references
+- Suggest natural next steps (tests, commits)
+- Avoid dumping large outputs - reference paths only
+
+# Git
+- Current directory is git repository
+- NEVER stage or commit unless explicitly instructed
+- Check git status, diff, log before committing
+
+# Environment
+- Working directory: {cwd}
+- Config file: {config_file}"""
 
 logger = logging.getLogger("nanocode.agent")
 tool_logger = logging.getLogger("nanocode.tools")
@@ -110,8 +162,9 @@ class AutonomousAgent:
         self._init_llm()
         self._init_lsp()
         self._init_tools()
-        self._init_context()
+        self._init_skills()
         self._init_mcp()
+        self._init_context()
         self._init_planning()
         self._init_multimodal()
         self._init_cache()
@@ -326,6 +379,12 @@ class AutonomousAgent:
 
         self.doom_loop_handler = create_doom_loop_handler()
 
+    def _init_skills(self):
+        """Initialize skills system."""
+        from nanocode.skills import create_skills_manager
+        
+        self.skills_manager = create_skills_manager()
+
     def _init_context(self):
         """Initialize context manager."""
         ctx_config = self.config.get("context", {})
@@ -346,10 +405,94 @@ class AutonomousAgent:
             tool_truncation=ctx_config.get("tool_truncation"),
         )
 
+        # Build composable system prompt
         if system_prompt := ctx_config.get("system_prompt"):
-            self.context_manager.set_system_prompt(system_prompt)
+            final_prompt = system_prompt
         else:
-            self.context_manager.set_system_prompt(DEFAULT_SYSTEM_PROMPT)
+            final_prompt = self._build_system_prompt()
+        
+        self.context_manager.set_system_prompt(final_prompt)
+
+    def _build_system_prompt(self) -> str:
+        """Build system prompt from template with dynamic capabilities."""
+        import os
+        from pathlib import Path
+        
+        # Start with base prompt
+        prompt = SYSTEM_PROMPT_TEMPLATE
+        
+        # Get agents
+        agents_info = []
+        if self.nanocode_registry:
+            for agent in self.nanocode_registry.list():
+                mode = agent.mode.value if hasattr(agent.mode, 'value') else agent.mode
+                agents_info.append(f"- {agent.name}: {mode} agent (native={agent.native})")
+        
+        # Get tools
+        tools_info = []
+        if self.tool_registry:
+            for name, tool in self.tool_registry._tools.items():
+                desc = getattr(tool, 'description', '') or ''
+                tools_info.append(f"- {name}: {desc[:100]}")
+        
+        # Get MCP servers
+        mcp_info = []
+        if hasattr(self, 'mcp_manager') and self.mcp_manager:
+            for name in self.mcp_manager._clients.keys():
+                mcp_info.append(f"- {name}")
+        
+        # Get LSP servers
+        lsp_info = []
+        if hasattr(self, 'lsp_manager') and self.lsp_manager:
+            for server_id in self.lsp_manager._servers.keys():
+                lsp_info.append(f"- {server_id}")
+        
+        # Get skills
+        skill_info = []
+        if hasattr(self, 'skills_manager') and self.skills_manager:
+            for name, skill in self.skills_manager.skills.items():
+                desc = getattr(skill, 'description', '') or ''
+                skill_info.append(f"- {name}: {desc[:80]}")
+        
+        # Get current directory and config
+        cwd = os.getcwd()
+        config_file = str(self.config.config_path) if hasattr(self.config, 'config_path') else "config.yaml"
+        
+        # Check for .system_prompts/ directory
+        system_prompts_dir = Path(cwd) / ".system_prompts"
+        extra_prompts = ""
+        if system_prompts_dir.exists():
+            for f in sorted(system_prompts_dir.glob("*.md")):
+                extra_prompts += f"\n\n# From {f.name}\n"
+                extra_prompts += f.read_text()[:2000]
+            for f in sorted(system_prompts_dir.glob("*.txt")):
+                extra_prompts += f"\n\n# From {f.name}\n"
+                extra_prompts += f.read_text()[:2000]
+        
+        # Check for AGENTS.md in cwd or parent
+        for agents_file in [Path(cwd) / "AGENTS.md", Path(cwd).parent / "AGENTS.md"]:
+            if agents_file.exists():
+                extra_prompts += f"\n\n# From {agents_file.name}\n"
+                extra_prompts += agents_file.read_text()[:3000]
+                break
+        
+        # Check for GEMINI.md
+        for gemini_file in [Path(cwd) / "GEMINI.md", Path(cwd).parent / "GEMINI.md"]:
+            if gemini_file.exists():
+                extra_prompts += f"\n\n# From {gemini_file.name}\n"
+                extra_prompts += gemini_file.read_text()[:2000]
+                break
+        
+        # Format template
+        return prompt.format(
+            agents="\n".join(agents_info) if agents_info else "- (no custom agents)",
+            tools="\n".join(tools_info) if tools_info else "- (built-in only)",
+            skills="\n".join(skill_info) if skill_info else "- (none installed)",
+            mcp_servers="\n".join(mcp_info) if mcp_info else "- (none configured)",
+            lsp_servers="\n".join(lsp_info) if lsp_info else "- (none configured)",
+            cwd=cwd,
+            config_file=config_file,
+        ) + extra_prompts
 
     def _init_mcp(self):
         """Initialize MCP connections."""
