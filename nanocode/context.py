@@ -310,6 +310,15 @@ class ModelLimits:
                     output_limit = min(context_limit // 8, 16384)
                     logger.debug(f"get_limits_sync({model}): found in registry, context={context_limit}")
                     return {"context": context_limit, "output": output_limit}
+                logger.debug(f"get_limits_sync({model}): not found via full_id, checking providers")
+            
+            for provider_id, provider in registry._providers.items():
+                if model in provider.models:
+                    model_info = provider.models[model]
+                    context_limit = model_info.context_limit
+                    output_limit = min(context_limit // 8, 16384)
+                    logger.debug(f"get_limits_sync({model}): found in provider '{provider_id}', context={context_limit}")
+                    return {"context": context_limit, "output": output_limit}
             logger.debug(f"get_limits_sync({model}): not found in registry, checking defaults")
 
         model_lower = model.lower()
