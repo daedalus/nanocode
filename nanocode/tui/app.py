@@ -409,7 +409,9 @@ Footer {
     background: #282828;
 }
 #sidebar {
-    width: 38;
+    width: 20%;
+    min-width: 30;
+    max-width: 50;
     background: #3c3836;
     border-left: solid #928374;
 }
