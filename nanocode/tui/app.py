@@ -410,6 +410,14 @@ Footer {
     text-align: right;
     color: #ebdbb2;
 }
+#spinner {
+    width: 3;
+    color: #458588;
+    text-style: bold;
+}
+.spinner-active {
+    color: #458588;
+}
 #input {
     height: auto;
     border: none;
@@ -513,6 +521,7 @@ Footer {
             with OutputArea(id="output-area", auto_scroll=True):
                 pass
             with Horizontal(id="input-container"):
+                yield Static("", id="spinner")
                 yield Label("➜", id="input-prompt")
                 yield Input(placeholder="Enter your task...", id="input")
         yield Static("", id="status-bar")
@@ -526,6 +535,17 @@ Footer {
         if self.agent:
             self._setup_permission_callback()
     
+    def _update_spinner(self) -> None:
+        """Update spinner animation."""
+        if not self._processing:
+            if hasattr(self, '_spinner_timer') and self._spinner_timer:
+                self._spinner_timer.stop()
+            return
+        
+        self._spinner_index = (self._spinner_index + 1) % len(self._spinner_chars)
+        spinner = self.query_one("#spinner", Static)
+        spinner.update(self._spinner_chars[self._spinner_index])
+
     def _show_welcome(self):
         """Show welcome message matching opencode style."""
         self._print_logo()
@@ -840,6 +860,16 @@ Footer {
 
         self._processing = True
 
+        # Show and animate spinner
+        spinner = self.query_one("#spinner", Static)
+        spinner.update("◐")
+        spinner.classes = "spinner-active"
+        
+        # Start spinner animation
+        self._spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        self._spinner_index = 0
+        self._spinner_timer = self.set_interval(0.15, self._update_spinner)
+
         input_widget = self.query_one("#input", Input)
         input_widget.disabled = True
 
@@ -973,6 +1003,14 @@ Footer {
             self._print_error(f"Error: {e}")
             traceback.print_exc()
         finally:
+            # Stop spinner
+            if hasattr(self, '_spinner_timer') and self._spinner_timer:
+                self._spinner_timer.stop()
+                self._spinner_timer = None
+            spinner = self.query_one("#spinner", Static)
+            spinner.update("")  # Clear spinner
+            spinner.classes = ""  # Remove active class
+            
             self._processing = False
             input_widget.disabled = False
             input_widget.focus()
