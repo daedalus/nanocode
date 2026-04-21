@@ -409,6 +409,7 @@ Footer {
     background: #282828;
 }
 #sidebar {
+    width: 38;
     background: #3c3836;
     border-left: solid #928374;
 }
@@ -552,7 +553,7 @@ Footer {
                     yield Static("", id="spinner")
                     yield Label("➜", id="input-prompt")
                     yield Input(placeholder="Enter your task...", id="input")
-            with Vertical(id="sidebar", width=38):
+            with Vertical(id="sidebar"):
                 yield Static("╭─ Info ──╮", id="sidebar-title")
                 with ScrollableContainer(id="sidebar-content"):
                     yield Static("", id="sidebar-body")
