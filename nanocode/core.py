@@ -539,8 +539,12 @@ class AutonomousAgent:
             final_prompt = system_prompt
         else:
             final_prompt = self._build_system_prompt()
-        
+
         self.context_manager.set_system_prompt(final_prompt)
+
+    async def init_async(self):
+        """Async initialization - load model registry from API."""
+        await self.context_manager.init_async()
 
     def _build_system_prompt(self) -> str:
         """Build system prompt from template with dynamic capabilities."""

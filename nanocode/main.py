@@ -301,6 +301,7 @@ async def main():
                 auth_username = args.serve_auth
 
         agent = AutonomousAgent(config, session_id=args.resume, verbose=args.verbose)
+        await agent.init_async()
 
         if args.mdns:
             try:
@@ -332,6 +333,7 @@ async def main():
         if args.user_agent:
             config.set("user_agent", args.user_agent)
         agent = AutonomousAgent(config, session_id=args.resume)
+        await agent.init_async()
         await run_acp(agent)
         return
 
@@ -390,6 +392,7 @@ async def main():
         )
 
     agent = AutonomousAgent(config, session_id=args.resume, verbose=args.verbose)
+    await agent.init_async()
     atexit.register(lambda: _save_session_on_exit(agent))
 
     show_thinking = getattr(args, "thinking", False)  # Default: disabled (use --thinking to enable)
