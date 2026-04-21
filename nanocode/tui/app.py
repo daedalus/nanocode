@@ -638,8 +638,9 @@ Footer {
         if self.agent and hasattr(self.agent, "llm") and self.agent.llm:
             model = getattr(self.agent.llm, "model", "unknown")
             lines.append(f"Model: {model}")
-            if hasattr(self.agent.llm, "max_tokens"):
-                lines.append(f"Max out: {self.agent.llm.max_tokens:,}")
+            max_out = getattr(self.agent.llm, "max_tokens", None)
+            if max_out:
+                lines.append(f"Max out: {max_out:,}")
 
         if hasattr(self, "_session_id") and self._session_id:
             lines.append(f"Session: {self._session_id[:12]}")
