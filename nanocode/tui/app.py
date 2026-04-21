@@ -702,6 +702,28 @@ Footer {
                     if len(lsp_servers) > 10:
                         lines.append(f"  ... and {len(lsp_servers) - 10} more")
 
+            if hasattr(self.agent, 'modified_files') and self.agent.modified_files:
+                try:
+                    self.agent.modified_files.refresh_from_git()
+                    modified = self.agent.modified_files.get_modified_files()
+                    if modified:
+                        lines.append("─ Modified ─")
+                        for f in modified[:15]:
+                            adds_str = f"+{f.additions}" if f.additions > 0 else ""
+                            dels_str = f"-{f.deletions}" if f.deletions > 0 else ""
+                            stats_parts = []
+                            if adds_str:
+                                stats_parts.append(adds_str)
+                            if dels_str:
+                                stats_parts.append(dels_str)
+                            stats = " " + " ".join(stats_parts) if stats_parts else ""
+                            file_name = f.relative_path.split("/")[-1]
+                            lines.append(f"  {file_name}{stats}")
+                        if len(modified) > 15:
+                            lines.append(f"  ... and {len(modified) - 15} more")
+                except Exception:
+                    pass
+
         try:
             sidebar_body = self.query_one("#sidebar-body", Static)
             sidebar_body.update("\n".join(lines))

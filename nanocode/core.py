@@ -262,6 +262,7 @@ class AutonomousAgent:
         self._init_tools()
         self._init_skills()
         self._init_mcp()
+        self._init_modified_files()
         self._init_context()
         self._init_planning()
         self._init_multimodal()
@@ -632,6 +633,11 @@ class AutonomousAgent:
             self._mcp_available[name] = server_config.get("enabled", True)
             if self._mcp_available[name]:
                 self.mcp_manager.add_server(name, server_config)
+
+    def _init_modified_files(self):
+        """Initialize modified files tracker."""
+        from nanocode.modified_files import ModifiedFilesTracker
+        self.modified_files = ModifiedFilesTracker()
 
     def _init_planning(self):
         """Initialize planning system."""
