@@ -717,8 +717,7 @@ Footer {
                             if dels_str:
                                 stats_parts.append(dels_str)
                             stats = " " + " ".join(stats_parts) if stats_parts else ""
-                            file_name = f.relative_path.split("/")[-1]
-                            lines.append(f"  {file_name}{stats}")
+                            lines.append(f"  {f.relative_path}{stats}")
                         if len(modified) > 15:
                             lines.append(f"  ... and {len(modified) - 15} more")
                 except Exception:
