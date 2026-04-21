@@ -145,8 +145,10 @@ class OpenAILLM(LLMBase):
 
         # DEBUG: Print raw response on error
         if response.status_code != 200:
-            print(f"[DEBUG] OpenAI Raw response: status={response.status_code}, data={data}")
-            logger.error(f"[OpenAI] API Error: status={response.status_code}, data={data}")
+            print(f"\n[DEBUG] OpenAI status={response.status_code}")
+            print(f"[DEBUG] OpenAI Response text: {response.text}")
+            logger.error(f"[OpenAI] API Error: status={response.status_code}")
+            logger.error(f"[OpenAI] Response text: {response.text}")
         # DEBUG: Print response
         if "error" in data:
             error_msg = data.get("error", {}).get("message", str(data))

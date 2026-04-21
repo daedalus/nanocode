@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
+from httpx import HTTPStatusError
 
 from nanocode.retry import (
     ProviderOverloadedError,
@@ -232,7 +233,18 @@ class LLMBase(ABC):
                         f"Provider overloaded ({response.status_code}): {response.text[:200]}"
                     )
 
-                response.raise_for_status()
+                if response.status_code >= 400:
+                    try:
+                        error_data = response.json()
+                        error_msg = error_data.get("error", {}).get("message", response.text[:300])
+                    except Exception:
+                        error_msg = response.text[:300]
+                    raise HTTPStatusError(
+                        f"{response.status_code} {response.reason_phrase}: {error_msg}",
+                        request=response.request,
+                        response=response,
+                    )
+
                 return response
 
         if self.retry_config.max_retries > 0:

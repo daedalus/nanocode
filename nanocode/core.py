@@ -229,6 +229,20 @@ def get_session_logger(session_id: str = None):
     return base_logger
 
 
+_current_session_id: str | None = None
+
+
+def set_current_session_id(session_id: str) -> None:
+    """Set the current session ID globally."""
+    global _current_session_id
+    _current_session_id = session_id
+
+
+def get_current_session_id() -> str | None:
+    """Get the current session ID."""
+    return _current_session_id
+
+
 class AutonomousAgent:
     """Main autonomous agent class."""
 
@@ -268,6 +282,7 @@ class AutonomousAgent:
             self.session = self.session_manager.create()
             self._session_id = self.session.id
         logger.info(f"Session: {self._session_id}")
+        set_current_session_id(self._session_id)
         self._session_logger = get_session_logger(self._session_id)
 
     def save_session(self):

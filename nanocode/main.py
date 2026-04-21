@@ -68,6 +68,11 @@ def parse_args():
         help="UI mode (default: textual)",
     )
     parser.add_argument(
+        "--no-spinner",
+        action="store_true",
+        help="Disable spinner animation in CLI mode",
+    )
+    parser.add_argument(
         "--acp",
         action="store_true",
         help="Start ACP (Agent Client Protocol) server",
@@ -191,7 +196,7 @@ def parse_args():
     return parser.parse_args()
 
 
-async def run_cli(agent, show_thinking: bool = False, show_messages: bool = False):
+async def run_cli(agent, show_thinking: bool = False, show_messages: bool = False, enable_spinner: bool = True):
     """Run the CLI interface."""
     from nanocode.agents.permission import (
         PermissionCallback,
@@ -229,7 +234,8 @@ async def run_cli(agent, show_thinking: bool = False, show_messages: bool = Fals
     agent.permission_handler.set_callback(permission_callback)
 
     cli = InteractiveCLI(
-        agent, show_thinking=show_thinking, show_messages=show_messages
+        agent, show_thinking=show_thinking, show_messages=show_messages,
+        enable_spinner=enable_spinner
     )
     await cli.run()
 
@@ -431,7 +437,12 @@ async def main():
         return
 
     if gui_mode == "cli":
-        await run_cli(agent, show_thinking=show_thinking, show_messages=show_messages)
+        await run_cli(
+            agent,
+            show_thinking=show_thinking,
+            show_messages=show_messages,
+            enable_spinner=not getattr(args, "no_spinner", False)
+        )
     else:
         await run_tui(agent, show_thinking=gui_show_thinking, show_messages=show_messages)
 

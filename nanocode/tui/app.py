@@ -651,12 +651,38 @@ Footer {
                 active = sum(1 for s in task_tool.sessions.values() if not s.completed)
                 if active > 0:
                     lines.append(f"Active tasks: {active}")
+
             todo_tool = self.agent.tool_registry.get("todo")
-            if todo_tool and hasattr(todo_tool, "tasks"):
-                pending = sum(1 for t in todo_tool.tasks.values() if t.get("status") == "pending")
-                completed = sum(1 for t in todo_tool.tasks.values() if t.get("status") == "completed")
-                if pending > 0 or completed > 0:
-                    lines.append(f"Todos: {pending} pending, {completed} done")
+            if todo_tool and hasattr(todo_tool, "todo_service"):
+                session_id = getattr(self.agent, '_session_id', None)
+                if session_id:
+                    todos = todo_tool.todo_service.get_todos(session_id)
+                    if todos:
+                        lines.append("─ Todos ─")
+                        for t in todos:
+                            if t.status == "completed":
+                                icon = "✓"
+                            elif t.status == "in_progress":
+                                icon = "◐"
+                            elif t.status == "cancelled":
+                                icon = "✗"
+                            else:
+                                icon = "○"
+                            content = t.content[:30] + "..." if len(t.content) > 30 else t.content
+                            lines.append(f"  {icon} {content}")
+            elif todo_tool and hasattr(todo_tool, "tasks"):
+                todo_items = todo_tool.tasks
+                if todo_items:
+                    lines.append("─ Todos ─")
+                    for tid, t in todo_items.items():
+                        if t.get("status") == "completed":
+                            icon = "✓"
+                        elif t.get("status") == "in_progress":
+                            icon = "◐"
+                        else:
+                            icon = "○"
+                        content = t.get("content", "")[:30]
+                        lines.append(f"  {icon} {content}")
 
         try:
             sidebar_body = self.query_one("#sidebar-body", Static)

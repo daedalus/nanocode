@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from nanocode.tools import Tool, ToolRegistry, ToolResult
+from nanocode.todo_service import get_todo_service
 
 
 def atomic_write(file_path: Path, content: str) -> None:
@@ -898,39 +899,87 @@ class WebSearchTool(Tool):
 
 
 class TodoTool(Tool):
-    """Manage task list."""
+    """Manage task list - supports adding/updating multiple todos at once."""
 
-    def __init__(self):
+    def __init__(self, todo_service=None):
         super().__init__(
             name="todo",
             description="Manage a todo list for tracking tasks",
         )
-        self.tasks = {}
+        self.todo_service = todo_service
+
+    def get_schema(self) -> dict:
+        return {
+            "type": "function",
+            "function": {
+                "name": "todo",
+                "description": "Manage a todo list for tracking tasks. Use this to track your progress on multi-step tasks.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["read", "write"],
+                            "description": "Action: 'read' to query current todos, 'write' to update todos",
+                        },
+                        "todos": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "content": {"type": "string", "description": "Brief description of the task"},
+                                    "status": {"type": "string", "enum": ["pending", "in_progress", "completed", "cancelled"], "description": "Current status"},
+                                    "priority": {"type": "string", "enum": ["high", "medium", "low"], "description": "Priority level"},
+                                },
+                                "required": ["content", "status", "priority"],
+                            },
+                            "description": "The updated todo list (for 'write' action)",
+                        },
+                    },
+                    "required": ["action"],
+                },
+            },
+        }
 
     async def execute(
-        self, action: str, task: str = None, task_id: str = None
+        self, action: str = "read", todos: list = None
     ) -> ToolResult:
-        """Manage todos."""
-        if action == "add":
-            import uuid
+        """Manage todos - read or write the entire list."""
+        if self.todo_service is None:
+            from nanocode.todo_service import get_todo_service
+            self.todo_service = get_todo_service()
 
-            task_id = str(uuid.uuid4())[:8]
-            self.tasks[task_id] = {"content": task, "status": "pending"}
-            return ToolResult(success=True, content=f"Added task {task_id}: {task}")
-        elif action == "list":
-            return ToolResult(success=True, content=self.tasks)
-        elif action == "complete" and task_id:
-            if task_id in self.tasks:
-                self.tasks[task_id]["status"] = "completed"
-                return ToolResult(success=True, content=f"Completed task {task_id}")
+        if action == "read":
+            from nanocode.core import get_current_session_id
+            session_id = get_current_session_id() or "default"
+            items = self.todo_service.get_todos(session_id)
+            todos_list = [
+                {"content": t.content, "status": t.status, "priority": t.priority}
+                for t in items
+            ]
+            stats = self.todo_service.get_stats(session_id)
             return ToolResult(
-                success=False, content=None, error=f"Task {task_id} not found"
+                success=True,
+                content=f"{stats['pending']} pending, {stats['in_progress']} in progress, {stats['completed']} done",
+                metadata={"todos": todos_list, "stats": stats},
             )
-        elif action == "delete" and task_id:
-            self.tasks.pop(task_id, None)
-            return ToolResult(success=True, content=f"Deleted task {task_id}")
+        elif action == "write" and todos is not None:
+            from nanocode.core import get_current_session_id
+            session_id = get_current_session_id() or "default"
+            self.todo_service.update_todos(session_id, todos)
+            pending = sum(1 for t in todos if t.get("status") == "pending")
+            completed = sum(1 for t in todos if t.get("status") == "completed")
+            return ToolResult(
+                success=True,
+                content=f"Updated todo list: {pending} pending, {completed} done",
+                metadata={"todos": todos},
+            )
         else:
-            return ToolResult(success=False, content=None, error="Invalid action")
+            return ToolResult(
+                success=False,
+                content="Invalid action",
+                error="Invalid action. Use 'read' or 'write'.",
+            )
 
 
 class LSPTool(Tool):
@@ -1769,7 +1818,7 @@ def create_builtin_tools(
         # Free search tools (no API key required)
         FreeExaSearchTool(),
         OpenWebSearchTool(),
-        TodoTool(),
+        TodoTool(todo_service=get_todo_service()),
         # LSP tool
         LSPTool(lsp_manager=lsp_manager),
         # PTY tools

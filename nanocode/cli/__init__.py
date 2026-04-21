@@ -430,7 +430,7 @@ class CommandHistory:
 class InteractiveCLI:
     """Main CLI for the agent."""
 
-    def __init__(self, agent, show_thinking: bool = True, show_messages: bool = False):
+    def __init__(self, agent, show_thinking: bool = True, show_messages: bool = False, enable_spinner: bool = True):
         self.nanocode = agent
         self.ui = ConsoleUI()
         self.history = CommandHistory()
@@ -438,6 +438,7 @@ class InteractiveCLI:
         self.compact_threshold: float = 85.0
         self.show_thinking = show_thinking
         self.show_messages = show_messages
+        self.enable_spinner = enable_spinner
         self.debug = False
 
     async def run(self):
@@ -590,8 +591,10 @@ class InteractiveCLI:
         """Process user input through the agent."""
         self.ui.print_message("user", user_input)
 
-        spinner = Spinner("Thinking")
-        spinner.start(self.ui)
+        spinner = None
+        if self.enable_spinner:
+            spinner = Spinner("Thinking")
+            spinner.start(self.ui)
 
         try:
             response = await self.nanocode.process_input(
@@ -600,7 +603,8 @@ class InteractiveCLI:
                 show_messages=self.show_messages,
             )
         finally:
-            spinner.stop()
+            if spinner:
+                spinner.stop()
 
         if response.startswith("Error:") and self.nanocode.state.last_traceback:
             self.last_error_trace = self.nanocode.state.last_traceback
