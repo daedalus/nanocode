@@ -163,7 +163,7 @@ class SessionManager:
         """List all sessions, most recent first."""
         sessions = []
         for filepath in sorted(
-            self.storage_dir.glob("session_*.json"), key=lambda p: p.stat().st_mtime, reverse=True
+            self.storage_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
         ):
             if limit and len(sessions) >= limit:
                 break

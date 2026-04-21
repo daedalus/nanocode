@@ -1,5 +1,5 @@
 llm:
-  default_provider: openrouter
+  default_provider: opencode
   use_model_registry: false
   default_model: "openrouter/free"
   user_agent: "opencode/1.4.8"
@@ -8,7 +8,7 @@ llm:
 
     opencode:
       api_key: public
-      base_url: https://opencode.ai/api/v1
+      base_url: https://api.opencode.ai/v1
       model: opencode/big-pickle
 
     openrouter:
