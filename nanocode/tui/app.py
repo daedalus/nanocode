@@ -393,6 +393,9 @@ Footer {
 #main-container {
     height: 100%;
 }
+#content-area {
+    width: 1fr;
+}
 #output-area {
     height: 1fr;
     border: solid #458588;
@@ -404,6 +407,25 @@ Footer {
     height: auto;
     padding: 0 1 1 1;
     background: #282828;
+}
+#sidebar {
+    background: #3c3836;
+    border-left: solid #928374;
+}
+#sidebar-title {
+    background: #3c3836;
+    color: #d79921;
+    padding: 0 1;
+    text-style: bold;
+}
+#sidebar-body {
+    padding: 1;
+    color: #ebdbb2;
+}
+#sidebar-footer {
+    background: #3c3836;
+    color: #928374;
+    padding: 0 1;
 }
 #input-prompt {
     width: 2;
@@ -471,6 +493,7 @@ Footer {
         Binding("escape", "quit", "Quit", show=True),
         Binding("ctrl+c", "interrupt", "Interrupt", show=False),
         Binding("f1", "show_command_palette", "Commands", show=True),
+        Binding("ctrl+b", "toggle_sidebar", "Sidebar", show=True),
     ]
 
     def on_key(self, event) -> None:
@@ -516,16 +539,24 @@ Footer {
         self._processing = False
         self._input_history: list[str] = []
         self._history_index = -1
-    
+        self._sidebar_visible = True
+        self._sidebar_content: list[str] = []
+
     def compose(self) -> ComposeResult:
         yield Header()
-        with Vertical(id="main-container"):
-            with OutputArea(id="output-area", auto_scroll=True):
-                pass
-            with Horizontal(id="input-container"):
-                yield Static("", id="spinner")
-                yield Label("➜", id="input-prompt")
-                yield Input(placeholder="Enter your task...", id="input")
+        with Horizontal(id="main-container"):
+            with Vertical(id="content-area"):
+                with OutputArea(id="output-area", auto_scroll=True):
+                    pass
+                with Horizontal(id="input-container"):
+                    yield Static("", id="spinner")
+                    yield Label("➜", id="input-prompt")
+                    yield Input(placeholder="Enter your task...", id="input")
+            with Vertical(id="sidebar", width=38):
+                yield Static("╭─ Info ──╮", id="sidebar-title")
+                with ScrollableContainer(id="sidebar-content"):
+                    yield Static("", id="sidebar-body")
+                yield Static("╰─────────╯", id="sidebar-footer")
         yield Static("", id="status-bar")
         yield Footer()
     
@@ -538,21 +569,70 @@ Footer {
             self._setup_permission_callback()
         
         self._status_timer = self.set_interval(1.0, self._update_status_bar)
+        self._sidebar_timer = self.set_interval(2.0, self._update_sidebar)
+        self._update_sidebar()
 
     def _update_status_bar(self) -> None:
         """Update status bar with subagent count."""
         status_bar = self.query_one("#status-bar", Static)
-        
+
         if self.agent and hasattr(self.agent, "tool_registry"):
             task_tool = self.agent.tool_registry.get("task")
             if task_tool and hasattr(task_tool, "sessions"):
                 active = sum(1 for s in task_tool.sessions.values() if not s.completed)
                 if active > 0:
                     status_bar.update(f"Tasks: {active}")
+                    self._update_sidebar()
                     return
-        
+
         status_bar.update("")
-    
+        self._update_sidebar()
+
+    def _update_sidebar(self) -> None:
+        """Update sidebar content with current state info."""
+        if not self._sidebar_visible:
+            return
+
+        lines = []
+
+        if self.agent and hasattr(self.agent, "context_manager"):
+            ctx = self.agent.context_manager
+            usage = ctx.get_token_usage()
+            lines.append(f"Context: {usage.get('current_tokens', 0):,} / {usage.get('max_tokens', 0):,}")
+            lines.append(f"Msgs: {usage.get('message_count', 0)}")
+
+        if self.agent and hasattr(self.agent, "current_agent"):
+            lines.append(f"Agent: {self.agent.current_agent.name}")
+
+        if hasattr(self, "_session_id") and self._session_id:
+            lines.append(f"Session: {self._session_id[:12]}")
+
+        if self.agent and hasattr(self.agent, "tool_registry"):
+            task_tool = self.agent.tool_registry.get("task")
+            if task_tool and hasattr(task_tool, "sessions"):
+                active = sum(1 for s in task_tool.sessions.values() if not s.completed)
+                if active > 0:
+                    lines.append(f"Active tasks: {active}")
+
+        try:
+            sidebar_body = self.query_one("#sidebar-body", Static)
+            sidebar_body.update("\n".join(lines))
+        except Exception:
+            pass
+
+    def action_toggle_sidebar(self) -> None:
+        """Toggle sidebar visibility."""
+        self._sidebar_visible = not self._sidebar_visible
+        try:
+            sidebar = self.query_one("#sidebar")
+            if self._sidebar_visible:
+                sidebar.display = "block"
+            else:
+                sidebar.display = "none"
+            self._update_sidebar()
+        except Exception:
+            pass
+
     def _update_spinner(self) -> None:
         """Update spinner animation."""
         if not self._processing:
