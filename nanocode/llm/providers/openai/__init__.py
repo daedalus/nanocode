@@ -121,9 +121,27 @@ class OpenAILLM(LLMBase):
         
         # Debug: Print status code
         status_code = response.status_code
-        print(f"[DEBUG] HTTP Response status: {status_code}")
-        
-        data = response.json()
+        content_type = response.headers.get("content-type", "")
+        print(f"[DEBUG] HTTP Response status: {status_code}, content-type: {content_type}")
+
+        # Handle non-JSON responses (like plain text "Hi there!")
+        if "application/json" not in content_type:
+            text_content = response.text
+            print(f"[DEBUG] Non-JSON response: {text_content[:200]}")
+            # Return as simple text response
+            return LLMResponse(
+                content=text_content,
+                tool_calls=[],
+                finish_reason="stop",
+                thinking=None,
+            )
+
+        try:
+            data = response.json()
+        except Exception as e:
+            print(f"[DEBUG] Failed to parse JSON response: {e}")
+            print(f"[DEBUG] Response text: {response.text[:500] if response.text else '(empty)'}")
+            raise
 
         # DEBUG: Print raw response on error
         if response.status_code != 200:
@@ -131,8 +149,14 @@ class OpenAILLM(LLMBase):
             logger.error(f"[OpenAI] API Error: status={response.status_code}, data={data}")
         # DEBUG: Print response
         if "error" in data:
-            print(f"[DEBUG] OpenAI Error: {data}")
-            logger.error(f"[OpenAI] API Error: {data}")
+            error_msg = data.get("error", {}).get("message", str(data))
+            print(f"[DEBUG] OpenAI Error: {error_msg}")
+            logger.error(f"[OpenAI] API Error: {error_msg}")
+            # Handle specific error types
+            if "tool id" in error_msg.lower() or "tool_call_id" in error_msg.lower():
+                raise RuntimeError(f"Tool call error: {error_msg}. Try starting a new session.")
+            if response.status_code == 400:
+                raise RuntimeError(f"Bad request: {error_msg}")
         if "choices" not in data:
             error_msg = data.get("error", {}).get("message", str(data))
             raise RuntimeError(f"LLM API error: {error_msg}")
@@ -144,10 +168,15 @@ class OpenAILLM(LLMBase):
         if tc_data := msg_data.get("tool_calls"):
             for tc in tc_data:
                 func = tc.get("function", {})
+                args_str = func.get("arguments", "{}")
+                try:
+                    arguments = json.loads(args_str) if args_str else {}
+                except json.JSONDecodeError:
+                    arguments = {}
                 tool_calls.append(
                     ToolCall(
                         name=func.get("name", ""),
-                        arguments=json.loads(func.get("arguments", "{}")),
+                        arguments=arguments,
                         id=tc.get("id"),
                     )
                 )

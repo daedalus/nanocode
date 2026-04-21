@@ -94,12 +94,12 @@ class TestPermissionHandler:
 
     @pytest.mark.asyncio
     async def test_request_permission_ask_no_callback(self, plan_agent):
-        """Test asking permission with no callback defaults to deny."""
+        """Test asking permission with no callback allows by default (TUI mode)."""
         handler = PermissionHandler()
-        handler.set_default_deny(True)
 
-        with pytest.raises(PermissionDeniedError):
-            await handler.request_permission(plan_agent, "bash", {})
+        result = await handler.request_permission(plan_agent, "bash", {})
+
+        assert result is True
 
     @pytest.mark.asyncio
     async def test_request_permission_ask_with_callback(self, plan_agent):

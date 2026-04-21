@@ -134,7 +134,10 @@ class CodeSearchTool(Tool):
         lines = response_text.split("\n")
         for line in lines:
             if line.startswith("data: "):
-                data = json.loads(line[6:])
+                try:
+                    data = json.loads(line[6:])
+                except json.JSONDecodeError:
+                    continue
                 if (
                     data.get("result")
                     and data["result"].get("content")

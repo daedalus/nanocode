@@ -898,6 +898,9 @@ class AutonomousAgent:
         try:
             return await self._process_input_impl(user_input, show_thinking, show_messages)
         except Exception as e:
+            if "Expecting value" in str(e) or isinstance(e, json.JSONDecodeError):
+                logger.error(f"JSON parsing error in process_input: {e}")
+                return f"Error: Failed to parse LLM response - {e}"
             traceback.print_exc()
             raise
 

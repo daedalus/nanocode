@@ -47,12 +47,15 @@ class OllamaLLM(LLMBase):
         tool_calls = []
         if tc_data := data.get("tool_calls"):
             for tc in tc_data:
+                args_str = tc.get("function", {}).get("arguments", "{}")
+                try:
+                    arguments = json.loads(args_str) if args_str else {}
+                except json.JSONDecodeError:
+                    arguments = {}
                 tool_calls.append(
                     ToolCall(
                         name=tc.get("function", {}).get("name", ""),
-                        arguments=json.loads(
-                            tc.get("function", {}).get("arguments", "{}")
-                        ),
+                        arguments=arguments,
                     )
                 )
 

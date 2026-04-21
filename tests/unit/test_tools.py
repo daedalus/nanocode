@@ -297,7 +297,7 @@ class TestNewTools:
         result = await tool.execute(tool_calls=[])
 
         assert result.success is True
-        assert "0" in result.content
+        assert result.metadata["total"] == 0
 
     @pytest.mark.asyncio
     async def test_batch_tool_with_calls(self, temp_dir):
@@ -1123,3 +1123,95 @@ class TestBashSessionTool:
         )
 
         assert result.success is True
+
+
+class TestBuiltinSearchTools:
+    """Tests for builtin search tools."""
+
+    def test_codesearch_instantiation(self):
+        """Test CodeSearchTool can be instantiated."""
+        import nanocode.tools.builtin.codesearch as cs
+
+        tool = cs.CodeSearchTool(api_key="test-key")
+        assert tool.name == "codesearch"
+        assert tool.api_key == "test-key"
+
+    def test_codesearch_no_api_key_attr(self):
+        """Test CodeSearchTool api_key defaults to env."""
+        import nanocode.tools.builtin.codesearch as cs
+
+        orig_key = os.environ.get("EXA_API_KEY")
+        os.environ.pop("EXA_API_KEY", None)
+        try:
+            tool = cs.CodeSearchTool()
+            assert tool.api_key is None
+        finally:
+            if orig_key:
+                os.environ["EXA_API_KEY"] = orig_key
+
+    def test_exasearch_instantiation(self):
+        """Test ExaSearchTool can be instantiated."""
+        from nanocode.tools.builtin.exa_search import ExaSearchTool
+
+        tool = ExaSearchTool(api_key="test-key")
+        assert tool.name == "exa"
+        assert tool.api_key == "test-key"
+
+    def test_freeexasearch_basic(self):
+        """Test FreeExaSearchTool can be instantiated."""
+        from nanocode.tools.builtin.free_search import FreeExaSearchTool
+
+        tool = FreeExaSearchTool()
+        assert tool.name == "free_exa"
+        assert tool.base_url == "https://mcp.exa.ai/mcp"
+
+    def test_brave_search_instantiation(self):
+        """Test BraveSearchTool can be instantiated."""
+        from nanocode.tools.builtin.free_search import BraveSearchTool
+
+        tool = BraveSearchTool(api_key="test-key")
+        assert tool.name == "brave_search"
+        assert tool.api_key == "test-key"
+
+    @pytest.mark.asyncio
+    async def test_skill_tool_missing_name(self):
+        """Test SkillTool fails without skill name."""
+        from unittest.mock import MagicMock
+
+        from nanocode.tools.builtin.skill import SkillTool
+
+        mock_manager = MagicMock()
+        tool = SkillTool(mock_manager)
+
+        result = await tool.execute(name="", input="test")
+        assert result.success is False
+        assert "Skill name is required" in result.error
+
+    def test_skill_tool_instantiation(self):
+        """Test SkillTool can be instantiated."""
+        from unittest.mock import MagicMock
+
+        from nanocode.tools.builtin.skill import SkillTool
+
+        mock_manager = MagicMock()
+        tool = SkillTool(mock_manager)
+        assert tool.name == "skill"
+        assert tool.skills_manager is mock_manager
+
+
+class TestSkillToolExecution:
+    """Tests for SkillTool execution paths."""
+
+    @pytest.mark.asyncio
+    async def test_skill_tool_get_skill_error(self):
+        """Test SkillTool fails when get_skill raises."""
+        from unittest.mock import MagicMock
+
+        from nanocode.tools.builtin.skill import SkillTool
+
+        mock_manager = MagicMock()
+        mock_manager.get_skill.side_effect = FileNotFoundError("Skill not found")
+        tool = SkillTool(mock_manager)
+
+        result = await tool.execute(name="nonexistent", input="test")
+        assert result.success is False

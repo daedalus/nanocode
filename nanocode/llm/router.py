@@ -212,7 +212,8 @@ class ProviderRouter:
             # Special handling for OpenCode Zen
             base_url = "https://opencode.ai/zen/v1"
 
-        api_key = self._get_api_key(parsed.provider) or os.getenv(defaults.get("api_key_env", ""))
+        api_key_env = defaults.get("api_key_env")
+        api_key = self._get_api_key(parsed.provider) or (os.getenv(api_key_env) if api_key_env else None)
 
         return ProviderConfig(
             provider=parsed.provider,

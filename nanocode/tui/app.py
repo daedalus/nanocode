@@ -651,6 +651,12 @@ Footer {
                 active = sum(1 for s in task_tool.sessions.values() if not s.completed)
                 if active > 0:
                     lines.append(f"Active tasks: {active}")
+            todo_tool = self.agent.tool_registry.get("todo")
+            if todo_tool and hasattr(todo_tool, "tasks"):
+                pending = sum(1 for t in todo_tool.tasks.values() if t.get("status") == "pending")
+                completed = sum(1 for t in todo_tool.tasks.values() if t.get("status") == "completed")
+                if pending > 0 or completed > 0:
+                    lines.append(f"Todos: {pending} pending, {completed} done")
 
         try:
             sidebar_body = self.query_one("#sidebar-body", Static)

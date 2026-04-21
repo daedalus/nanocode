@@ -74,10 +74,15 @@ class Message:
         if tool_calls_data := data.get("tool_calls"):
             for tc in tool_calls_data:
                 func = tc.get("function", {})
+                args_str = func.get("arguments", "{}")
+                try:
+                    arguments = json.loads(args_str) if args_str else {}
+                except json.JSONDecodeError:
+                    arguments = {}
                 tool_calls.append(
                     ToolCall(
                         name=func.get("name", ""),
-                        arguments=json.loads(func.get("arguments", "{}")),
+                        arguments=arguments,
                         id=tc.get("id"),
                     )
                 )

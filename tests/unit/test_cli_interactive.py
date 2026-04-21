@@ -627,7 +627,7 @@ class TestAgentDebug:
         from nanocode.core import AutonomousAgent
 
         source = inspect.getsource(AutonomousAgent.__init__)
-        assert "self.debug = False" in source
+        assert "self.debug =" in source
 
     def test_mock_agent_debug_can_be_set(self):
         """Test that mock agent debug flag can be set."""

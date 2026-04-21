@@ -288,6 +288,7 @@ def create_default_agents() -> AgentRegistry:
                 PermissionRule(
                     permission="task", pattern="*", action=PermissionAction.ALLOW
                 ),
+                PermissionRule(permission="todo", action=PermissionAction.ALLOW),
             ],
         )
     )
@@ -330,6 +331,8 @@ def create_default_agents() -> AgentRegistry:
                 PermissionRule(
                     permission="read", pattern="*.env.*", action=PermissionAction.ASK
                 ),
+                PermissionRule(permission="todo", action=PermissionAction.ALLOW),
+                PermissionRule(permission="task", action=PermissionAction.ALLOW),
             ],
         )
     )
@@ -369,6 +372,7 @@ def create_default_agents() -> AgentRegistry:
                 ),
                 PermissionRule(permission="todoread", action=PermissionAction.DENY),
                 PermissionRule(permission="todowrite", action=PermissionAction.DENY),
+                PermissionRule(permission="todo", action=PermissionAction.ALLOW),
             ],
         )
     )

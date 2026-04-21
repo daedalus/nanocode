@@ -1,15 +1,15 @@
 llm:
   default_provider: opencode
   use_model_registry: false
-  default_model: "openrouter/free"
+  default_model: "opencode/big-pickle"
   user_agent: "opencode/1.4.8"
 
   providers:
 
     opencode:
       api_key: public
-      base_url: https://api.opencode.ai/v1/
-      model: opencode/big-pickle
+      base_url: https://opencode.ai/zen/v1
+      model: big-pickle
 
     openrouter:
       api_key: ${OPENROUTER_API_KEY}
