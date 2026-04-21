@@ -591,6 +591,28 @@ Footer {
         status_bar.update("")
         self._update_sidebar()
 
+    def _fetch_model_info(self):
+        """Fetch model info from models.dev registry."""
+        try:
+            from nanocode.llm.registry import get_registry
+            import asyncio
+
+            async def fetch():
+                registry = get_registry()
+                await registry.load()
+                return registry
+
+            registry = asyncio.run(fetch())
+            if self.agent and hasattr(self.agent, "llm") and self.agent.llm:
+                model = self.agent.llm.model
+                if registry and model:
+                    info = registry.get_model_by_full_id(model)
+                    if info:
+                        return info
+        except Exception:
+            pass
+        return None
+
     def _update_sidebar(self) -> None:
         """Update sidebar content with current state info."""
         if not self._sidebar_visible:
@@ -601,11 +623,23 @@ Footer {
         if self.agent and hasattr(self.agent, "context_manager"):
             ctx = self.agent.context_manager
             usage = ctx.get_token_usage()
-            lines.append(f"Context: {usage.get('current_tokens', 0):,} / {usage.get('max_tokens', 0):,}")
+            current = usage.get("current_tokens", 0)
+            max_tok = usage.get("max_tokens", 0)
+            if max_tok > 0:
+                pct = (current / max_tok) * 100
+                lines.append(f"Context: {current:,} / {max_tok:,} ({pct:.0f}%)")
+            else:
+                lines.append(f"Context: {current:,}")
             lines.append(f"Msgs: {usage.get('message_count', 0)}")
 
         if self.agent and hasattr(self.agent, "current_agent"):
             lines.append(f"Agent: {self.agent.current_agent.name}")
+
+        if self.agent and hasattr(self.agent, "llm") and self.agent.llm:
+            model = getattr(self.agent.llm, "model", "unknown")
+            lines.append(f"Model: {model}")
+            if hasattr(self.agent.llm, "max_tokens"):
+                lines.append(f"Max out: {self.agent.llm.max_tokens:,}")
 
         if hasattr(self, "_session_id") and self._session_id:
             lines.append(f"Session: {self._session_id[:12]}")
