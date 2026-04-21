@@ -685,14 +685,13 @@ Footer {
                         lines.append(f"  {icon} {content}")
 
         if self.agent:
-            if hasattr(self.agent, 'mcp_manager') and self.agent.mcp_manager:
-                mcp_clients = list(self.agent.mcp_manager._clients.keys()) if hasattr(self.agent.mcp_manager, '_clients') else []
-                if mcp_clients:
+            if hasattr(self.agent, '_mcp_available'):
+                mcp_available = self.agent._mcp_available
+                if mcp_available:
                     lines.append("─ MCP ─")
-                    for name in mcp_clients[:10]:
-                        lines.append(f"  {name}")
-                    if len(mcp_clients) > 10:
-                        lines.append(f"  ... and {len(mcp_clients) - 10} more")
+                    for name, enabled in list(mcp_available.items())[:15]:
+                        dot = "🟢" if enabled else "⚪"
+                        lines.append(f"  {dot} {name}")
 
             if hasattr(self.agent, 'lsp_manager') and self.agent.lsp_manager:
                 lsp_servers = list(self.agent.lsp_manager._servers.keys()) if hasattr(self.agent.lsp_manager, '_servers') else []
