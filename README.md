@@ -156,6 +156,70 @@ This skill returns a greeting.
 
 Use `/skills` CLI command to list available skills.
 
+### Hook System
+Custom hooks for lifecycle events that run at specific times during agent execution.
+
+```bash
+# Create hooks directory
+mkdir -p .nanocode/hooks
+```
+
+#### JSON Hooks
+Create `.nanocode/hooks/*.json` files:
+
+```json
+[
+  {
+    "name": "security-block-env",
+    "event": "PreToolUse",
+    "description": "Block env tool access",
+    "pattern": "env",
+    "type": "command",
+    "command": "exit 1",
+    "action_on_result": "deny"
+  },
+  {
+    "name": "log-all-tools",
+    "event": "PostToolUse",
+    "description": "Log tool executions",
+    "type": "command",
+    "command": "echo 'Tool executed: $NANO_HOOK_TOOL' >> /tmp/hooks.log",
+    "action_on_result": "allow"
+  }
+]
+```
+
+#### Python Hooks
+Create `.nanocode/hooks/*.py` files:
+
+```python
+from nanocode.hooks import Hook, HookContext, HookResult, HookAction, HookEvent
+
+class SecurityHook(Hook):
+    def __init__(self):
+        super().__init__("security-hook", HookEvent.PRE_TOOL_USE, "Block dangerous operations")
+
+    async def run(self, ctx: HookContext) -> HookResult:
+        if ctx.tool_name in ["env", "get_env"]:
+            return HookResult(action=HookAction.DENY, message="Environment access denied")
+        return HookResult(action=HookAction.ALLOW)
+```
+
+**Hook Events:**
+- `PreToolUse` - Before a tool executes (can block or modify args)
+- `PostToolUse` - After a tool executes (for logging)
+- `SessionStart` - When a session begins
+- `SessionEnd` - When a session ends
+- `Notification` - When a notification is sent
+- `Error` - When an error occurs
+
+**Hook Actions:**
+- `allow` - Continue execution
+- `deny` - Block tool execution
+- `warn` - Allow with warning
+- `modify` - Modify tool arguments
+- `stop` - Stop processing further hooks
+
 ### Built-in Skills
 
 #### Red Teaming Skill

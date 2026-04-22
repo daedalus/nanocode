@@ -133,6 +133,11 @@ class Config:
             return Path(cache_path)
         return _get_default_storage_dir()
 
+    @property
+    def base_dir(self) -> str:
+        """Get base directory for the agent."""
+        return self.get("base_dir", os.getcwd())
+
 
 _config: Config | None = None
 

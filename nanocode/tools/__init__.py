@@ -9,6 +9,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from nanocode.hooks import HookAction, HookEvent, HookManager, HookResult
+
 logger = logging.getLogger("nanocode.tools")
 
 
@@ -188,14 +190,31 @@ class ToolRegistry:
 class ToolExecutor:
     """Executes tools with proper error handling and result formatting."""
 
-    def __init__(self, registry: ToolRegistry):
+    def __init__(self, registry: ToolRegistry, hook_manager: HookManager | None = None):
         self.registry = registry
+        self.hook_manager = hook_manager
         self.execution_history: list[dict] = []
         logger.debug("ToolExecutor initialized")
 
-    async def execute(self, tool_name: str, arguments: dict) -> ToolResult:
+    async def execute(self, tool_name: str, arguments: dict, session_id: str | None = None, agent_name: str | None = None) -> ToolResult:
         """Execute a tool by name with arguments."""
         logger.debug(f"ToolExecutor.execute('{tool_name}', {arguments})")
+
+        # Run pre-tool hooks
+        if self.hook_manager:
+            hook_result = await self.hook_manager.run_pre_tool_hooks(
+                tool_name, arguments, session_id, agent_name
+            )
+            if hook_result.action == HookAction.DENY:
+                logger.warning(f"Tool '{tool_name}' blocked by pre-hook: {hook_result.message}")
+                return ToolResult(
+                    success=False,
+                    content=None,
+                    error=hook_result.message or "Tool blocked by hook",
+                )
+            if hook_result.modified_args:
+                arguments = hook_result.modified_args
+                logger.debug(f"Tool args modified by hook: {arguments}")
 
         tool = self.registry.get(tool_name)
 
@@ -207,32 +226,44 @@ class ToolExecutor:
                 try:
                     logger.debug(f"Executing handler for '{tool_name}'")
                     result = await handler(**arguments)
-                    return ToolResult(success=True, content=result)
+                    result_obj = ToolResult(success=True, content=result)
                 except Exception as e:
                     logger.error(f"Handler for '{tool_name}' failed: {e}")
-                    return ToolResult(success=False, content=None, error=str(e))
-            logger.warning(f"Unknown tool: '{tool_name}'")
-            return ToolResult(
-                success=False, content=None, error=f"Unknown tool: {tool_name}"
-            )
+                    result_obj = ToolResult(success=False, content=None, error=str(e))
+            else:
+                logger.warning(f"Unknown tool: '{tool_name}'")
+                result_obj = ToolResult(
+                    success=False, content=None, error=f"Unknown tool: {tool_name}"
+                )
+        else:
+            logger.debug(f"Executing tool '{tool_name}'")
+            result_obj = await tool.execute(**arguments)
 
-        logger.debug(f"Executing tool '{tool_name}'")
-        result = await tool.execute(**arguments)
+        # Run post-tool hooks
+        if self.hook_manager:
+            await self.hook_manager.run_post_tool_hooks(
+                tool_name,
+                arguments,
+                result_obj.content,
+                result_obj.success,
+                session_id,
+                agent_name,
+            )
 
         self.execution_history.append(
             {
                 "tool": tool_name,
                 "arguments": arguments,
-                "result": result.to_dict(),
+                "result": result_obj.to_dict(),
             }
         )
 
-        if result.success:
+        if result_obj.success:
             logger.info(f"Tool '{tool_name}' executed successfully")
         else:
-            logger.warning(f"Tool '{tool_name}' failed: {result.error}")
+            logger.warning(f"Tool '{tool_name}' failed: {result_obj.error}")
 
-        return result
+        return result_obj
 
     async def execute_multiple(
         self, tool_calls: list[tuple[str, dict]]

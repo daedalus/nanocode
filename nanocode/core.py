@@ -5,6 +5,7 @@ import json
 import logging
 import traceback
 from enum import Enum
+
 from rich.console import Console
 from rich.theme import Theme
 
@@ -38,14 +39,14 @@ custom_theme = Theme({
 console = Console(theme=custom_theme)
 from nanocode.config import get_config
 from nanocode.context import ContextManager, ContextStrategy
-from nanocode.llm import create_llm
+from nanocode.hooks import HookManager
 from nanocode.llm.base import LLMResponse
 from nanocode.lsp import LSPServerManager
 from nanocode.mcp import MCPManager
 from nanocode.multimodal import MultimodalManager
 from nanocode.planning import PlanExecutor, PlanMonitor, PlanningContext, TaskPlanner
+from nanocode.session_manager import get_session_manager
 from nanocode.session_summary import SessionSummaryGenerator
-from nanocode.session_manager import SessionManager, get_session_manager
 from nanocode.state import AgentState, AgentStateData
 from nanocode.storage.cache import CachedResponse, PromptCache, get_prompt_cache
 from nanocode.tools import ToolExecutor, ToolRegistry
@@ -263,6 +264,7 @@ class AutonomousAgent:
         self._init_file_tracker()
         self._init_llm()
         self._init_lsp()
+        self._init_hooks()
         self._init_tools()
         self._init_skills()
         self._init_mcp()
@@ -490,13 +492,20 @@ class AutonomousAgent:
                     debug=self.debug,
                 )
 
+    def _init_hooks(self):
+        """Initialize hook system."""
+
+        self.hook_manager = HookManager(base_dir=self.config.get("base_dir", "."))
+        self.hook_manager.discover_hooks()
+        logger.info(f"Hook system initialized: {len(sum(self.hook_manager.hooks.values(), []))} hooks loaded")
+
     def _init_tools(self):
         """Initialize tool system."""
         from nanocode.doom_loop import create_doom_loop_handler
         from nanocode.tools.task import create_task_tool
 
         self.tool_registry = ToolRegistry()
-        self.tool_executor = ToolExecutor(self.tool_registry)
+        self.tool_executor = ToolExecutor(self.tool_registry, self.hook_manager)
 
         register_builtin_tools(
             self.tool_registry, self.config.tools, self.file_tracker, self.lsp_manager
@@ -796,7 +805,7 @@ class AutonomousAgent:
                         continue
 
             logger.debug(f"[{agent_name}] Executing tool: {tool_name}")
-            result = await self.tool_executor.execute(tool_name, args)
+            result = await self.tool_executor.execute(tool_name, args, self._session_id, agent_name)
 
             if result.success:
                 logger.info(f"[{agent_name}] Tool '{tool_name}' succeeded")
@@ -987,7 +996,7 @@ class AutonomousAgent:
                     console.print(f"  [dim]{i}: {role}: {content}[/dim]")
 
             if show_messages:
-                console.print(f"\n[debug]=== LLM REQUEST ===[/debug]")
+                console.print("\n[debug]=== LLM REQUEST ===[/debug]")
                 for i, msg in enumerate(messages):
                     content = (
                         msg.content
@@ -1012,7 +1021,7 @@ class AutonomousAgent:
                 cache_logger.warning(f"[{agent_name}] Using CACHED response (this is a bug if input changed!)")
                 logger.warning(f"[{agent_name}] Cache hit! Messages: {len(messages)}, User input: {user_input[:50]}")
                 if self.debug:
-                    console.print(f"\n[warning][WARN] CACHE HIT - Previous response reused![/warning]")
+                    console.print("\n[warning][WARN] CACHE HIT - Previous response reused![/warning]")
                 response = cached_response
             else:
                 response = await self.llm.chat(
@@ -1027,7 +1036,7 @@ class AutonomousAgent:
                 self._last_thinking = response.thinking
 
             if self.debug:
-                console.print(f"\n[debug][DEBUG] LLM Response:[/debug]")
+                console.print("\n[debug][DEBUG] LLM Response:[/debug]")
                 if response.thinking:
                     console.print(f"  [thought]| Thinking:[/thought]\n{response.thinking}")
                 if response.has_tool_calls:
@@ -1038,11 +1047,11 @@ class AutonomousAgent:
                     console.print(f"  [content]Content: {response.content}[/content]")
 
             if show_messages:
-                console.print(f"\n[debug]=== LLM RESPONSE ===[/debug]")
+                console.print("\n[debug]=== LLM RESPONSE ===[/debug]")
                 if response.thinking:
                     console.print(f"\n[thought]| Thinking:[/thought]\n{response.thinking}")
                 if response.has_tool_calls:
-                    print(f"\nTool Calls:")
+                    print("\nTool Calls:")
                     for tc in response.tool_calls:
                         print(f"  - {tc.name}: {tc.arguments}")
                 print(
@@ -1190,7 +1199,7 @@ class AutonomousAgent:
                         f"[{agent_name}] Detected {len(detected)} command(s) in text that were not executed"
                     )
                     if self.debug:
-                        console.print(f"\n[warning][WARN] Detected unexecuted commands:[/warning]")
+                        console.print("\n[warning][WARN] Detected unexecuted commands:[/warning]")
                         for cmd in detected:
                             console.print(f"  - [{cmd.tool_name}] {cmd.command[:60]}...")
 
@@ -1225,7 +1234,7 @@ class AutonomousAgent:
             # Include tool use info (full output, not truncated)
             if tool_results_history:
                 if show_thinking:
-                    tool_info = f"\n\n[thought]| Tool Use:[/thought]"
+                    tool_info = "\n\n[thought]| Tool Use:[/thought]"
                     for tr in tool_results_history:
                         result_str = str(tr['result'])
                         # Include full result for display

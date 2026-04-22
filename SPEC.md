@@ -21,6 +21,7 @@ Nanocode is an autonomous AI agent for console with advanced tool use. It suppor
 - File watcher for cache invalidation
 - Skills system for custom commands
 - Git-based snapshot/revert functionality
+- **Hook system for lifecycle events (PreToolUse, PostToolUse, SessionStart, etc.)**
 
 ### What is NOT in scope
 - GUI application (CLI-only)
@@ -107,6 +108,34 @@ description: Description
 
 # Skill Content
 ```
+
+### Hooks (JSON or Python)
+```json
+{
+  "name": "hook-name",
+  "event": "PreToolUse",
+  "pattern": "read|write",
+  "type": "command",
+  "command": "echo 'Running hook'",
+  "action_on_result": "allow"
+}
+```
+
+Or Python hooks in `.nanocode/hooks/*.py`:
+```python
+from nanocode.hooks import Hook, HookContext, HookResult, HookAction, HookEvent
+
+class MyHook(Hook):
+    def __init__(self):
+        super().__init__("my-hook", HookEvent.PRE_TOOL_USE, "My custom hook")
+
+    async def run(self, context: HookContext) -> HookResult:
+        # Custom logic
+        return HookResult(action=HookAction.ALLOW)
+```
+
+Hook events: `PreToolUse`, `PostToolUse`, `Notification`, `Stop`, `SessionStart`, `SessionEnd`, `Error`
+Hook actions: `allow`, `deny`, `warn`, `modify`, `stop`
 
 ## Edge Cases
 

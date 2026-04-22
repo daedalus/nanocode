@@ -1,0 +1,19 @@
+[
+  {
+    "name": "security-block-env",
+    "event": "PreToolUse",
+    "description": "Block access to environment variables",
+    "pattern": "env",
+    "type": "command",
+    "command": "exit 1",
+    "action_on_result": "deny"
+  },
+  {
+    "name": "log-all-tools",
+    "event": "PostToolUse",
+    "description": "Log all tool executions",
+    "type": "command",
+    "command": "echo 'Tool executed: $NANO_HOOK_TOOL' >> /tmp/nanocode_hooks.log",
+    "action_on_result": "allow"
+  }
+]
