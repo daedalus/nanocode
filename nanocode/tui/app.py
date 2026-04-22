@@ -1195,6 +1195,10 @@ Footer {
                                 ctx._messages = msg_mgr._messages
                                 self._input_history = self._input_history[:msg_index + 1]
                                 self._history_index = len(self._input_history)
+                                # Clear output and show new session
+                                output = self.query_one("#output-area", OutputArea)
+                                output.clear_lines()
+                                self._show_welcome()
                                 self.notify(f"Reverted to message {msg_index}", severity="success")
                             else:
                                 self.notify(f"Revert failed: {result.get('error')}", severity="error")
