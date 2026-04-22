@@ -251,11 +251,12 @@ def get_current_session_id() -> str | None:
 class AutonomousAgent:
     """Main autonomous agent class."""
 
-    def __init__(self, config: dict | None = None, session_id: str = None, verbose: bool = False, yolo: bool = False):
+    def __init__(self, config: dict | None = None, session_id: str = None, verbose: bool = False, yolo: bool = False, drift_alert: bool = False, drift_intervene: bool = False):
         self.config = config or get_config()
         self.state = AgentStateData()
         self.debug = verbose
         self.yolo = yolo
+        self.drift_mode = "intervene" if drift_intervene else ("alert" if drift_alert else "off")
         self._session_id = session_id
         self._session_logger = None
 
@@ -273,6 +274,7 @@ class AutonomousAgent:
         self._init_context()
         self._init_planning()
         self._init_multimodal()
+        self._init_drift_watchdog() if self.drift_mode != "off" else None
         self._init_cache()
 
     def _init_session(self):
@@ -663,6 +665,13 @@ class AutonomousAgent:
         self.planner = TaskPlanner(self.llm, self.tool_registry)
         self.plan_executor = PlanExecutor(self.planner, self.tool_executor)
         self.plan_monitor = PlanMonitor(self.llm)
+
+    def _init_drift_watchdog(self):
+        """Initialize drift watchdog."""
+        from nanocode.drift import create_drift_watchdog
+
+        self.drift_watchdog = create_drift_watchdog(self.drift_mode)
+        logger.debug(f"Drift watchdog initialized: mode={self.drift_mode}")
 
     def _init_multimodal(self):
         """Initialize multimodal support."""
