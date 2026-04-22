@@ -1366,3 +1366,331 @@ class PrivateTool(Tool):
             assert len(discovered) == 0
         finally:
             shutil.rmtree(tmpdir)
+
+
+class TestToolDiscoveryWithInitPattern:
+    """Tests for tool auto-discovery with __init__ pattern."""
+
+    @pytest.fixture
+    def temp_tool_dir_init(self):
+        """Create a temporary directory with init-style tools."""
+        import shutil
+
+        tmpdir = tempfile.mkdtemp()
+
+        tool_dir = os.path.join(tmpdir, ".nanocode", "tools")
+        os.makedirs(tool_dir)
+
+        with open(os.path.join(tool_dir, "greet_tool.py"), "w") as f:
+            f.write(
+                """
+from nanocode.tools import Tool, ToolResult
+
+
+class GreetTool(Tool):
+    def __init__(self):
+        super().__init__(
+            name="greet",
+            description="Greet someone"
+        )
+
+    async def execute(self, name: str = "world") -> ToolResult:
+        return ToolResult(success=True, content=f"Hello, {name}!")
+"""
+            )
+
+        yield tmpdir
+
+        shutil.rmtree(tmpdir)
+
+    def test_discover_tools_with_init_pattern(self, temp_tool_dir_init):
+        """Test discovering tools with __init__ pattern."""
+        registry = ToolRegistry()
+        discovered = registry.discover_tools(temp_tool_dir_init)
+
+        assert len(discovered) == 1
+        assert discovered[0].name == "greet"
+
+    def test_load_discovered_tools_with_init_pattern(self, temp_tool_dir_init):
+        """Test loading discovered tools with __init__ pattern."""
+        registry = ToolRegistry()
+        count = registry.load_discovered_tools(temp_tool_dir_init)
+
+        assert count == 1
+        assert registry.has_tool("greet")
+
+    @pytest.mark.asyncio
+    async def test_execute_discovered_tool(self, temp_tool_dir_init):
+        """Test executing a discovered tool."""
+        registry = ToolRegistry()
+        registry.load_discovered_tools(temp_tool_dir_init)
+        executor = ToolExecutor(registry)
+
+        result = await executor.execute("greet", {"name": "Alice"})
+
+        assert result.success is True
+        assert "Alice" in result.content
+
+    def test_discover_tools_invalid_file(self):
+        """Test discovering tools with invalid file."""
+        import shutil
+
+        tmpdir = tempfile.mkdtemp()
+
+        tool_dir = os.path.join(tmpdir, ".nanocode", "tools")
+        os.makedirs(tool_dir)
+
+        with open(os.path.join(tool_dir, "bad_tool.py"), "w") as f:
+            f.write("# invalid python syntax error $$$")
+
+        try:
+            registry = ToolRegistry()
+            discovered = registry.discover_tools(tmpdir)
+
+            assert len(discovered) == 0
+        finally:
+            shutil.rmtree(tmpdir)
+
+    def test_discover_tools_no_tool_class(self):
+        """Test discovering tools skips files without Tool subclass."""
+        import shutil
+
+        tmpdir = tempfile.mkdtemp()
+
+        tool_dir = os.path.join(tmpdir, ".nanocode", "tools")
+        os.makedirs(tool_dir)
+
+        with open(os.path.join(tool_dir, "notool.py"), "w") as f:
+            f.write(
+                """
+def hello():
+    return "hello"
+"""
+            )
+
+        try:
+            registry = ToolRegistry()
+            discovered = registry.discover_tools(tmpdir)
+
+            assert len(discovered) == 0
+        finally:
+            shutil.rmtree(tmpdir)
+
+    def test_discover_tools_mixed_valid_invalid(self):
+        """Test discovering tools with mixed valid/invalid files."""
+        import shutil
+
+        tmpdir = tempfile.mkdtemp()
+
+        tool_dir = os.path.join(tmpdir, ".nanocode", "tools")
+        os.makedirs(tool_dir)
+
+        with open(os.path.join(tool_dir, "valid.py"), "w") as f:
+            f.write(
+                """
+from nanocode.tools import Tool, ToolResult
+
+
+class ValidTool(Tool):
+    name = "valid"
+    description = "A valid tool"
+
+    async def execute(self, input: str = "") -> ToolResult:
+        return ToolResult(success=True, content="valid")
+"""
+            )
+
+        with open(os.path.join(tool_dir, "invalid.py"), "w") as f:
+            f.write("# broken")
+
+        with open(os.path.join(tool_dir, "helper.py"), "w") as f:
+            f.write(
+                """
+from nanocode.tools import Tool, ToolResult
+
+def helper_func():
+    pass
+
+class HelperTool(Tool):
+    name = "helper"
+    description = "Helper tool"
+
+    async def execute(self, input: str = "") -> ToolResult:
+        return ToolResult(success=True, content="helper")
+"""
+            )
+
+        try:
+            registry = ToolRegistry()
+            discovered = registry.discover_tools(tmpdir)
+
+            tool_names = {t.name for t in discovered}
+            assert "valid" in tool_names
+            assert "helper" in tool_names
+            assert len(discovered) == 2
+        finally:
+            shutil.rmtree(tmpdir)
+
+    def test_discover_nested_directories(self):
+        """Test discovering tools in nested directories."""
+        import shutil
+
+        tmpdir = tempfile.mkdtemp()
+
+        nested_dir = os.path.join(tmpdir, ".nanocode", "tools", "subdir")
+        os.makedirs(nested_dir)
+
+        with open(os.path.join(nested_dir, "nested_tool.py"), "w") as f:
+            f.write(
+                """
+from nanocode.tools import Tool, ToolResult
+
+
+class NestedTool(Tool):
+    name = "nested"
+    description = "Nested tool"
+
+    async def execute(self, input: str = "") -> ToolResult:
+        return ToolResult(success=True, content="nested")
+"""
+            )
+
+        try:
+            registry = ToolRegistry()
+            discovered = registry.discover_tools(tmpdir)
+
+            assert len(discovered) == 1
+            assert discovered[0].name == "nested"
+        finally:
+            shutil.rmtree(tmpdir)
+
+    def test_discover_ignores_pycache(self):
+        """Test discovering tools ignores __pycache__."""
+        import shutil
+
+        tmpdir = tempfile.mkdtemp()
+
+        tool_dir = os.path.join(tmpdir, ".nanocode", "tools")
+        os.makedirs(tool_dir)
+
+        pycache_dir = os.path.join(tool_dir, "__pycache__")
+        os.makedirs(pycache_dir)
+
+        tool_file = os.path.join(tool_dir, "real_tool.py")
+        with open(tool_file, "w") as f:
+            f.write(
+                """
+from nanocode.tools import Tool, ToolResult
+
+
+class RealTool(Tool):
+    name = "real"
+    description = "Real tool"
+
+    async def execute(self, input: str = "") -> ToolResult:
+        return ToolResult(success=True, content="real")
+"""
+            )
+
+        try:
+            registry = ToolRegistry()
+            discovered = registry.discover_tools(tmpdir)
+
+            assert len(discovered) == 1
+            assert discovered[0].name == "real"
+        finally:
+            shutil.rmtree(tmpdir)
+
+
+class TestToolRegistryIntegration:
+    """Integration tests for tool registry."""
+
+    @pytest.mark.asyncio
+    async def test_register_and_execute_custom_tool(self):
+        """Test registering and executing a custom tool."""
+        import shutil
+
+        tmpdir = tempfile.mkdtemp()
+
+        tool_dir = os.path.join(tmpdir, "tools")
+        os.makedirs(tool_dir)
+
+        tool_file = os.path.join(tool_dir, "echo.py")
+        with open(tool_file, "w") as f:
+            f.write(
+                """
+from nanocode.tools import Tool, ToolResult
+
+
+class EchoTool(Tool):
+    name = "echo"
+    description = "Echo back the input"
+
+    async def execute(self, text: str = "") -> ToolResult:
+        return ToolResult(success=True, content=text)
+"""
+            )
+
+        try:
+            registry = ToolRegistry()
+            registry.load_discovered_tools(tmpdir)
+
+            assert registry.has_tool("echo")
+
+            executor = ToolExecutor(registry)
+            result = await executor.execute("echo", {"text": "hello world"})
+
+            assert result.success is True
+            assert result.content == "hello world"
+        finally:
+            shutil.rmtree(tmpdir)
+
+    def test_tool_schema_generation(self):
+        """Test tool schema is correctly generated."""
+        import shutil
+
+        tmpdir = tempfile.mkdtemp()
+
+        tool_dir = os.path.join(tmpdir, ".nanocode", "tools")
+        os.makedirs(tool_dir)
+
+        tool_file = os.path.join(tool_dir, "schema_tool.py")
+        with open(tool_file, "w") as f:
+            f.write(
+                """
+from nanocode.tools import Tool, ToolResult
+
+
+class SchemaTool(Tool):
+    name = "schema"
+    description = "A tool with schema"
+
+    def __init__(self):
+        super().__init__(
+            name="schema",
+            description="A tool with schema",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "input": {"type": "string", "description": "Input text"}
+                },
+                "required": ["input"]
+            }
+        )
+
+    async def execute(self, input: str = "") -> ToolResult:
+        return ToolResult(success=True, content=input)
+"""
+            )
+
+        try:
+            registry = ToolRegistry()
+            registry.load_discovered_tools(tmpdir)
+
+            schemas = registry.get_schemas()
+            schema = next(s for s in schemas if s["function"]["name"] == "schema")
+
+            assert schema["function"]["name"] == "schema"
+            assert "input" in schema["function"]["parameters"]["properties"]
+        finally:
+            shutil.rmtree(tmpdir)
