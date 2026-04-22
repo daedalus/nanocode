@@ -468,6 +468,135 @@ description: A test skill
                 call_args = str(mock_logger.info.call_args_list)
                 assert "test-skill" in call_args
         finally:
-            import shutil
-
             shutil.rmtree(tmpdir)
+
+
+class TestSkillsManagerURL:
+    """Test URL-based skill discovery."""
+
+    @pytest.fixture
+    def temp_skill_dir(self):
+        """Create a temporary directory."""
+        tmpdir = tempfile.mkdtemp()
+        yield tmpdir
+        shutil.rmtree(tmpdir)
+
+    def test_default_skill_urls(self):
+        """Test DEFAULT_SKILL_URLS contains expected URLs."""
+        from nanocode.skills import SkillsManager
+
+        urls = SkillsManager.DEFAULT_SKILL_URLS
+
+        assert len(urls) == 1
+        assert "daedalus/skills" in urls[0]
+        assert "{skill}" in urls[0]
+
+    def test_skills_manager_accepts_config(self, temp_skill_dir):
+        """Test SkillsManager accepts config parameter."""
+        config = {"skills": {"urls": ["https://example.com/{skill}/SKILL.md"]}}
+        manager = SkillsManager(temp_skill_dir, config)
+
+        assert manager.config == config
+        assert manager._url_cache == {}
+
+    @pytest.mark.asyncio
+    async def test_fetch_skill_from_url_invalid_url(self, temp_skill_dir):
+        """Test fetching from invalid URL returns None."""
+        from nanocode.skills import SkillsManager
+
+        manager = SkillsManager(temp_skill_dir)
+        skill = await manager._fetch_skill_from_url("https://invalid.example.com/nonexistent")
+
+        assert skill is None
+
+    @pytest.mark.asyncio
+    async def test_discover_skills_from_urls_empty(self, temp_skill_dir):
+        """Test discover_skills_from_urls with no URLs in config."""
+        manager = SkillsManager(temp_skill_dir, {})
+        skills = await manager.discover_skills_from_urls([])
+
+        assert skills == []
+
+    @pytest.mark.asyncio
+    async def test_load_skills_async_without_urls(self, temp_skill_dir):
+        """Test load_skills_async without URL config."""
+        skill_dir = os.path.join(temp_skill_dir, ".nanocode", "skills", "local-skill")
+        os.makedirs(skill_dir)
+        with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+            f.write(
+                """---
+name: local-skill
+description: A local skill
+---
+
+# Local Skill
+"""
+            )
+
+        manager = SkillsManager(temp_skill_dir)
+        count = await manager.load_skills_async()
+
+        assert count == 1
+        assert "local-skill" in manager.skills
+
+    def test_get_cached_skill_path(self, temp_skill_dir):
+        """Test get_cached_skill_path returns cached path."""
+        manager = SkillsManager(temp_skill_dir)
+
+        manager._url_cache["cached-skill"] = "/path/to/cached/skill.md"
+        path = manager.get_cached_skill_path("cached-skill")
+
+        assert path == "/path/to/cached/skill.md"
+
+    def test_get_cached_skill_path_not_found(self, temp_skill_dir):
+        """Test get_cached_skill_path returns None for unknown skill."""
+        manager = SkillsManager(temp_skill_dir)
+
+        path = manager.get_cached_skill_path("unknown-skill")
+
+        assert path is None
+
+
+class TestCreateSkillsManagerAsync:
+    """Test async factory function."""
+
+    @pytest.mark.asyncio
+    async def test_create_skills_manager_async(self):
+        """Test create_skills_manager_async factory."""
+        from nanocode.skills import create_skills_manager_async
+
+        tmpdir = tempfile.mkdtemp()
+        skill_dir = os.path.join(tmpdir, ".nanocode", "skills", "async-skill")
+        os.makedirs(skill_dir)
+        with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+            f.write(
+                """---
+name: async-skill
+description: Async loaded skill
+---
+
+# Async Skill
+"""
+            )
+
+        try:
+            manager = await create_skills_manager_async(tmpdir)
+
+            assert manager is not None
+            assert "async-skill" in manager.skills
+        finally:
+            shutil.rmtree(tmpdir)
+
+    @pytest.mark.asyncio
+    async def test_create_skills_manager_async_with_config(self):
+        """Test create_skills_manager_async with config."""
+        from nanocode.skills import create_skills_manager_async
+
+        tmpdir = tempfile.mkdtemp()
+
+        config = {"skills": {"urls": []}}
+        manager = await create_skills_manager_async(tmpdir, config)
+
+        assert manager.config == config
+
+        os.rmdir(tmpdir)

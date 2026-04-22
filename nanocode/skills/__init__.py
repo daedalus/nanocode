@@ -1,15 +1,23 @@
-"""Skills system - custom commands defined in .nanocode/skills/."""
+"""Skills system - custom commands defined in .nanocode/skills/ or fetched from URLs."""
 
 import asyncio
 import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Optional
 
 import frontmatter
+import httpx
 
 logger = logging.getLogger(__name__)
+
+
+def _get_skills_cache_dir() -> Path:
+    """Get cache directory for remote skills."""
+    xdg_data = os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))
+    return Path(xdg_data) / "nanocode" / "cache" / "skills"
 
 
 @dataclass
@@ -58,12 +66,17 @@ class SkillsManager:
         os.path.expanduser("~/.gemini/skills"),
         os.path.expanduser("~/.agents/skills"),
     ]
+    DEFAULT_SKILL_URLS = [
+        "https://raw.githubusercontent.com/daedalus/skills/main/{skill}/SKILL.md",
+    ]
     SKILL_FILE_NAME = "SKILL.md"
 
-    def __init__(self, base_dir: str = None):
+    def __init__(self, base_dir: str = None, config: dict = None):
         self.base_dir = base_dir or os.getcwd()
+        self.config = config or {}
         self.skills: dict[str, Skill] = {}
         self._handlers: dict[str, Callable] = {}
+        self._url_cache: dict[str, str] = {}
 
     def discover_skills(self) -> list[Skill]:
         """Discover skills in the configured directories."""
@@ -140,6 +153,81 @@ class SkillsManager:
         except Exception:
             return None
 
+    async def discover_skills_from_urls(
+        self, urls: list[str] = None
+    ) -> list[Skill]:
+        """Discover skills from URLs (supports {skill} placeholder)."""
+        urls = urls or self.config.get("skills.urls", [])
+        if not urls:
+            urls = self.DEFAULT_SKILL_URLS
+
+        discovered = []
+        cache_dir = _get_skills_cache_dir()
+
+        for url in urls:
+            try:
+                skill_url = url.format(skill="{skill}")
+                skill_names = ["sample"] if "{skill}" in url else ["custom"]
+
+                for skill_name in skill_names:
+                    formatted_url = skill_url.format(skill=skill_name)
+                    skill = await self._fetch_skill_from_url(formatted_url, cache_dir)
+                    if skill:
+                        discovered.append(skill)
+            except Exception as e:
+                logger.warning(f"Failed to fetch skill from {url}: {e}")
+
+        return discovered
+
+    async def _fetch_skill_from_url(
+        self, url: str, cache_dir: Path = None
+    ) -> Skill | None:
+        """Fetch and cache a skill from a URL."""
+        cache_dir = cache_dir or _get_skills_cache_dir()
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                content = response.text
+        except Exception as e:
+            logger.debug(f"Failed to fetch {url}: {e}")
+            return None
+
+        cached_path = None
+        try:
+            metadata, body = frontmatter.parse(content)
+        except Exception:
+            return None
+
+        name = metadata.get("name", "")
+        description = metadata.get("description", "")
+
+        if not name:
+            import hashlib
+            name = hashlib.md5(url.encode()).hexdigest()[:8]
+
+        skill = Skill(
+            name=name,
+            description=description or f"Remote skill from {url}",
+            content=body,
+            location=url,
+        )
+
+        os.makedirs(cache_dir, exist_ok=True)
+        cached_path = cache_dir / f"{name}.md"
+        with open(cached_path, "w") as f:
+            f.write(content)
+
+        self._url_cache[name] = str(cached_path)
+        logger.info(f"Fetched and cached skill: {name} from {url}")
+
+        return skill
+
+    def get_cached_skill_path(self, name: str) -> str | None:
+        """Get path to cached skill file."""
+        return self._url_cache.get(name)
+
     def load_skills(self) -> int:
         """Load all discovered skills."""
         self.skills.clear()
@@ -148,6 +236,28 @@ class SkillsManager:
         for skill in discovered:
             self.skills[skill.name] = skill
             logger.info(f"Skill available: {skill.name} ({skill.location})")
+
+        return len(self.skills)
+
+    async def load_skills_async(self) -> int:
+        """Load all discovered skills including from URLs."""
+        self.skills.clear()
+
+        discovered = self.discover_skills()
+        for skill in discovered:
+            self.skills[skill.name] = skill
+            logger.info(f"Skill loaded: {skill.name} ({skill.location})")
+
+        try:
+            urls = self.config.get("skills.urls", [])
+            if urls:
+                url_skills = await self.discover_skills_from_urls(urls)
+                for skill in url_skills:
+                    if skill.name not in self.skills:
+                        self.skills[skill.name] = skill
+                        logger.info(f"Remote skill loaded: {skill.name} ({skill.location})")
+        except Exception as e:
+            logger.warning(f"Failed to load remote skills: {e}")
 
         return len(self.skills)
 
@@ -220,10 +330,17 @@ class SkillsManager:
         return tools
 
 
-def create_skills_manager(base_dir: str = None) -> SkillsManager:
+def create_skills_manager(base_dir: str = None, config: dict = None) -> SkillsManager:
     """Create and initialize a skills manager."""
-    manager = SkillsManager(base_dir)
+    manager = SkillsManager(base_dir, config)
     manager.load_skills()
+    return manager
+
+
+async def create_skills_manager_async(base_dir: str = None, config: dict = None) -> SkillsManager:
+    """Create and initialize a skills manager with URL support."""
+    manager = SkillsManager(base_dir, config)
+    await manager.load_skills_async()
     return manager
 
 
