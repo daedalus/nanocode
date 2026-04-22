@@ -1182,10 +1182,26 @@ Footer {
                     input_widget.value = msg_text
                     input_widget.focus()
                 elif action == "revert":
-                    # Revert to this message index
-                    if msg_index < len(self._input_history):
-                        self._input_history = self._input_history[:msg_index + 1]
-                        self._history_index = len(self._input_history)
+                    # Revert state via agent's context manager
+                    if self.agent and hasattr(self.agent, "context_manager"):
+                        from nanocode.message_actions import MessageActionManager
+
+                        ctx = self.agent.context_manager
+                        if hasattr(ctx, "_messages"):
+                            msg_mgr = MessageActionManager(ctx._messages)
+                            result = msg_mgr.revert_with_snapshot(msg_index)
+                            if result.get("success"):
+                                # Update context
+                                ctx._messages = msg_mgr._messages
+                                self._input_history = self._input_history[:msg_index + 1]
+                                self._history_index = len(self._input_history)
+                                self.notify(f"Reverted to message {msg_index}", severity="success")
+                            else:
+                                self.notify(f"Revert failed: {result.get('error')}", severity="error")
+                        else:
+                            self.notify("Context manager not available", severity="error")
+                    else:
+                        self.notify("No agent - cannot revert", severity="error")
         else:
             self.notify("No user messages yet", severity="info")
     
