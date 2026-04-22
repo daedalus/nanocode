@@ -1191,15 +1191,14 @@ Footer {
                             msg_mgr = MessageActionManager(ctx._messages)
                             result = msg_mgr.revert_with_snapshot(msg_index)
                             if result.get("success"):
-                                # Update context
+                                # Update context but keep input history intact
                                 ctx._messages = msg_mgr._messages
-                                self._input_history = self._input_history[:msg_index + 1]
-                                self._history_index = len(self._input_history)
+                                # Just point to reverted message, don't truncate
+                                self._history_index = msg_index + 1
                                 # Clear output by clearing the RichLog directly
                                 try:
                                     output = self.query_one("#output-area", RichLog)
                                     output.clear()
-                                    # Force refresh of the screen
                                     self.screen.refresh()
                                 except Exception as e:
                                     print(f"Clear error: {e}")
