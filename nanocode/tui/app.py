@@ -702,6 +702,10 @@ Footer {
         self._history_index = -1
         self._sidebar_visible = True
         self._sidebar_content: list[str] = []
+        
+        # Load input history from file
+        self._history_file = self._get_history_file()
+        self._load_input_history()
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -732,6 +736,10 @@ Footer {
         self._status_timer = self.set_interval(1.0, self._update_status_bar)
         self._sidebar_timer = self.set_interval(2.0, self._update_sidebar)
         self._update_sidebar()
+
+    def on_unmount(self) -> None:
+        """Save history before exit."""
+        self._save_input_history()
 
     def _update_status_bar(self) -> None:
         """Update status bar with subagent count."""
@@ -923,6 +931,31 @@ Footer {
         self._print_empty()
         self._print_line("Type your task or 'help' for commands", Style.TEXT_DIM)
         self._print_empty()
+    
+    def _get_history_file(self):
+        """Get history file path."""
+        import os
+        from pathlib import Path
+        xdg_data = os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))
+        return Path(xdg_data) / "nanocode" / "storage" / "tui_history.json"
+    
+    def _load_input_history(self):
+        """Load input history from file."""
+        history_file = self._history_file
+        if history_file.exists():
+            import json
+            try:
+                data = json.loads(history_file.read_text())
+                self._input_history = data.get("history", [])
+                self._history_index = len(self._input_history) - 1 if self._input_history else -1
+            except Exception:
+                pass
+    
+    def _save_input_history(self):
+        """Save input history to file."""
+        import json
+        self._history_file.parent.mkdir(parents=True, exist_ok=True)
+        self._history_file.write_text(json.dumps({"history": self._input_history}, indent=2))
     
     def _print_logo(self):
         """Print simple banner."""
@@ -1178,6 +1211,7 @@ Footer {
                     self.notify("Copied to clipboard", severity="info")
                 elif action == "fork":
                     self._input_history.append(msg_text)
+                    self._save_input_history()
                     input_widget = self.query_one("#input", Input)
                     input_widget.value = msg_text
                     input_widget.focus()
@@ -1191,14 +1225,15 @@ Footer {
                             msg_mgr = MessageActionManager(ctx._messages)
                             result = msg_mgr.revert_with_snapshot(msg_index)
                             if result.get("success"):
-                                # Update context but keep input history intact
+                                # Update context
                                 ctx._messages = msg_mgr._messages
-                                # Just point to reverted message, don't truncate
-                                self._history_index = msg_index + 1
+                                self._input_history = self._input_history[:msg_index + 1]
+                                self._history_index = len(self._input_history)
                                 # Clear output by clearing the RichLog directly
                                 try:
                                     output = self.query_one("#output-area", RichLog)
                                     output.clear()
+                                    # Force refresh of the screen
                                     self.screen.refresh()
                                 except Exception as e:
                                     print(f"Clear error: {e}")
@@ -1223,6 +1258,7 @@ Footer {
         if text:
             self._input_history.append(text)
             self._history_index = len(self._input_history)
+            self._save_input_history()
             event.input.value = ""
             self._process_input(text)
 
