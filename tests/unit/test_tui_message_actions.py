@@ -107,3 +107,71 @@ class TestMessageActionBindings:
         ctrl_m_binding = [b for b in bindings if b.key == "ctrl+m"]
         assert len(ctrl_m_binding) == 1
         assert ctrl_m_binding[0].action == "message_actions"
+
+
+class TestInputHistoryPersistence:
+    """Test input history persistence."""
+
+    def test_load_input_history_from_file(self, tmp_path, monkeypatch):
+        """Test loading input history from file."""
+        import json
+        import os
+        from pathlib import Path
+        from nanocode.tui.app import NanoCodeTUI
+
+        history_file = tmp_path / "nanocode" / "storage" / "tui_history.json"
+        history_file.parent.mkdir(parents=True, exist_ok=True)
+        history_file.write_text(json.dumps({"history": ["cmd1", "cmd2"]}))
+
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        
+        # Need to set env BEFORE importing, or reload the module
+        os.environ["XDG_DATA_HOME"] = str(tmp_path)
+        
+        app = NanoCodeTUI()
+        assert app._input_history == ["cmd1", "cmd2"]
+        assert app._history_index == 1
+
+    def test_save_input_history(self, tmp_path, monkeypatch):
+        """Test saving input history to file."""
+        import json
+        from pathlib import Path
+        from nanocode.tui.app import NanoCodeTUI
+
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        app = NanoCodeTUI()
+        app._input_history = ["test1", "test2"]
+        app._history_file = tmp_path / "nanocode" / "storage" / "tui_history.json"
+
+        app._save_input_history()
+
+        data = json.loads(app._history_file.read_text())
+        assert data["history"] == ["test1", "test2"]
+
+    def test_history_file_location(self, tmp_path, monkeypatch):
+        """Test history file is in correct location."""
+        from nanocode.tui.app import NanoCodeTUI
+
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        app = NanoCodeTUI()
+
+        expected = tmp_path / "nanocode" / "storage" / "tui_history.json"
+        assert app._history_file == expected
+
+    def test_fork_saves_history(self, tmp_path, monkeypatch):
+        """Test that fork action saves history."""
+        from nanocode.tui.app import NanoCodeTUI
+
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        app = NanoCodeTUI()
+        app._history_file = tmp_path / "nanocode" / "storage" / "tui_history.json"
+
+        app._input_history = ["original"]
+        app._save_input_history()
+
+        app._input_history.append("forked")
+        app._save_input_history()
+
+        import json
+        data = json.loads(app._history_file.read_text())
+        assert "forked" in data["history"]
