@@ -1,4 +1,4 @@
-"""Message actions: revert, copy, fork."""
+"""Message actions: revert, copy, fork with undo/redo support."""
 
 import json
 import logging
@@ -15,18 +15,40 @@ logger = logging.getLogger("nanocode.message_actions")
 class MessageAction:
     """A single message action."""
 
-    action_type: str  # revert, copy, fork
+    action_type: str  # revert, copy, fork, undo, redo
     timestamp: datetime = field(default_factory=datetime.now)
     message_index: int = 0
     details: str = ""
 
 
+@dataclass
+class RevertState:
+    """State for revert operation (like opencode)."""
+
+    message_id: str = ""
+    snapshot_hash: str = ""
+    diff: dict = field(default_factory=dict)
+    message_count: int = 0
+
+
+@dataclass 
+class UndoEntry:
+    """An undo entry with messages and state."""
+
+    messages: list
+    state: RevertState
+    timestamp: datetime = field(default_factory=datetime.now)
+
+
 class MessageActionManager:
-    """Manages message actions: revert, copy, fork."""
+    """Manages message actions: revert, copy, fork with undo/redo."""
 
     def __init__(self, messages: list = None):
         self._messages = messages or []
         self._action_history: list[MessageAction] = []
+        self._undo_stack: list[UndoEntry] = []  # For undo
+        self._redo_stack: list[UndoEntry] = []   # For redo
+        self._current_state: Optional[RevertState] = None
 
     def get_message(self, index: int) -> Optional[dict]:
         """Get message by index from end (negative indexes from start)."""
@@ -58,6 +80,124 @@ class MessageActionManager:
 
         logger.info(f"Reverted {steps} messages")
         return removed
+
+    def undo(self) -> bool:
+        """Undo last revert operation using undo stack."""
+        if not self._undo_stack:
+            return False
+
+        entry = self._undo_stack.pop()
+
+        self._redo_stack.append(
+            UndoEntry(
+                messages=self._messages.copy(),
+                state=self._current_state or RevertState(),
+            )
+        )
+
+        self._messages = entry.messages
+        self._current_state = entry.state
+
+        self._action_history.append(
+            MessageAction(
+                action_type="undo",
+                details=f"Undid to message {len(self._messages)}",
+            )
+        )
+
+        logger.info(f"Undo: restored to {len(self._messages)} messages")
+        return True
+
+    def redo(self) -> bool:
+        """Redo last undone operation using redo stack."""
+        if not self._redo_stack:
+            return False
+
+        entry = self._redo_stack.pop()
+
+        self._undo_stack.append(
+            UndoEntry(
+                messages=self._messages.copy(),
+                state=self._current_state or RevertState(),
+            )
+        )
+
+        self._messages = entry.messages
+        self._current_state = entry.state
+
+        self._action_history.append(
+            MessageAction(
+                action_type="redo",
+                details=f"Redid to message {len(self._messages)}",
+            )
+        )
+
+        logger.info(f"Redo: restored to {len(self._messages)} messages")
+        return True
+
+    def can_undo(self) -> bool:
+        """Check if undo is available."""
+        return len(self._undo_stack) > 0
+
+    def can_redo(self) -> bool:
+        """Check if redo is available."""
+        return len(self._redo_stack) > 0
+
+    def revert_with_snapshot(self, at_index: int) -> dict:
+        """Revert to a specific message index with filesystem awareness (like opencode)."""
+        if not self._messages or at_index < 0 or at_index >= len(self._messages):
+            return {"success": False, "error": "Invalid index"}
+
+        from nanocode.snapshot import create_snapshot_manager
+
+        snapshot_manager = create_snapshot_manager()
+
+        snapshot_hash = None
+        try:
+            snapshot_hash = snapshot_manager.track()
+        except Exception:
+            pass
+
+        reverted_messages = self._messages[at_index:]
+        self._messages = self._messages[:at_index]
+
+        self._current_state = RevertState(
+            message_id=str(at_index),
+            snapshot_hash=snapshot_hash or "",
+            message_count=len(reverted_messages),
+        )
+
+        self._undo_stack.append(
+            UndoEntry(
+                messages=self._messages.copy(),
+                state=self._current_state,
+            )
+        )
+
+        self._redo_stack.clear()
+
+        self._action_history.append(
+            MessageAction(
+                action_type="revert_snapshot",
+                message_index=at_index,
+                details=f"Reverted to message {at_index}",
+            )
+        )
+
+        logger.info(f"Reverted with snapshot at message {at_index}")
+        return {
+            "success": True,
+            "removed": len(reverted_messages),
+            "snapshot": snapshot_hash,
+        }
+
+    def get_undo_stack_size(self) -> int:
+        """Get size of undo stack."""
+        return len(self._undo_stack)
+
+    def get_redo_stack_size(self) -> int:
+        """Get size of redo stack."""
+        return len(self._redo_stack)
 
     def copy_message(self, index: int) -> Optional[dict]:
         """Copy a message to clipboard (returns dict for external use)."""

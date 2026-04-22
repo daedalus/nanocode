@@ -528,6 +528,14 @@ class InteractiveCLI:
                         self._list_forks()
                         continue
 
+                    if command == "/undo":
+                        await self._undo_operation()
+                        continue
+
+                    if command == "/redo":
+                        await self._redo_operation()
+                        continue
+
                     if command.startswith("/fork"):
                         parts = user_input.split()
                         if len(parts) > 1:
@@ -1126,8 +1134,38 @@ def _list_skills(self):
             print(content)
         else:
             self.ui.print_error(f"Message at index {index} not found")
-                print("Create skills in .nanocode/skills/<skill-name>/skill.md")
-                return
+
+    async def _undo_operation(self):
+        """Undo last operation."""
+        from nanocode.message_actions import create_message_manager
+
+        manager = create_message_manager()
+
+        if manager.can_undo():
+            success = manager.undo()
+            if success:
+                self.ui.print_success("Undo: reverted to previous state")
+                self.ui.print_info(f"Undo stack: {manager.get_undo_stack_size()}, Redo stack: {manager.get_redo_stack_size()}")
+            else:
+                self.ui.print_error("Nothing to undo")
+        else:
+            self.ui.print_error("Nothing to undo - undo stack is empty")
+
+    async def _redo_operation(self):
+        """Redo last undone operation."""
+        from nanocode.message_actions import create_message_manager
+
+        manager = create_message_manager()
+
+        if manager.can_redo():
+            success = manager.redo()
+            if success:
+                self.ui.print_success("Redo: restored to next state")
+                self.ui.print_info(f"Undo stack: {manager.get_undo_stack_size()}, Redo stack: {manager.get_redo_stack_size()}")
+            else:
+                self.ui.print_error("Nothing to redo")
+        else:
+            self.ui.print_error("Nothing to redo - redo stack is empty")
 
             print(self.ui.color("cyan", "\nAvailable Skills:"))
             print(self.ui.color("gray", "─" * 40))

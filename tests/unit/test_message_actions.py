@@ -5,6 +5,8 @@ import pytest
 from nanocode.message_actions import (
     MessageAction,
     MessageActionManager,
+    RevertState,
+    UndoEntry,
     create_message_manager,
 )
 
@@ -191,3 +193,88 @@ class TestCreateMessageManager:
         manager = create_message_manager()
 
         assert isinstance(manager, MessageActionManager)
+
+
+class TestUndoRedo:
+    """Test undo/redo functionality."""
+
+    def test_undo_empty(self):
+        """Test undo when nothing to undo."""
+        manager = MessageActionManager()
+
+        result = manager.undo()
+
+        assert result is False
+
+    def test_redo_empty(self):
+        """Test redo when nothing to redo."""
+        manager = MessageActionManager()
+
+        result = manager.redo()
+
+        assert result is False
+
+    def test_can_undo_false_initially(self):
+        """Test can_undo is false initially."""
+        manager = MessageActionManager()
+
+        assert manager.can_undo() is False
+
+    def test_can_redo_false_initially(self):
+        """Test can_redo is false initially."""
+        manager = MessageActionManager()
+
+        assert manager.can_redo() is False
+
+    def test_undo_redo_flow(self):
+        """Test undo/redo flow."""
+        messages = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi there"},
+            {"role": "user", "content": "Tell me more"},
+        ]
+        manager = MessageActionManager(messages)
+
+        assert manager.can_undo() is False
+
+    def test_get_undo_stack_size(self):
+        """Test getting undo stack size."""
+        manager = MessageActionManager()
+
+        assert manager.get_undo_stack_size() == 0
+
+    def test_get_redo_stack_size(self):
+        """Test getting redo stack size."""
+        manager = MessageActionManager()
+
+        assert manager.get_redo_stack_size() == 0
+
+
+class TestRevertState:
+    """Test RevertState."""
+
+    def test_creation(self):
+        """Test creating RevertState."""
+        state = RevertState(
+            message_id="5",
+            snapshot_hash="abc123",
+            message_count=10,
+        )
+
+        assert state.message_id == "5"
+        assert state.snapshot_hash == "abc123"
+        assert state.message_count == 10
+
+
+class TestUndoEntry:
+    """Test UndoEntry."""
+
+    def test_creation(self):
+        """Test creating UndoEntry."""
+        entry = UndoEntry(
+            messages=[{"role": "user", "content": "test"}],
+            state=RevertState(message_id="1"),
+        )
+
+        assert len(entry.messages) == 1
+        assert entry.state.message_id == "1"

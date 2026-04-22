@@ -42,6 +42,8 @@ COMMANDS = [
     Command(("save",), "Save current fork", takes_args=True, arg_name="name"),
     Command(("load",), "Load a saved fork", takes_args=True, arg_name="name"),
     Command(("forks",), "List saved forks"),
+    Command(("undo",), "Undo last operation"),
+    Command(("redo",), "Redo last undone operation"),
 ]
 
 
