@@ -178,7 +178,7 @@ class ConsoleUI:
         if first_token == "/":
             commands = [
                 "help", "exit", "quit", "q", "clear", "history", "tools",
-                "provider", "plan", "resume", "checkpoint", "skills",
+                "provider", "plan", "resume", "checkpoint", "skills", "revert", "fork", "copy", "save", "load",
                 "snapshot", "snapshots", "revert", "trace", "debug",
                 "compact", "show_thinking", "agents", "agent"
             ]
@@ -514,6 +514,52 @@ class InteractiveCLI:
 
                     if command == "/checkpoint":
                         self._list_checkpoints()
+                        continue
+
+                    if command.startswith("/revert ") and not command.startswith("/resume "):
+                        try:
+                            steps = int(user_input[7:].strip()) or 1
+                            await self._revert_messages(steps)
+                        except ValueError:
+                            self.ui.print_error("Usage: /revert [steps]")
+                        continue
+
+                    if command == "/forks":
+                        self._list_forks()
+                        continue
+
+                    if command == "/undo":
+                        await self._undo_operation()
+                        continue
+
+                    if command == "/redo":
+                        await self._redo_operation()
+                        continue
+
+                    if command.startswith("/fork"):
+                        parts = user_input.split()
+                        if len(parts) > 1:
+                            await self._fork_session(parts[1])
+                        else:
+                            await self._fork_session()
+                        continue
+
+                    if command.startswith("/save "):
+                        name = user_input[5:].strip()
+                        self._save_fork(name)
+                        continue
+
+                    if command.startswith("/load "):
+                        name = user_input[6:].strip()
+                        await self._load_fork(name)
+                        continue
+
+                    if command.startswith("/copy "):
+                        try:
+                            idx = int(user_input[6:].strip())
+                            self._copy_message(idx)
+                        except ValueError:
+                            self.ui.print_error("Usage: /copy [message_index]")
                         continue
 
                     if command == "/skills":
@@ -1009,14 +1055,117 @@ class InteractiveCLI:
                 return
 
             print(self.ui.color("cyan", "\nAvailable Skills:"))
-            print(self.ui.color("gray", "─" * 40))
             for skill in skills:
-                print(
-                    f"  • {self.ui.color('magenta', skill['name'])}: {skill['description']}"
-                )
-                print(f"    {self.ui.color('gray', skill['location'])}")
+                print(f"  • {skill['name']}: {skill['description']}")
         except ImportError:
-            print(self.ui.color("gray", "\nSkills module not available."))
+            print(self.ui.color("yellow", "\nNo skills found."))
+
+    async def _revert_messages(self, steps: int):
+        """Revert N messages."""
+        if not hasattr(self, 'message_manager'):
+            from nanocode.message_actions import create_message_manager
+
+            self.message_manager = create_message_manager()
+
+        removed = self.message_manager.revert(steps)
+        self.ui.print_success(f"Reverted {len(removed)} messages")
+
+    def _list_forks(self):
+        """List saved forks."""
+        from nanocode.message_actions import create_message_manager
+
+        manager = create_message_manager()
+        forks = manager.list_forks()
+
+        if forks:
+            print(self.ui.color("cyan", "\nSaved Forks:"))
+            for f in forks:
+                print(f"  • {f}")
+        else:
+            print(self.ui.color("gray", "No forks found. Use /save <name> to save current state."))
+
+    async def _fork_session(self, name: str = None):
+        """Fork current session."""
+        from nanocode.message_actions import create_message_manager
+
+        manager = create_message_manager()
+        messages, fork_id = manager.fork(message_count=name)
+
+        if name:
+            manager.save_as(name)
+            self.ui.print_success(f"Forked as {name}")
+        else:
+            self.ui.print_success(f"Forked as {fork_id}")
+
+    def _save_fork(self, name: str):
+        """Save fork by name."""
+        from nanocode.message_actions import create_message_manager
+
+        manager = create_message_manager()
+
+        if manager.save_as(name):
+            self.ui.print_success(f"Saved as {name}")
+        else:
+            self.ui.print_error(f"Failed to save fork")
+
+    async def _load_fork(self, name: str):
+        """Load a saved fork."""
+        from nanocode.message_actions import create_message_manager
+
+        manager = create_message_manager()
+
+        if manager.load_fork(name):
+            self.ui.print_success(f"Loaded {name}")
+        else:
+            self.ui.print_error(f"Fork {name} not found")
+
+    def _copy_message(self, index: int):
+        """Copy a message to clipboard."""
+        from nanocode.message_actions import create_message_manager
+
+        manager = create_message_manager()
+        msg = manager.copy_message(index)
+
+        if msg:
+            self.ui.print_success(f"Copied message at index {index}")
+            content = msg.get("content", "")
+            if len(content) > 200:
+                content = content[:200] + "..."
+            print(content)
+        else:
+            self.ui.print_error(f"Message at index {index} not found")
+
+    async def _undo_operation(self):
+        """Undo last operation."""
+        from nanocode.message_actions import create_message_manager
+
+        manager = create_message_manager()
+
+        if manager.can_undo():
+            success = manager.undo()
+            if success:
+                self.ui.print_success("Undo: reverted to previous state")
+                self.ui.print_info(f"Undo stack: {manager.get_undo_stack_size()}, Redo stack: {manager.get_redo_stack_size()}")
+            else:
+                self.ui.print_error("Nothing to undo")
+        else:
+            self.ui.print_error("Nothing to undo - undo stack is empty")
+
+    async def _redo_operation(self):
+        """Redo last undone operation."""
+        from nanocode.message_actions import create_message_manager
+
+        manager = create_message_manager()
+
+        if manager.can_redo():
+            success = manager.redo()
+            if success:
+                self.ui.print_success("Redo: restored to next state")
+                self.ui.print_info(f"Undo stack: {manager.get_undo_stack_size()}, Redo stack: {manager.get_redo_stack_size()}")
+            else:
+                self.ui.print_error("Nothing to redo")
+        else:
+            self.ui.print_error("Nothing to redo - redo stack is empty")
 
     def _list_agents(self):
         """List available agents."""
