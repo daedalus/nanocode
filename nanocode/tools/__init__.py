@@ -144,6 +144,18 @@ class SyncFuncTool(FuncTool):
 class ToolRegistry:
     """Registry for managing available tools."""
 
+    DEFAULT_TOOL_DIRS = [
+        ".nanocode/tools",
+        ".nanocode/tool",
+        ".opencode/tools",
+        ".claude/tools",
+        ".codex/tools",
+        ".gemini/tools",
+        "tools",
+        "tool",
+    ]
+    TOOL_FILE_EXTENSIONS = [".py"]
+
     def __init__(self):
         self._tools: dict[str, Tool] = {}
         self._handlers: dict[str, Callable] = {}
@@ -185,6 +197,82 @@ class ToolRegistry:
     def unregister(self, name: str):
         """Unregister a tool."""
         self._tools.pop(name, None)
+
+    def discover_tools(self, base_dir: str = None) -> list[Tool]:
+        """Discover tools in configured directories."""
+        import os
+
+        base_dir = base_dir or os.getcwd()
+        discovered = []
+
+        for tool_dir in self.DEFAULT_TOOL_DIRS:
+            tool_path = os.path.join(base_dir, tool_dir)
+            if not os.path.isdir(tool_path):
+                continue
+
+            for root, dirs, files in os.walk(tool_path):
+                for ext in self.TOOL_FILE_EXTENSIONS:
+                    for filename in files:
+                        if filename.endswith(ext) and not filename.startswith("_"):
+                            tool_file = os.path.join(root, filename)
+                            try:
+                                tool = self._load_tool_file(tool_file)
+                                if tool:
+                                    discovered.append(tool)
+                            except Exception:
+                                pass
+
+        return discovered
+
+    def _load_tool_file(self, path: str) -> Tool | None:
+        """Load a tool from a Python file."""
+        import importlib.util
+        import os
+
+        from nanocode import tools
+
+        module_name = os.path.splitext(os.path.basename(path))[0]
+        spec = importlib.util.spec_from_file_location(module_name, path)
+        if not spec or not spec.loader:
+            return None
+
+        module = importlib.util.module_from_spec(spec)
+        module.Tool = tools.Tool
+        module.ToolResult = tools.ToolResult
+
+        try:
+            spec.loader.exec_module(module)
+        except Exception:
+            return None
+
+        ToolClass = module.Tool
+        for attr_name in dir(module):
+            attr = getattr(module, attr_name)
+            if isinstance(attr, type) and issubclass(attr, ToolClass) and attr is not ToolClass:
+                try:
+                    try:
+                        instance = attr()
+                    except TypeError:
+                        instance = attr.__new__(attr)
+                        if hasattr(instance, "name") and hasattr(instance, "description"):
+                            pass
+                        else:
+                            continue
+                    if hasattr(instance, "name") and instance.name:
+                        return instance
+                except Exception:
+                    pass
+
+        return None
+
+    def load_discovered_tools(self, base_dir: str = None) -> int:
+        """Load all discovered tools."""
+        discovered = self.discover_tools(base_dir)
+        for tool in discovered:
+            self.register(tool)
+            logger.info(f"Tool discovered: {tool.name}")
+
+        return len(discovered)
 
 
 class ToolExecutor:

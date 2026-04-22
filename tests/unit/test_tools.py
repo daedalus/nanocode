@@ -1213,5 +1213,156 @@ class TestSkillToolExecution:
         mock_manager.get_skill.side_effect = FileNotFoundError("Skill not found")
         tool = SkillTool(mock_manager)
 
-        result = await tool.execute(name="nonexistent", input="test")
+        result = await tool.execute(name="skill", input="test")
         assert result.success is False
+
+
+class TestToolDiscovery:
+    """Tests for tool auto-discovery."""
+
+    @pytest.fixture
+    def temp_tool_dir(self):
+        """Create a temporary directory with test tools."""
+        import shutil
+
+        tmpdir = tempfile.mkdtemp()
+
+        tool_dir = os.path.join(tmpdir, ".nanocode", "tools")
+        os.makedirs(tool_dir)
+
+        with open(os.path.join(tool_dir, "hello_tool.py"), "w") as f:
+            f.write(
+                """
+from nanocode.tools import Tool, ToolResult
+
+
+class HelloTool(Tool):
+    name = "hello"
+    description = "Say hello"
+
+    async def execute(self, name: str = "") -> ToolResult:
+        return ToolResult(success=True, content=f"Hello, {name}!")
+"""
+            )
+
+        yield tmpdir
+
+        shutil.rmtree(tmpdir)
+
+    def test_default_tool_dirs(self):
+        """Test DEFAULT_TOOL_DIRS contains expected directories."""
+        dirs = ToolRegistry.DEFAULT_TOOL_DIRS
+
+        assert ".nanocode/tools" in dirs
+        assert ".opencode/tools" in dirs
+        assert ".claude/tools" in dirs
+        assert ".codex/tools" in dirs
+        assert "tools" in dirs
+
+    def test_tool_file_extensions(self):
+        """Test TOOL_FILE_EXTENSIONS contains expected extensions."""
+        exts = ToolRegistry.TOOL_FILE_EXTENSIONS
+
+        assert ".py" in exts
+
+    def test_discover_tools(self, temp_tool_dir):
+        """Test discovering tools in directory."""
+        registry = ToolRegistry()
+        discovered = registry.discover_tools(temp_tool_dir)
+
+        assert len(discovered) == 1
+        assert discovered[0].name == "hello"
+
+    def test_discover_tools_no_tools(self):
+        """Test discovering tools with no tools directory."""
+        tmpdir = tempfile.mkdtemp()
+
+        registry = ToolRegistry()
+        discovered = registry.discover_tools(tmpdir)
+
+        assert len(discovered) == 0
+
+        os.rmdir(tmpdir)
+
+    def test_load_discovered_tools(self, temp_tool_dir):
+        """Test loading discovered tools."""
+        registry = ToolRegistry()
+        count = registry.load_discovered_tools(temp_tool_dir)
+
+        assert count == 1
+        assert registry.has_tool("hello")
+
+    def test_discover_tools_multiple_directories(self):
+        """Test discovering tools from multiple directories."""
+        import shutil
+
+        tmpdir = tempfile.mkdtemp()
+
+        dirs = [
+            (".nanocode/tool", "nanocode_tool"),
+            (".opencode/tools", "opencode_tool"),
+            ("tools", "project_tool"),
+        ]
+
+        for tool_subdir, tool_name in dirs:
+            tool_dir = os.path.join(tmpdir, tool_subdir)
+            os.makedirs(tool_dir)
+            with open(os.path.join(tool_dir, f"{tool_name}.py"), "w") as f:
+                f.write(
+                    f"""
+from nanocode.tools import Tool, ToolResult
+
+
+class {tool_name.title().replace("_", "")}Tool(Tool):
+    name = "{tool_name}"
+    description = "A {tool_name} tool"
+
+    async def execute(self, input: str = "") -> ToolResult:
+        return ToolResult(success=True, content="{tool_name}")
+"""
+                )
+
+        try:
+            registry = ToolRegistry()
+            discovered = registry.discover_tools(tmpdir)
+
+            tool_names = {t.name for t in discovered}
+            assert "nanocode_tool" in tool_names
+            assert "opencode_tool" in tool_names
+            assert "project_tool" in tool_names
+        finally:
+            shutil.rmtree(tmpdir)
+
+    def test_discover_tools_skips_dunder(self):
+        """Test discovering tools skips __init__.py and dunder files."""
+        import shutil
+
+        tmpdir = tempfile.mkdtemp()
+
+        tool_dir = os.path.join(tmpdir, ".nanocode", "tools")
+        os.makedirs(tool_dir)
+
+        with open(os.path.join(tool_dir, "__init__.py"), "w") as f:
+            f.write("# init")
+
+        with open(os.path.join(tool_dir, "_private.py"), "w") as f:
+            f.write(
+                """
+from nanocode.tools import Tool, ToolResult
+
+
+class PrivateTool(Tool):
+    name = "private"
+
+    async def execute(self, input: str = "") -> ToolResult:
+        return ToolResult(success=True, content="private")
+"""
+            )
+
+        try:
+            registry = ToolRegistry()
+            discovered = registry.discover_tools(tmpdir)
+
+            assert len(discovered) == 0
+        finally:
+            shutil.rmtree(tmpdir)
