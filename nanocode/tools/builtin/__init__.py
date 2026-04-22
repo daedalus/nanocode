@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from nanocode.tools import Tool, ToolRegistry, ToolResult
+from nanocode.context import TokenCounter
 from nanocode.todo_service import get_todo_service
 
 
@@ -703,6 +704,100 @@ class ReadFileTool(Tool):
                     "lines": len(lines),
                     "total_lines": len(content.splitlines()),
                     "cached": was_cached,
+                },
+            )
+        except Exception as e:
+            return ToolResult(success=False, content=None, error=str(e))
+
+
+class StatFileCountTokensTool(Tool):
+    """Count tokens in a file without reading full content."""
+
+    def __init__(self, root_dir: str = None):
+        super().__init__(
+            name="stat_file_count_tokens",
+            description="Get token count of a file to understand its size before reading. "
+            "Returns estimated tokens, lines, and byte size. Use offset/limit to count a range.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "The path to the file to analyze",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of lines to analyze (for partial)",
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Line number to start from (1-indexed, for partial)",
+                    },
+                },
+                "required": ["path"],
+            },
+        )
+        self.root_dir = Path(root_dir) if root_dir else Path.cwd()
+
+    async def execute(
+        self,
+        path: str,
+        limit: int = None,
+        offset: int = None,
+    ) -> ToolResult:
+        """Count tokens in a file."""
+        try:
+            file_path = self.root_dir / path
+            if not file_path.exists():
+                return ToolResult(success=False, content=None, error="File not found")
+
+            content = file_path.read_text(errors="ignore")
+            lines = content.splitlines()
+
+            total_lines = len(lines)
+            total_tokens = TokenCounter.count_tokens(content)
+            total_bytes = len(content.encode("utf-8"))
+
+            if offset or limit:
+                target_lines = lines
+                if offset:
+                    target_lines = target_lines[offset - 1 :]
+                if limit:
+                    target_lines = target_lines[:limit]
+
+                partial_content = "\n".join(target_lines)
+                partial_tokens = TokenCounter.count_tokens(partial_content)
+                partial_lines_count = len(target_lines)
+
+                return ToolResult(
+                    success=True,
+                    content=f"File: {path}\n"
+                    f"Lines: {partial_lines_count} (of {total_lines})\n"
+                    f"Estimated tokens: {partial_tokens} (of ~{total_tokens})\n"
+                    f"Bytes: ~{total_bytes}",
+                    metadata={
+                        "path": str(file_path),
+                        "lines": partial_lines_count,
+                        "total_lines": total_lines,
+                        "tokens": partial_tokens,
+                        "total_tokens": total_tokens,
+                        "bytes": total_bytes,
+                        "partial": True,
+                    },
+                )
+
+            return ToolResult(
+                success=True,
+                content=f"File: {path}\n"
+                f"Lines: {total_lines}\n"
+                f"Estimated tokens: ~{total_tokens}\n"
+                f"Bytes: ~{total_bytes}",
+                metadata={
+                    "path": str(file_path),
+                    "lines": total_lines,
+                    "tokens": total_tokens,
+                    "bytes": total_bytes,
+                    "partial": False,
                 },
             )
         except Exception as e:
@@ -1807,6 +1902,7 @@ def create_builtin_tools(
         WriteFileTool(file_tracker=file_tracker),
         EditFileTool(),
         ListDirTool(),
+        StatFileCountTokensTool(),
         WebFetchTool(),
         WebSearchTool(),
         # Paid Exa tools (requires API key)
