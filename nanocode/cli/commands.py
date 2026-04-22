@@ -36,6 +36,12 @@ COMMANDS = [
     Command(("debug",), "Toggle HTTP debug logging"),
     Command(("compact",), "Compact context (summarize old messages)"),
     Command(("show_thinking",), "Toggle thinking display"),
+    Command(("revert_messages",), "Revert N messages", takes_args=True, arg_name="steps"),
+    Command(("fork",), "Fork current session", takes_args=True, arg_name="name"),
+    Command(("copy",), "Copy a message", takes_args=True, arg_name="index"),
+    Command(("save",), "Save current fork", takes_args=True, arg_name="name"),
+    Command(("load",), "Load a saved fork", takes_args=True, arg_name="name"),
+    Command(("forks",), "List saved forks"),
 ]
 
 
