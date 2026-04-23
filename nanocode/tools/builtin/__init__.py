@@ -930,6 +930,10 @@ class WebFetchTool(Tool):
         if not target_url:
             return ToolResult(success=False, content=None, error="URL is required")
         
+        # Ensure URL has protocol
+        if not target_url.startswith(("http://", "https://")):
+            target_url = "https://" + target_url
+        
         try:
             import httpx
 
