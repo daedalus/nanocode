@@ -703,6 +703,7 @@ class ReadFileTool(Tool):
                     "path": str(file_path),
                     "lines": len(lines),
                     "total_lines": len(content.splitlines()),
+                    "bytes": len(content.encode("utf-8")),
                     "cached": was_cached,
                 },
             )
@@ -828,7 +829,7 @@ class WriteFileTool(Tool):
             return ToolResult(
                 success=True,
                 content=f"Written to {file_path}",
-                metadata={"path": str(file_path), "size": len(content)},
+                metadata={"path": str(file_path), "bytes": len(content.encode("utf-8"))},
             )
         except Exception as e:
             return ToolResult(success=False, content=None, error=str(e))
@@ -871,10 +872,13 @@ class EditFileTool(Tool):
             if self.file_tracker:
                 self.file_tracker.invalidate(full_path)
 
+            old_bytes = len(old.encode("utf-8"))
+            new_bytes = len(new.encode("utf-8"))
+
             return ToolResult(
                 success=True,
                 content=f"Edited {file_path}",
-                metadata={"path": str(file_path)},
+                metadata={"path": str(file_path), "bytes_read": old_bytes, "bytes_written": new_bytes},
             )
         except Exception as e:
             return ToolResult(success=False, content=None, error=str(e))
@@ -927,7 +931,7 @@ class WebFetchTool(Tool):
     async def execute(self, path: str = None, url: str = None, format: str = "text") -> ToolResult:
         """Fetch URL content."""
         import sys
-        target_url = path or url
+        target_url = url or path
         print(f"DEBUG WebFetchTool.execute: path={path!r}, url={url!r}, target_url={target_url!r}", file=sys.stderr)
         
         if not target_url:
