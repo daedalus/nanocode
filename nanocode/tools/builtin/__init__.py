@@ -634,12 +634,12 @@ class DiffTool(Tool):
 
 
 class ReadFileTool(Tool):
-    """Read file contents with auto-refresh on modification."""
+    """Read file contents with auto-refresh. ALWAYS call fstat first to get file size."""
 
     def __init__(self, root_dir: str = None, file_tracker=None):
         super().__init__(
             name="read",
-            description="Read contents of a file. Returns metadata (lines, bytes, tokens) to help decide if full read is needed. Use offset/limit to read in chunks.",
+            description="Read file content. IMPORTANT: Call fstat(path) FIRST to get stats (lines, bytes, tokens), then use offset/limit to read in chunks.",
             parameters={
                 "type": "object",
                 "properties": {
@@ -723,7 +723,7 @@ class FstatTool(Tool):
     def __init__(self, root_dir: str = None):
         super().__init__(
             name="fstat",
-            description="Get file stats (lines, bytes, tokens) BEFORE reading. MUST call this first to decide reading strategy.",
+            description="Get file stats (lines, bytes, tokens) BEFORE reading. MUST call this first to decide reading strategy. Lightweight - doesn't read full file.",
             parameters={
                 "type": "object",
                 "properties": {
@@ -735,24 +735,32 @@ class FstatTool(Tool):
         self.root_dir = Path(root_dir) if root_dir else Path.cwd()
 
     async def execute(self, path: str) -> ToolResult:
-        """Get file stats."""
+        """Get file stats - lightweight without reading full content."""
         try:
             file_path = self.root_dir / path
             if not file_path.exists():
                 return ToolResult(success=False, content=None, error="File not found")
 
-            content = file_path.read_text(errors="ignore")
-            lines = content.splitlines()
-            total_lines = len(lines)
-            total_bytes = len(content.encode("utf-8"))
-            total_tokens = max(1, total_bytes // 4)
+            # Get file size without reading full content
+            file_size = file_path.stat().st_size
+            bytes_val = file_size
+            
+            # Count lines from file object (more efficient)
+            with open(file_path, 'rb') as f:
+                line_count = sum(1 for _ in f) if file_size < 1024*1024 else None
+            
+            if line_count is None:
+                # For big files, estimate from size
+                line_count = max(1, file_size // 80)
+            
+            total_tokens = max(1, bytes_val // 4)
 
             return ToolResult(
                 success=True,
-                content=f"lines={total_lines}, bytes={total_bytes}, tokens~{total_tokens}",
+                content=f"lines={line_count}, bytes={bytes_val}, tokens~{total_tokens}",
                 metadata={
-                    "total_lines": total_lines,
-                    "bytes": total_bytes,
+                    "total_lines": line_count,
+                    "bytes": bytes_val,
                     "tokens": total_tokens,
                 },
             )

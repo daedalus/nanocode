@@ -261,7 +261,7 @@ def get_current_session_id() -> str | None:
 class AutonomousAgent:
     """Main autonomous agent class."""
 
-    def __init__(self, config: dict | None = None, session_id: str = None, verbose: bool = False, yolo: bool = False, drift_alert: bool = False, drift_intervene: bool = False):
+    def __init__(self, config: dict | None = None, session_id: str = None, verbose: bool = False, yolo: bool = False, drift_alert: bool = False, drift_intervene: bool = False, system_prompt: str = None):
         self.config = config or get_config()
         self.state = AgentStateData()
         self.debug = verbose
@@ -269,6 +269,7 @@ class AutonomousAgent:
         self.drift_mode = "intervene" if drift_intervene else ("alert" if drift_alert else "off")
         self._session_id = session_id
         self._session_logger = None
+        self._custom_system_prompt = system_prompt
 
         self._init_session()
         self._init_agents()
@@ -562,7 +563,9 @@ class AutonomousAgent:
         )
 
         # Build composable system prompt
-        if system_prompt := ctx_config.get("system_prompt"):
+        if self._custom_system_prompt:
+            final_prompt = self._custom_system_prompt
+        elif system_prompt := ctx_config.get("system_prompt"):
             final_prompt = system_prompt
         else:
             final_prompt = self._build_system_prompt()
