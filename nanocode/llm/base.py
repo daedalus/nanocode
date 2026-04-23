@@ -236,9 +236,19 @@ class LLMBase(ABC):
                 if response.status_code >= 400:
                     try:
                         error_data = response.json()
-                        error_msg = error_data.get("error", {}).get("message", response.text[:300])
+                        print(f"[DEBUG] Raw error JSON: {error_data}")
+                        raw_error = error_data.get("error", {}).get("metadata", {}).get("raw", "")
+                        if raw_error:
+                            try:
+                                raw_json = json.loads(raw_error)
+                                error_msg = raw_json.get("error", {}).get("message", raw_error)
+                            except Exception:
+                                error_msg = error_data.get("error", {}).get("message", response.text[:300])
+                        else:
+                            error_msg = error_data.get("error", {}).get("message", response.text[:300])
                     except Exception:
                         error_msg = response.text[:300]
+                    print(f"[DEBUG] Error msg extracted: {error_msg}")
                     raise HTTPStatusError(
                         f"{response.status_code} {response.reason_phrase}: {error_msg}",
                         request=response.request,

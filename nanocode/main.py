@@ -33,8 +33,15 @@ def parse_args():
         help="Path to config file",
     )
     parser.add_argument(
+        "--resume",
+        "-r",
+        type=str,
+        default=None,
+        help="Resume an existing session by ID",
+    )
+    parser.add_argument(
         "--provider",
-        "-p",
+        "-P",
         type=str,
         choices=["openai", "anthropic", "ollama", "lm-studio"],
         help="LLM provider to use",
@@ -172,11 +179,6 @@ def parse_args():
         help="Show messages exchanged with the LLM",
     )
     parser.add_argument(
-        "--prompt",
-        type=str,
-        help="Run a single prompt and exit (non-interactive mode)",
-    )
-    parser.add_argument(
         "--debug-logging",
         action="store_true",
         help="Enable debug logging",
@@ -200,16 +202,22 @@ def parse_args():
         help="Context compaction strategy",
     )
     parser.add_argument(
-        "--resume",
-        "-r",
-        type=str,
-        default=None,
-        help="Resume an existing session by ID",
-    )
-    parser.add_argument(
         "--list-sessions",
         action="store_true",
         help="List all sessions",
+    )
+    parser.add_argument(
+        "--auto-execute",
+        "-x",
+        action="store_true",
+        help="Enable auto-execution of commands found in file contents (potentially dangerous)",
+    )
+    parser.add_argument(
+        "--prompt",
+        "-p",
+        type=str,
+        default=None,
+        help="Run a single prompt and exit",
     )
     return parser.parse_args()
 
@@ -318,7 +326,7 @@ async def main():
             else:
                 auth_username = args.serve_auth
 
-        agent = AutonomousAgent(config, session_id=args.resume, verbose=args.verbose, yolo=args.yolo, drift_alert=args.drift_alert, drift_intervene=args.drift_intervene)
+        agent = AutonomousAgent(config, session_id=args.resume, verbose=args.verbose, yolo=args.yolo, drift_alert=args.drift_alert, drift_intervene=args.drift_intervene, auto_execute=args.auto_execute)
         await agent.init_async()
 
         if args.mdns:
@@ -350,7 +358,7 @@ async def main():
             config.set("proxy", args.proxy)
         if args.user_agent:
             config.set("user_agent", args.user_agent)
-        agent = AutonomousAgent(config, session_id=args.resume, yolo=args.yolo, drift_alert=args.drift_alert, drift_intervene=args.drift_intervene)
+        agent = AutonomousAgent(config, session_id=args.resume, yolo=args.yolo, drift_alert=args.drift_alert, drift_intervene=args.drift_intervene, auto_execute=args.auto_execute)
         await agent.init_async()
         await run_acp(agent)
         return
@@ -410,7 +418,7 @@ async def main():
             args.model,
         )
 
-    agent = AutonomousAgent(config, session_id=args.resume, verbose=args.verbose, yolo=args.yolo, drift_alert=args.drift_alert, drift_intervene=args.drift_intervene)
+    agent = AutonomousAgent(config, session_id=args.resume, verbose=args.verbose, yolo=args.yolo, drift_alert=args.drift_alert, drift_intervene=args.drift_intervene, auto_execute=args.auto_execute)
     await agent.init_async()
     atexit.register(lambda: _save_session_on_exit(agent))
 

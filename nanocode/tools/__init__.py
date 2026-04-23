@@ -369,7 +369,8 @@ class ToolExecutor:
                 meta_parts = []
                 for key, value in result.metadata.items():
                     if key not in ("cached",):
-                        meta_parts.append(f"{key}={value}")
+                        val_str = str(value) if not isinstance(value, (list, dict)) else repr(value)
+                        meta_parts.append(f"{key}={val_str}")
                 if meta_parts:
                     parts.append(f"[metadata: {', '.join(meta_parts)}]")
             if result.content:

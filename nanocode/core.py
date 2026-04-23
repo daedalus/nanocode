@@ -117,7 +117,7 @@ def get_current_session_id() -> str | None:
 class AutonomousAgent:
     """Main autonomous agent class."""
 
-    def __init__(self, config: dict | None = None, session_id: str = None, verbose: bool = False, yolo: bool = False, drift_alert: bool = False, drift_intervene: bool = False, system_prompt: str = None):
+    def __init__(self, config: dict | None = None, session_id: str = None, verbose: bool = False, yolo: bool = False, drift_alert: bool = False, drift_intervene: bool = False, system_prompt: str = None, auto_execute: bool = False):
         self.config = config or get_config()
         self.state = AgentStateData()
         self.debug = verbose
@@ -126,6 +126,7 @@ class AutonomousAgent:
         self._session_id = session_id
         self._session_logger = None
         self._custom_system_prompt = system_prompt
+        self.auto_execute = auto_execute
 
         self._init_session()
         self._init_agents()
@@ -568,28 +569,26 @@ class AutonomousAgent:
                 return await self.llm.chat(messages=messages, tools=tools)
             except Exception as e:
                 error_str = str(e)
-                logger.warning(f"[{self.current_agent.name if self.current_agent else 'unknown'}] LLM error: {error_str[:150]}")
+                import traceback
+                logger.warning(f"[{self.current_agent.name if self.current_agent else 'unknown'}] LLM error: {error_str[:500]}")
+                logger.warning(f"[{self.current_agent.name}] Full error: {traceback.format_exc()}")
                 retry_count += 1
                 if retry_count >= max_retries:
                     logger.error(f"[{self.current_agent.name if self.current_agent else 'unknown'}] Max retries ({max_retries}) reached")
                     raise
-                # Build fresh call without tool IDs - keep only user message
+                # Build fresh call - strip ALL tool results, keep only system + user
                 logger.warning(f"[{self.current_agent.name if self.current_agent else 'unknown'}] Retry {retry_count}/{max_retries}: rebuild context")
-                user_msg = None
-                for msg in messages:
-                    if msg.get("role") == "user":
-                        user_msg = msg
-                        break
-                if not user_msg:
-                    raise last_error or Exception("No user message to retry with")
-                # Fresh messages: system + just the user input
                 fresh_messages = []
+                seen_user = False
                 for msg in messages:
-                    if msg.get("role") == "system":
+                    role = msg.get("role")
+                    if role == "system":
                         fresh_messages.append(msg)
-                fresh_messages.append(user_msg)
+                    elif role == "user" and not seen_user:
+                        fresh_messages.append(msg)
+                        seen_user = True
                 logger.debug(f"[retry] Fresh context: {len(fresh_messages)} messages")
-                result = await self.llm.chat(messages=fresh_messages, tools=None)
+                result = await self.llm.chat(messages=fresh_messages, tools=tools)
                 return result
         raise last_error or Exception("Max retries exceeded")
     
@@ -1044,8 +1043,8 @@ class AutonomousAgent:
                         result_content
                     )
                     
-                    # AUTO-EXECUTE: If this was a read tool and result contains commands, extract and run them
-                    if tr["tool_name"] == "read" and result_content:
+                    # AUTO-EXECUTE: If enabled, run commands found in file contents
+                    if self.auto_execute and tr["tool_name"] == "read" and result_content:
                         commands = self._extract_commands_from_output(result_content)
                         if commands:
                             logger.info(f"[{agent_name}] Auto-executing {len(commands)} commands from file content")
@@ -1055,6 +1054,7 @@ class AutonomousAgent:
                                     logger.info(f"[{agent_name}] Auto-exec '{cmd[:30]}...': {exec_result.success}")
                                 except Exception as e:
                                     logger.warning(f"[{agent_name}] Auto-exec failed: {e}")
+                     
                     
                     self.context_manager.add_tool_result(
                         tr["tool_name"],

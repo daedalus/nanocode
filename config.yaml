@@ -1,7 +1,7 @@
 llm:
   default_provider: opencode
   use_model_registry: false
-  default_model: "opencode/big-pickle"
+  default_model: "opencode/hy3-preview-free"
   user_agent: "opencode/1.4.8"
 
   providers:
@@ -9,7 +9,7 @@ llm:
     opencode:
       api_key: public
       base_url: https://opencode.ai/zen/v1
-      model: big-pickle
+      model: hy3-preview-free
 
     openrouter:
       api_key: ${OPENROUTER_API_KEY}

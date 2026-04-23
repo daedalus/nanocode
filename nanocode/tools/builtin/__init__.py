@@ -419,9 +419,10 @@ class GlobTool(Tool):
         try:
             search_path = Path(path) if path else self.root_dir
             files = list(search_path.glob(pattern))
+            file_list = [str(f.relative_to(search_path)) for f in files]
             return ToolResult(
                 success=True,
-                content=[str(f.relative_to(search_path)) for f in files],
+                content="\n".join(file_list) if file_list else "",
                 metadata={"count": len(files)},
             )
         except Exception as e:

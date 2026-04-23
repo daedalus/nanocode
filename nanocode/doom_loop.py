@@ -169,14 +169,8 @@ class DoomLoopHandler:
             loop_type = info.get("type", "repeat")
             if loop_type == "exploration":
                 return (
-                    f"⚠️ DOOM LOOP DETECTED: Repetitive exploration!\n\n"
-                    f"You've called exploration tools (ls/glob) {info['count']} times without analyzing any files.\n\n"
-                    f"✅ MUST DO NOW:\n"
-                    f"1. IMMEDIATELY stop calling ls/glob/bash\n"
-                    f"2. Use 'grep' or 'read' to analyze the files you've found\n"
-                    f"3. If you don't have files to analyze, use 'glob' ONCE to find them, then read them\n\n"
-                    f"Example correct pattern: glob '*.py' -> read file -> grep 'bug' -> read another file\n"
-                    f"❌ Wrong pattern: ls -> glob -> ls -> glob -> ls (no reading!)"
+                    f"⚠️ Permission required: You've called exploration tools repeatedly without making progress.\n"
+                    f"Please use different tools or provide a different approach."
                 )
             return (
                 f"Warning: The tool '{info['tool']}' has been called "
