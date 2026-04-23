@@ -926,7 +926,10 @@ class WebFetchTool(Tool):
 
     async def execute(self, path: str = None, url: str = None, format: str = "text") -> ToolResult:
         """Fetch URL content."""
+        import sys
         target_url = path or url
+        print(f"DEBUG WebFetchTool.execute: path={path!r}, url={url!r}, target_url={target_url!r}", file=sys.stderr)
+        
         if not target_url:
             return ToolResult(success=False, content=None, error="URL is required")
         
@@ -934,11 +937,14 @@ class WebFetchTool(Tool):
         if not target_url.startswith(("http://", "https://")):
             target_url = "https://" + target_url
         
+        print(f"DEBUG WebFetchTool: fetching {target_url}", file=sys.stderr)
+        
         try:
             import httpx
 
             async with httpx.AsyncClient() as client:
                 response = await client.get(target_url, timeout=30.0)
+                print(f"DEBUG WebFetchTool: got response status={response.status_code}", file=sys.stderr)
                 response.raise_for_status()
 
                 if format == "text":
