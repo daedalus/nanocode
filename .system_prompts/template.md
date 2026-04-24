@@ -64,8 +64,8 @@ If user says "read AND X", "fetch AND Y", or "do A then B":
 
 # Skills
 Skills provide specialized capabilities. To activate:
-- Use `/skill <name>` to view skill details
-- Use `/skill <name> <input>` to execute a skill
+- Use `skill` tool to execute any skill directly (e.g., name="mcp-builder", input="...")
+- NEVER list skills and stop - actually USE the skill tool to execute it
 
 # Code Review
 When asked to review or find bugs:

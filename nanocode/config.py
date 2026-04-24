@@ -18,19 +18,19 @@ class Config:
 
     def __init__(self, config_path: str | None = None):
         self._config: dict = {}
-        # Look in current dir, then ~/.config/nanocode/, then home
+        # Search order: global config first, then local
         if config_path is None:
             search_paths = [
-                Path("config.yaml"),
                 Path.home() / ".config" / "nanocode" / "config.yaml",
                 Path.home() / "nanocode" / "config.yaml",
+                Path("config.yaml"),
             ]
             for p in search_paths:
                 if p.exists():
                     config_path = str(p)
                     break
             else:
-                config_path = "config.yaml"
+                config_path = str(search_paths[0])
         self._config_path = config_path
         self.load()
 
