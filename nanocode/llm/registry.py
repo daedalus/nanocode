@@ -4,6 +4,10 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from time import time
+
+# Cache TTL: refresh every 6 hours
+CACHE_TTL_SECONDS = 6 * 60 * 60
 
 
 def _get_default_storage_dir() -> Path:
@@ -76,18 +80,33 @@ class ModelRegistry:
         """Ensure cache directory exists."""
         os.makedirs(self.cache_dir, exist_ok=True)
 
+    def _cache_age_seconds(self) -> float:
+        """Get age of cache file in seconds."""
+        if not os.path.exists(self.cache_file):
+            return float("inf")
+        mtime = os.path.getmtime(self.cache_file)
+        return time() - mtime
+
+    def _is_cache_valid(self) -> bool:
+        """Check if cache exists and is not expired."""
+        if not os.path.exists(self.cache_file):
+            return False
+        return self._cache_age_seconds() < CACHE_TTL_SECONDS
+
     async def load(self, force_refresh: bool = False):
         """Load model registry from cache or fetch from models.dev."""
-
+        # Early return if already loaded in memory
         if not force_refresh and self._providers:
             return
 
-        if not force_refresh:
+        # Check if cache is valid (not expired)
+        if not force_refresh and self._is_cache_valid():
             cached = self._load_from_cache()
             if cached:
                 self._providers = cached
                 return
 
+        # Cache missing or expired - refresh from server
         await self.refresh()
 
     def _load_from_cache(self) -> dict[str, ProviderInfo] | None:

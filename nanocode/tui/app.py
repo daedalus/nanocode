@@ -149,7 +149,11 @@ class ModelExplorerScreen(ModalScreen):
         text-align: center;
         text-style: bold;
         color: #b16286;
-        margin-bottom: 1;
+    }
+
+    #model-subtitle {
+        color: #928374;
+        text-align: center;
     }
 
     #search-input {
@@ -173,6 +177,7 @@ class ModelExplorerScreen(ModalScreen):
     BINDINGS = [
         Binding("escape", "cancel", "Cancel"),
         Binding("enter", "select", "Select"),
+        Binding("ctrl+r", "refresh", "Refresh"),
     ]
 
     def __init__(self, on_select=None, **kwargs):
@@ -181,39 +186,60 @@ class ModelExplorerScreen(ModalScreen):
         self._models: list[tuple[str, str, int]] = []  # (provider/model, provider, context_limit)
         self._filtered: list[tuple[str, str, int]] = []
         self._loading = True
+        self._refresh_time = None
 
     def compose(self) -> ComposeResult:
         yield Vertical(
             Static("Model Explorer (models.dev)", id="model-title"),
+            Static("Loading...", id="model-subtitle"),
             Input(placeholder="Search models...", id="search-input"),
             DataTable(id="model-list"),
-            Static("Enter: select | Escape: cancel", id="help-text"),
+            Static("Enter: select | Ctrl+R: refresh | Escape: cancel", id="help-text"),
         )
 
     def on_mount(self):
-        async def load_models():
-            try:
-                from nanocode.llm.registry import get_registry
-                registry = get_registry()
-                await registry.load()
-                models = []
-                for pid, provider in registry._providers.items():
-                    for mname, minfo in provider.models.items():
-                        models.append((f"{pid}/{mname}", pid, minfo.context_limit))
-                models.sort(key=lambda x: -x[2])  # Sort by context_limit desc
-                return models
-            except Exception as e:
-                return []
+        self._load_registry()
 
-        async def set_models(models):
+    def _load_registry(self, force: bool = False):
+        async def load_models():
+            from nanocode.llm.registry import get_registry
+            from nanocode.llm.registry import CACHE_TTL_SECONDS
+            registry = get_registry()
+            await registry.load(force_refresh=force)
+            age = registry._cache_age_seconds() if not force else 0
+            remaining = CACHE_TTL_SECONDS - age
+            return registry, age, remaining
+
+        async def set_models(result):
+            registry, age, remaining = result
+            subtitle = self.query_one("#model-subtitle", Static)
+            if age < 60:
+                subtitle.update(f"Cache: just refreshed ({len(registry._providers)} providers)")
+            else:
+                mins = int(remaining / 60)
+                subtitle.update(f"Cache: {mins}m remaining ({len(registry._providers)} providers)")
+
+            models = []
+            for pid, provider in registry._providers.items():
+                for mname, minfo in provider.models.items():
+                    models.append((f"{pid}/{mname}", pid, minfo.context_limit))
+            models.sort(key=lambda x: -x[2])
+
             self._models = models
-            self._filtered = models[:100]  # Show first 100
+            self._filtered = models[:100]
             self._loading = False
             self._update_list()
 
         asyncio.create_task(load_models()).add_done_callback(
             lambda f: self.call_later(set_models, f.result())
         )
+
+    @work()
+    async def action_refresh(self):
+        """Refresh the model registry."""
+        self._loading = True
+        self.query_one("#model-subtitle", Static).update("Refreshing...")
+        self._load_registry(force=True)
 
     def _update_list(self):
         table = self.query_one("#model-list", DataTable)
