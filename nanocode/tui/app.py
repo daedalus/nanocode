@@ -292,8 +292,8 @@ class ModelExplorerScreen(ModalScreen):
     def on_data_table_row_selected(self, event: DataTable.RowSelected):
         row_index = event.cursor_row
         if 0 <= row_index < len(self._filtered):
-            full_id, provider, ctx = self._filtered[row_index]
-            self.dismiss((full_id, provider))
+            self._selected_index = row_index
+            self.dismiss((self._filtered[row_index][0], self._filtered[row_index][1]))
 
     def action_cancel(self):
         self.dismiss(None)
@@ -1876,6 +1876,8 @@ Footer {
                 if self.agent and hasattr(self.agent, '_init_llm'):
                     self.agent._init_llm()
                 
+                self._update_sidebar()
+                
                 self.notify(f"Model set to {full_id}", severity="success")
             except Exception as e:
                 self.notify(f"Failed to save: {e}", severity="error")
@@ -2050,17 +2052,28 @@ Footer {
                 sys.stdout = stdout_capture
                 sys.stderr = stderr_capture
 
-                # Suppress all loggers to file only
+                # Suppress ALL logging BEFORE touching stdout/stderr
+                # This prevents any library from writing to stderr before we capture it
                 root_logger = logging.getLogger()
-                old_level = root_logger.level
-                root_logger.setLevel(logging.DEBUG)
+                root_logger.setLevel(logging.CRITICAL + 1)  # Above CRITICAL = no output
 
-                # Disable all handlers and add file handler only
+                # Disable all handlers first (before any output)
                 for h in root_logger.handlers[:]:
                     root_logger.removeHandler(h)
-                fh = logging.FileHandler("/tmp/nanocode.log")
-                fh.setLevel(logging.DEBUG)
-                root_logger.addHandler(fh)
+
+                # Save original stdout/stderr
+                self._saved_stdout = sys.stdout
+                self._saved_stderr = sys.stderr
+
+                # Create capture buffers
+                stdout_capture = io.StringIO()
+                stderr_capture = io.StringIO()
+                sys.stdout = stdout_capture
+                sys.stderr = stderr_capture
+
+                # Restore root logger to DEBUG but with all output going to file only
+                root_logger.setLevel(logging.DEBUG)
+                root_logger.addHandler(logging.FileHandler("/tmp/nanocode.log"))
 
                 try:
                     # Streaming buffer for real-time display
@@ -2110,12 +2123,16 @@ Footer {
                         on_tool_complete=on_tool_complete,
                     )
                 finally:
-                    # Restore logging
-                    root_logger.removeHandler(fh)
-                    fh.close()
+                    # Restore stdout/stderr first
+                    sys.stdout = self._saved_stdout
+                    sys.stderr = self._saved_stderr
+
+                    # Restore root logger level
+                    root_logger.setLevel(logging.WARNING)  # Default level
+
+                    # Remove file handler
                     for h in root_logger.handlers[:]:
                         root_logger.removeHandler(h)
-                    root_logger.setLevel(old_level)
 
                 # Restore stdout/stderr (but don't restore - keep them captured!)
                 # Actually, keep them captured permanently to prevent any print from showing
