@@ -1,144 +1,117 @@
-llm:
-  default_provider: opencode
-  use_model_registry: false
-  default_model: "opencode/hy3-preview-free"
-  user_agent: "opencode/1.4.8"
-
-  providers:
-
-    opencode:
-      api_key: public
-      base_url: https://opencode.ai/zen/v1
-      model: hy3-preview-free
-
-    openrouter:
-      api_key: ${OPENROUTER_API_KEY}
-      base_url: https://openrouter.ai/api/v1
-      model: "openrouter/free"
-     
-    openai:
-      api_key: ${OPENAI_API_KEY}
-      base_url: https://api.openai.com/v1
-      model: gpt-4o
-     
-    anthropic:
-      api_key: ${ANTHROPIC_API_KEY}
-      model: claude-3-5-sonnet-20241022
-    
-    ollama:
-      base_url: http://localhost:11434
-      model: llama3
-    
-    lm-studio:
-      base_url: http://localhost:1234/v1
-      model: local-model
-
-context:
-  strategy: sliding_window  # sliding_window, summary, importance
-  max_tokens: 8000
-  preserve_system: true
-  preserve_last_n: 6
-  summarize_threshold: 0.8
-  tool_truncation: null  # null to disable, or number (e.g. 500) to enable truncation at token limit
-
-mcp:
-  servers:
-    # Free Exa MCP - no API key required
-    exa:
-      url: https://mcp.exa.ai/mcp?tools=web_search_exa,deep_search_exa,get_code_context_exa
-      enabled: True
-
-    # Open WebSearch MCP - free multi-engine search
-    openwebsearch:
-      url: https://open-web-search.vercel.app/mcp
-      enabled: True
-
-planning:
-  max_steps: 20
-  max_retries: 3
-  checkpoint_enabled: true
-
-tools:
-  enabled:
-    - bash
-    - read
-    - write
-    - edit
-    - glob
-    - grep
-    - ls
-    - webfetch
-    - websearch
-    - exa          # Paid Exa (requires API key)
-    - exa_fetch   # Paid Exa fetch (requires API key)
-    - free_exa    # Free Exa (no API key, rate limited)
-    - openwebsearch  # Free multi-engine search
-    - todo
-
-file_tracker:
-  cache_dir: .nanocode/cache
-  enabled: true
-
-file_watcher:
-  enabled: true
-  ignore:
-    - .git
-    - __pycache__
-    - "*.pyc"
-    - .pytest_cache
-    - node_modules
-    - .DS_Store
-    - "*.swp"
-    - "*.tmp"
-    - .venv
-    - venv
-
-exa:
-  api_key: ${EXA_API_KEY}
-  num_results: 10
-  default_type: auto
-
-storage:
-  enabled: true
-  db_path: ~/.nanocode/data/nanocode.db
-
-skills:
-  directories:
-    - .nanocode/skills
-    - .nanocode/commands
-
-snapshot:
-  enabled: true
-  prune_days: 7
-
 admin:
   enabled: true
   host: 127.0.0.1
   port: 7890
-
+context:
+  max_tokens: 8000
+  preserve_last_n: 6
+  preserve_system: true
+  strategy: sliding_window
+  summarize_threshold: 0.8
+  tool_truncation: null
+exa:
+  api_key: ${EXA_API_KEY}
+  default_type: auto
+  num_results: 10
+file_tracker:
+  cache_dir: .nanocode/cache
+  enabled: true
+file_watcher:
+  enabled: true
+  ignore:
+  - .git
+  - __pycache__
+  - '*.pyc'
+  - .pytest_cache
+  - node_modules
+  - .DS_Store
+  - '*.swp'
+  - '*.tmp'
+  - .venv
+  - venv
+github: null
+llm:
+  default_model: opencode/hy3-preview-free
+  default_provider: opencode
+  providers:
+    anthropic:
+      api_key: ${ANTHROPIC_API_KEY}
+      model: claude-3-5-sonnet-20241022
+    lm-studio:
+      base_url: http://localhost:1234/v1
+      model: local-model
+    ollama:
+      base_url: http://localhost:11434
+      model: llama3
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      base_url: https://api.openai.com/v1
+      model: gpt-4o
+    opencode:
+      api_key: public
+      base_url: https://opencode.ai/zen/v1
+      model: hy3-preview-free
+    openrouter:
+      api_key: ${OPENROUTER_API_KEY}
+      base_url: https://openrouter.ai/api/v1
+      model: openrouter/free
+    qiniu-ai:
+      model: kling-v2-6
+  use_model_registry: false
+  user_agent: opencode/1.4.8
+mcp:
+  servers:
+    exa:
+      enabled: true
+      url: https://mcp.exa.ai/mcp?tools=web_search_exa,deep_search_exa,get_code_context_exa
+    openwebsearch:
+      enabled: true
+      url: https://open-web-search.vercel.app/mcp
 messaging:
   enabled: false
   platforms:
     slack:
-      enabled: false
-      bot_token: ${SLACK_BOT_TOKEN}
-      signing_secret: ${SLACK_SIGNING_SECRET}
       app_token: ${SLACK_APP_TOKEN}
-      socket_mode: true
-    
-    telegram:
+      bot_token: ${SLACK_BOT_TOKEN}
       enabled: false
+      signing_secret: ${SLACK_SIGNING_SECRET}
+      socket_mode: true
+    telegram:
       bot_token: ${TELEGRAM_BOT_TOKEN}
-    
+      enabled: false
     whatsapp:
+      access_token: ${WHATSAPP_ACCESS_TOKEN}
       enabled: false
       phone_number_id: ${WHATSAPP_PHONE_NUMBER_ID}
-      access_token: ${WHATSAPP_ACCESS_TOKEN}
       verify_token: ${WHATSAPP_VERIFY_TOKEN}
       webhook_port: 8080
-
-github:
-  # token: ${GITHUB_TOKEN}  # Set via environment variable or here
-  # app_id: ""              # GitHub App ID
-  # app_private_key: ""      # GitHub App private key
-  # installation_id: ""      # GitHub App installation ID
+planning:
+  checkpoint_enabled: true
+  max_retries: 3
+  max_steps: 20
+skills:
+  directories:
+  - .nanocode/skills
+  - .nanocode/commands
+snapshot:
+  enabled: true
+  prune_days: 7
+storage:
+  db_path: ~/.nanocode/data/nanocode.db
+  enabled: true
+tools:
+  enabled:
+  - bash
+  - read
+  - write
+  - edit
+  - glob
+  - grep
+  - ls
+  - webfetch
+  - websearch
+  - exa
+  - exa_fetch
+  - free_exa
+  - openwebsearch
+  - todo

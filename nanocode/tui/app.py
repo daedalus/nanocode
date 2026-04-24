@@ -309,6 +309,153 @@ class ModelExplorerScreen(ModalScreen):
             table.cursor_position = self._selected_index
 
 
+class AgentPermissionsScreen(ModalScreen):
+    """Modal screen for managing agent permissions."""
+
+    CSS = """
+    AgentPermissionsScreen {
+        align: center middle;
+    }
+
+    AgentPermissionsScreen > #agent-dialog {
+        width: 70;
+        height: 80%;
+        border: solid #689d6a;
+        background: #282828;
+        padding: 1 2;
+    }
+
+    #agent-title {
+        text-align: center;
+        text-style: bold;
+        color: #689d6a;
+    }
+
+    #agent-subtitle {
+        color: #928374;
+        text-align: center;
+    }
+
+    #agent-list {
+        height: 1fr;
+    }
+
+    DataTable {
+        height: 100%;
+    }
+
+    #help-text {
+        color: #928374;
+        padding: 0 2 1 2;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+        Binding("enter", "toggle", "Toggle"),
+        Binding("up", "move_up", "Up"),
+        Binding("down", "move_down", "Down"),
+    ]
+
+    def __init__(self, on_select=None, **kwargs):
+        super().__init__(**kwargs)
+        self._on_select = on_select
+        self._agents: list[dict] = []  # {name, permission, description}
+        self._filtered: list[dict] = []
+        self._selected_index = 0
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Static("Agent Permissions", id="agent-title"),
+            Static("Manage agent tool permissions", id="agent-subtitle"),
+            Input(placeholder="Search agents...", id="search-input"),
+            DataTable(id="agent-list"),
+            Static("↑↓: navigate | Enter: toggle | Escape: cancel", id="help-text"),
+        )
+
+    def on_mount(self):
+        self._load_agents()
+
+    def _load_agents(self):
+        from nanocode.agents import get_agent_registry
+        registry = get_agent_registry()
+        agents = []
+
+        for agent in registry.list_primary():
+            # Get current permission mode
+            perm = agent.permission.value if hasattr(agent, 'permission') else 'ask'
+            agents.append({
+                'name': agent.name,
+                'permission': perm,
+                'description': getattr(agent, 'description', '')[:50],
+            })
+
+        self._agents = agents
+        self._filtered = agents
+        self._update_list()
+
+    def _update_list(self):
+        table = self.query_one("#agent-list", DataTable)
+        table.clear()
+        table.add_columns("Agent", "Permission", "Description")
+        for agent in self._filtered:
+            table.add_row(agent['name'], agent['permission'], agent['description'][:50])
+
+    def on_input_changed(self, event: Input.Changed):
+        query = event.value.lower()
+        if query:
+            self._filtered = [
+                a for a in self._agents
+                if query in a['name'].lower() or query in a['permission'].lower()
+            ]
+        else:
+            self._filtered = self._agents
+        self._selected_index = 0
+        self._update_list()
+
+    def on_input_submitted(self, event: Input.Submitted):
+        self.action_toggle()
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected):
+        row_index = event.cursor_row
+        if 0 <= row_index < len(self._filtered):
+            self._selected_index = row_index
+            self._toggle_permission()
+
+    def action_cancel(self):
+        self.dismiss(None)
+
+    def action_toggle(self):
+        """Toggle permission for current agent."""
+        if self._filtered and 0 <= self._selected_index < len(self._filtered):
+            self._toggle_permission()
+
+    def _toggle_permission(self):
+        """Toggle between allow/ask/deny."""
+        if 0 <= self._selected_index < len(self._filtered):
+            agent = self._filtered[self._selected_index]
+            current = agent['permission']
+            # Cycle: ask -> allow -> deny -> ask
+            if current == 'ask':
+                new_perm = 'allow'
+            elif current == 'allow':
+                new_perm = 'deny'
+            else:
+                new_perm = 'ask'
+
+            # Update agent permission in registry
+            from nanocode.agents import get_agent_registry
+            registry = get_agent_registry()
+            ag = registry.get(agent['name'])
+            if ag and hasattr(ag, 'permission'):
+                from nanocode.agents.permission import PermissionAction
+                ag.permission = PermissionAction(new_perm)
+
+            # Update local data
+            agent['permission'] = new_perm
+            self._update_list()
+
+
 class MessageActionScreen(ModalScreen):
     """Modal screen for message actions: fork, copy, revert."""
 
@@ -809,6 +956,7 @@ Footer {
         Binding("ctrl+b", "toggle_sidebar", "Sidebar", show=True),
         Binding("ctrl+m", "message_actions", "Actions", show=True),
         Binding("f2", "model_explorer", "Models", show=True),
+        Binding("f3", "agent_permissions", "Agents", show=True),
     ]
 
     def on_key(self, event) -> None:
@@ -1387,6 +1535,14 @@ Footer {
                 self.notify(f"Model set to {full_id}", severity="success")
             except Exception as e:
                 self.notify(f"Failed to save: {e}", severity="error")
+
+    @work()
+    async def action_agent_permissions(self):
+        """Show agent permissions management."""
+        screen = AgentPermissionsScreen()
+        result = await self.push_screen_wait(screen)
+        if result:
+            self.notify("Agent permissions updated", severity="success")
 
     @work()
     async def action_message_actions(self):
