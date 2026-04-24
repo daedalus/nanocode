@@ -122,38 +122,126 @@ class PermissionScreen(ModalScreen):
         min-width: 8;
     }
     """
-    
+
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.request = request
         self._result = None
-    
+
+
+class ModelExplorerScreen(ModalScreen):
+    """Modal screen for exploring available models from models.dev."""
+
+    CSS = """
+    ModelExplorerScreen {
+        align: center middle;
+    }
+
+    ModelExplorerScreen > #model-dialog {
+        width: 80;
+        height: 80%;
+        border: solid #b16286;
+        background: #282828;
+        padding: 1 2;
+    }
+
+    #model-title {
+        text-align: center;
+        text-style: bold;
+        color: #b16286;
+        margin-bottom: 1;
+    }
+
+    #search-input {
+        margin-bottom: 1;
+    }
+
+    #model-list {
+        height: 1fr;
+    }
+
+    DataTable {
+        height: 100%;
+    }
+
+    #help-text {
+        color: #928374;
+        padding: 0 2 1 2;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+        Binding("enter", "select", "Select"),
+    ]
+
+    def __init__(self, on_select=None, **kwargs):
+        super().__init__(**kwargs)
+        self._on_select = on_select
+        self._models: list[tuple[str, str, int]] = []  # (provider/model, provider, context_limit)
+        self._filtered: list[tuple[str, str, int]] = []
+        self._loading = True
+
     def compose(self) -> ComposeResult:
-        args_str = f"Args: {str(self.request.arguments)}" if self.request.arguments else ""
         yield Vertical(
-            Static("⚠️ Permission Request", id="dialog-title"),
-            Static(f"Tool: {self.request.tool_name}", id="dialog-info"),
-            Static(args_str, id="dialog-args"),
-            Horizontal(
-                Button("Yes (y)", id="btn-yes", variant="primary"),
-                Button("No (n)", id="btn-no", variant="default"),
-                Button("Always (a)", id="btn-always", variant="success"),
-                id="dialog-buttons",
-            ),
-            id="dialog",
+            Static("Model Explorer (models.dev)", id="model-title"),
+            Input(placeholder="Search models...", id="search-input"),
+            DataTable(id="model-list"),
+            Static("Enter: select | Escape: cancel", id="help-text"),
         )
-    
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        from nanocode.agents.permission import PermissionReply, PermissionReplyType
-        
-        if event.button.id == "btn-yes":
-            self._result = PermissionReply(request_id=self.request.id, reply=PermissionReplyType.ONCE)
-        elif event.button.id == "btn-no":
-            self._result = PermissionReply(request_id=self.request.id, reply=PermissionReplyType.REJECT, message="Permission denied by user")
-        elif event.button.id == "btn-always":
-            self._result = PermissionReply(request_id=self.request.id, reply=PermissionReplyType.ALWAYS)
-        
-        self.dismiss(self._result)
+
+    def on_mount(self):
+        async def load_models():
+            try:
+                from nanocode.llm.registry import get_registry
+                registry = get_registry()
+                await registry.load()
+                models = []
+                for pid, provider in registry._providers.items():
+                    for mname, minfo in provider.models.items():
+                        models.append((f"{pid}/{mname}", pid, minfo.context_limit))
+                models.sort(key=lambda x: -x[2])  # Sort by context_limit desc
+                return models
+            except Exception as e:
+                return []
+
+        async def set_models(models):
+            self._models = models
+            self._filtered = models[:100]  # Show first 100
+            self._loading = False
+            self._update_list()
+
+        asyncio.create_task(load_models()).add_done_callback(
+            lambda f: self.call_later(set_models, f.result())
+        )
+
+    def _update_list(self):
+        table = self.query_one("#model-list", DataTable)
+        table.clear()
+        table.add_columns("Provider/Model", "Context", "Output")
+        for full_id, provider, ctx in self._filtered[:50]:
+            output = min(ctx // 8, 16384)
+            table.add_row(full_id, f"{ctx:,}", f"{output:,}")
+
+    def on_input_changed(self, event: Input.Changed):
+        query = event.value.lower()
+        if query:
+            self._filtered = [
+                (m, p, c) for m, p, c in self._models
+                if query in m.lower() or query in p.lower()
+            ][:50]
+        else:
+            self._filtered = self._models[:50]
+        self._update_list()
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected):
+        row_index = event.cursor_row
+        if 0 <= row_index < len(self._filtered):
+            full_id, provider, ctx = self._filtered[row_index]
+            self.dismiss((full_id, provider))
+
+    def action_cancel(self):
+        self.dismiss(None)
 
 
 class MessageActionScreen(ModalScreen):
@@ -655,6 +743,7 @@ Footer {
         Binding("f1", "show_command_palette", "Commands", show=True),
         Binding("ctrl+b", "toggle_sidebar", "Sidebar", show=True),
         Binding("ctrl+m", "message_actions", "Actions", show=True),
+        Binding("f2", "model_explorer", "Models", show=True),
     ]
 
     def on_key(self, event) -> None:
@@ -1208,6 +1297,31 @@ Footer {
             input_widget = self.query_one("#input", Input)
             input_widget.value = result
             input_widget.focus()
+
+    @work()
+    async def action_model_explorer(self):
+        """Show model explorer to select a new model."""
+        screen = ModelExplorerScreen()
+        result = await self.push_screen_wait(screen)
+        if result:
+            full_id, provider = result
+            # Save to config.yaml
+            try:
+                import yaml
+                config_path = "config.yaml"
+                with open(config_path, "r") as f:
+                    config = yaml.safe_load(f)
+                config["llm"]["default_provider"] = provider
+                # Extract model name from full_id (e.g., "tencent/hy3" -> "hy3")
+                model_name = full_id.split("/")[-1]
+                if provider:
+                    config["llm"]["providers"][provider] = config["llm"]["providers"].get(provider, {})
+                    config["llm"]["providers"][provider]["model"] = model_name
+                with open(config_path, "w") as f:
+                    yaml.dump(config, f, default_flow_style=False)
+                self.notify(f"Model set to {full_id}", severity="success")
+            except Exception as e:
+                self.notify(f"Failed to save: {e}", severity="error")
 
     @work()
     async def action_message_actions(self):

@@ -302,23 +302,35 @@ class ModelLimits:
 
         if registry and registry._providers:
             full_id = model
+            
+            # Extract provider and model from "provider/model" format
+            provider_id = None
+            model_name = model
+            if "/" in full_id:
+                parts = full_id.split("/", 1)
+                provider_id = parts[0]
+                model_name = parts[1] if len(parts) > 1 else model
+            
+            # Try exact full_id first
             if "/" in full_id:
                 model_info = registry.get_model_by_full_id(full_id)
                 if model_info:
                     context_limit = model_info.context_limit
                     output_limit = min(context_limit // 8, 16384)
-                    logger.debug(f"get_limits_sync({model}): found in registry, context={context_limit}")
+                    logger.debug(f"get_limits_sync({model}): found via full_id, context={context_limit}")
                     return {"context": context_limit, "output": output_limit}
-                logger.debug(f"get_limits_sync({model}): not found via full_id, checking providers")
             
-            for provider_id, provider in registry._providers.items():
-                if model in provider.models:
-                    model_info = provider.models[model]
-                    context_limit = model_info.context_limit
-                    output_limit = min(context_limit // 8, 16384)
-                    logger.debug(f"get_limits_sync({model}): found in provider '{provider_id}', context={context_limit}")
-                    return {"context": context_limit, "output": output_limit}
-            logger.debug(f"get_limits_sync({model}): not found in registry, checking defaults")
+            # Try to find by provider + model matching
+            for pid, provider in registry._providers.items():
+                # Match if provider_id matches OR if exact model name in provider
+                for mname, model_info in provider.models.items():
+                    # Check: exact match, substring, or hybrid (e.g., "hy3-preview" in "hy3-preview-free")
+                    if model == mname or model in mname or mname in model:
+                        context_limit = model_info.context_limit
+                        output_limit = min(context_limit // 8, 16384)
+                        logger.debug(f"get_limits_sync({model}): found in provider '{pid}' ({mname}), context={context_limit}")
+                        return {"context": context_limit, "output": output_limit}
+            logger.debug(f"get_limits_sync({model}): not found in registry via any match")
 
         model_lower = model.lower()
         for key, limits in cls.DEFAULT_LIMITS.items():
