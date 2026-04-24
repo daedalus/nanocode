@@ -1434,6 +1434,8 @@ Footer {
         if not self._sidebar_visible:
             return
 
+        from rich.text import Text
+
         lines = []
 
         if self.agent and hasattr(self.agent, "context_manager"):
