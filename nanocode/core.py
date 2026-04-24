@@ -18,6 +18,7 @@ from nanocode.agents.permission import (
 
 class RichColor(Enum):
     """Rich color palette."""
+
     RESET = "reset"
     RED = "red"
     GREEN = "green"
@@ -28,18 +29,20 @@ class RichColor(Enum):
     GRAY = "dim"
 
 
-custom_theme = Theme({
-    "thought": "yellow italic",
-    "tool_call": "red",
-    "tool_result": "cyan",
-    "content": "green",
-    "debug": "cyan",
-    "warning": "yellow",
-})
+custom_theme = Theme(
+    {
+        "thought": "yellow italic",
+        "tool_call": "red",
+        "tool_result": "cyan",
+        "content": "green",
+        "debug": "cyan",
+        "warning": "yellow",
+    }
+)
 
 console = Console(theme=custom_theme)
 from nanocode.config import get_config
-from nanocode.context import ContextManager, ContextStrategy
+from nanocode.context import ContextManager, ContextStrategy, MessagePartType
 from nanocode.hooks import HookManager
 from nanocode.llm.base import LLMResponse
 from nanocode.lsp import LSPServerManager
@@ -60,22 +63,23 @@ from nanocode.tools.text_detector import (
     format_detected_commands_message,
     should_reprompt_for_tools,
 )
-from nanocode.context import MessagePartType
+
 
 def _load_system_prompt_template() -> str:
     """Load system prompt template from .system_prompts/template.md if exists."""
-    from pathlib import Path
     import os
-    
+    from pathlib import Path
+
     cwd = os.getcwd()
     system_prompts_dir = Path(cwd) / ".system_prompts"
-    
+
     if system_prompts_dir.exists():
         template_file = system_prompts_dir / "template.md"
         if template_file.exists():
             return template_file.read_text()
-    
+
     return "You are NanoCode, CLI agent."
+
 
 SYSTEM_PROMPT_TEMPLATE = _load_system_prompt_template()
 
@@ -87,9 +91,11 @@ cache_logger = logging.getLogger("nanocode.cache")
 
 class SessionLoggerAdapter(logging.LoggerAdapter):
     """Logger adapter that includes session_id in all log messages."""
-    
+
     def process(self, msg, kwargs):
-        session_id = self.extra.get('session_id', 'unknown') if self.extra else 'unknown'
+        session_id = (
+            self.extra.get("session_id", "unknown") if self.extra else "unknown"
+        )
         return f"[session={session_id}] {msg}", kwargs
 
 
@@ -98,7 +104,7 @@ def get_session_logger(session_id: str = None):
     base_logger = logging.getLogger("nanocode.agent")
     if session_id:
         hashed = hashlib.sha256(session_id.encode()).hexdigest()[:8]
-        return SessionLoggerAdapter(base_logger, {'session_id': hashed})
+        return SessionLoggerAdapter(base_logger, {"session_id": hashed})
     return base_logger
 
 
@@ -149,57 +155,75 @@ RETRY_MAX_DELAY = 30.0
 def calculate_retry_delay(attempt: int, error: str = None) -> float:
     """Calculate exponential backoff delay for retries."""
     delay = RETRY_INITIAL_DELAY * (RETRY_BACKOFF_FACTOR ** (attempt - 1))
-    
+
     if error:
         import re
-        retry_after_ms = re.search(r'retry-after-ms[:\s]*(\d+)', error, re.IGNORECASE)
+
+        retry_after_ms = re.search(r"retry-after-ms[:\s]*(\d+)", error, re.IGNORECASE)
         if retry_after_ms:
             return min(float(retry_after_ms.group(1)) / 1000, RETRY_MAX_DELAY)
-        
-        retry_after = re.search(r'retry-after[:\s]*(\d+)', error, re.IGNORECASE)
+
+        retry_after = re.search(r"retry-after[:\s]*(\d+)", error, re.IGNORECASE)
         if retry_after:
             return min(float(retry_after.group(1)), RETRY_MAX_DELAY)
-    
+
     return min(delay, RETRY_MAX_DELAY)
 
 
 def is_retryable_error(error: Exception) -> tuple[bool, str | None]:
     """Check if an error is retryable and return reason."""
     error_str = str(error).lower()
-    
+
     if "context" in error_str and "overflow" in error_str:
         return False, None
-    
+
     if "free" in error_str and "usage" in error_str:
         return False, "Free usage exceeded"
-    
+
     import re
-    status_match = re.search(r'status[_\s]?code[:\s]*(\d+)', error_str)
+
+    status_match = re.search(r"status[_\s]?code[:\s]*(\d+)", error_str)
     if status_match:
         status = int(status_match.group(1))
         if status >= 500:
             return True, f"Server error (status {status})"
-    
+
     rate_limit_patterns = [
-        "rate limit", "too many requests", "rate increased too quickly",
-        "overloaded", "too_many_requests", "rate_limit"
+        "rate limit",
+        "too many requests",
+        "rate increased too quickly",
+        "overloaded",
+        "too_many_requests",
+        "rate_limit",
     ]
     for pattern in rate_limit_patterns:
         if pattern in error_str:
             return True, f"Rate limited: {pattern}"
-    
+
     return True, "Transient error"
 
 
 class AutonomousAgent:
     """Main autonomous agent class."""
 
-    def __init__(self, config: dict | None = None, session_id: str = None, verbose: bool = False, yolo: bool = False, drift_alert: bool = False, drift_intervene: bool = False, system_prompt: str = None, auto_execute: bool = False):
+    def __init__(
+        self,
+        config: dict | None = None,
+        session_id: str = None,
+        verbose: bool = False,
+        yolo: bool = False,
+        drift_alert: bool = False,
+        drift_intervene: bool = False,
+        system_prompt: str = None,
+        auto_execute: bool = False,
+    ):
         self.config = config or get_config()
         self.state = AgentStateData()
         self.debug = verbose
         self.yolo = yolo
-        self.drift_mode = "intervene" if drift_intervene else ("alert" if drift_alert else "off")
+        self.drift_mode = (
+            "intervene" if drift_intervene else ("alert" if drift_alert else "off")
+        )
         self._session_id = session_id
         self._session_logger = None
         self._custom_system_prompt = system_prompt
@@ -237,7 +261,9 @@ class AutonomousAgent:
                 logger.info(f"Resumed session: {self._session_id}")
             else:
                 logger.warning(f"Session not found: {self._session_id}, creating new")
-                self.session = self.session_manager.create(f"Session - resumed from {self._session_id}")
+                self.session = self.session_manager.create(
+                    f"Session - resumed from {self._session_id}"
+                )
                 self._session_id = self.session.id
         else:
             self.session = self.session_manager.create()
@@ -256,10 +282,14 @@ class AutonomousAgent:
         """Initialize the prompt cache."""
         self.prompt_cache: PromptCache | None = None
         cache_enabled = self.config.cache_enabled
-        session_id = getattr(self, '_session_id', 'no-session')
-        logger.warning(f"CACHE INIT: session={session_id}, _session_logger={self._session_logger}")
+        session_id = getattr(self, "_session_id", "no-session")
+        logger.warning(
+            f"CACHE INIT: session={session_id}, _session_logger={self._session_logger}"
+        )
         if self._session_logger:
-            self._session_logger.info(f"Cache: {'enabled' if cache_enabled else 'disabled'}")
+            self._session_logger.info(
+                f"Cache: {'enabled' if cache_enabled else 'disabled'}"
+            )
         if cache_enabled:
             try:
                 cache_dir = self.config.cache_dir
@@ -371,6 +401,12 @@ class AutonomousAgent:
         user_agent = self.config.get("llm.user_agent", "nanocode/1.0")
         proxy = self.config.proxy
 
+        # Validate required config
+        if not default_provider:
+            raise ValueError("No default_provider configured. Set llm.default_provider in config.yaml")
+        if not default_model:
+            raise ValueError("No default_model configured. Set llm.default_model in config.yaml")
+
         # FIRST: Use default_provider from config when set (before registry logic)
         if default_provider:
             providers = self.config.providers
@@ -378,18 +414,30 @@ class AutonomousAgent:
                 provider_config = providers[default_provider].copy()
                 model = provider_config.pop("model", default_model)
                 max_tokens = provider_config.pop("max_tokens", None)
-                logger.info(f"Using default_provider: {default_provider}, model: {model}")
+                logger.info(
+                    f"Using default_provider: {default_provider}, model: {model}"
+                )
                 logger.info(f"URL: {provider_config.get('base_url')}")
                 from nanocode.llm import create_llm
-                llm = create_llm(default_provider, model=model, user_agent=user_agent, proxy=proxy, debug=self.debug, **provider_config)
+
+                llm = create_llm(
+                    default_provider,
+                    model=model,
+                    user_agent=user_agent,
+                    proxy=proxy,
+                    debug=self.debug,
+                    **provider_config,
+                )
                 if max_tokens:
                     llm.max_tokens = max_tokens
                 self.llm = llm
                 return
             else:
-                logger.warning(f"Provider {default_provider} not in providers: {list(providers.keys())}")
+                logger.warning(
+                    f"Provider {default_provider} not in providers: {list(providers.keys())}"
+                )
 
-        # Only use registry if no default_provider
+            # Only use registry if no default_provider
             from nanocode.llm.router import get_router
 
             providers = self.config.get("llm.providers", {})
@@ -399,7 +447,9 @@ class AutonomousAgent:
                 router.add_explicit_provider(provider, config)
 
             provider_config = router.get_provider_config(default_model)
-            logger.info(f"Model: {default_model} -> Provider: {provider_config.provider}, URL: {provider_config.base_url}")
+            logger.info(
+                f"Model: {default_model} -> Provider: {provider_config.provider}, URL: {provider_config.base_url}"
+            )
 
             from nanocode.llm import OpenAILLM
             from nanocode.llm.providers.anthropic import AnthropicLLM
@@ -434,7 +484,11 @@ class AutonomousAgent:
             if default in providers:
                 provider_config = providers[default]
                 self.llm = create_llm(
-                    default, **provider_config, user_agent=user_agent, proxy=proxy, debug=self.debug
+                    default,
+                    **provider_config,
+                    user_agent=user_agent,
+                    proxy=proxy,
+                    debug=self.debug,
                 )
             else:
                 self.llm = create_llm(
@@ -451,7 +505,9 @@ class AutonomousAgent:
 
         self.hook_manager = HookManager(base_dir=self.config.get("base_dir", "."))
         self.hook_manager.discover_hooks()
-        logger.info(f"Hook system initialized: {len(sum(self.hook_manager.hooks.values(), []))} hooks loaded")
+        logger.info(
+            f"Hook system initialized: {len(sum(self.hook_manager.hooks.values(), []))} hooks loaded"
+        )
 
     def _init_tools(self):
         """Initialize tool system."""
@@ -478,7 +534,7 @@ class AutonomousAgent:
     def _init_skills(self):
         """Initialize skills system."""
         from nanocode.skills import create_skills_manager
-        
+
         self.skills_manager = create_skills_manager()
 
     def _init_context(self):
@@ -520,51 +576,57 @@ class AutonomousAgent:
         """Build system prompt from template file with dynamic capabilities."""
         import os
         from pathlib import Path
-        
+
         cwd = os.getcwd()
-        config_file = str(self.config.config_path) if hasattr(self.config, 'config_path') else "config.yaml"
+        config_file = (
+            str(self.config.config_path)
+            if hasattr(self.config, "config_path")
+            else "config.yaml"
+        )
         system_prompts_dir = Path(cwd) / ".system_prompts"
-        
+
         # Priority: template.md > default
         prompt = SYSTEM_PROMPT_TEMPLATE
         if system_prompts_dir.exists():
             if (system_prompts_dir / "template.md").exists():
                 prompt = (system_prompts_dir / "template.md").read_text()
-                logger.info(f"Using .system_prompts/template.md")
-        
+                logger.info("Using .system_prompts/template.md")
+
         # Get agents
         agents_info = []
         if self.nanocode_registry:
             for agent in self.nanocode_registry.list():
-                mode = agent.mode.value if hasattr(agent.mode, 'value') else agent.mode
-                agents_info.append(f"- {agent.name}: {mode} agent (native={agent.native})")
-        
+                mode = agent.mode.value if hasattr(agent.mode, "value") else agent.mode
+                agents_info.append(
+                    f"- {agent.name}: {mode} agent (native={agent.native})"
+                )
+
         # Get tools
         tools_info = []
         if self.tool_registry:
             for name, tool in self.tool_registry._tools.items():
-                desc = getattr(tool, 'description', '') or ''
+                desc = getattr(tool, "description", "") or ""
                 tools_info.append(f"- {name}: {desc}")
-        
+
         # Get MCP servers
         mcp_info = []
-        if hasattr(self, 'mcp_manager') and self.mcp_manager:
+        if hasattr(self, "mcp_manager") and self.mcp_manager:
             for name in self.mcp_manager._clients.keys():
                 mcp_info.append(f"- {name}")
-        
+
         # Get LSP servers
         lsp_info = []
-        if hasattr(self, 'lsp_manager') and self.lsp_manager:
+        if hasattr(self, "lsp_manager") and self.lsp_manager:
             for server_id in self.lsp_manager._servers.keys():
                 lsp_info.append(f"- {server_id}")
 
         # Get skills
         skill_info = []
-        if hasattr(self, 'skills_manager') and self.skills_manager:
+        if hasattr(self, "skills_manager") and self.skills_manager:
             for name, skill in self.skills_manager.skills.items():
-                desc = getattr(skill, 'description', '') or ''
+                desc = getattr(skill, "description", "") or ""
                 skill_info.append(f"- {name}: {desc}")
-        
+
         # Check for additional .system_prompts/*.md files (except template.md)
         extra_prompts = ""
         if system_prompts_dir.exists():
@@ -589,11 +651,13 @@ class AutonomousAgent:
                 extra_prompts += f"\n\n# From {gemini_file.name}\n"
                 extra_prompts += gemini_file.read_text()
                 break
-        
+
         # Format template with placeholders
         try:
             prompt = prompt.format(
-                agents="\n".join(agents_info) if agents_info else "- (no custom agents)",
+                agents="\n".join(agents_info)
+                if agents_info
+                else "- (no custom agents)",
                 tools="\n".join(tools_info) if tools_info else "- (built-in only)",
                 skills="\n".join(skill_info) if skill_info else "- (none installed)",
                 mcp_servers="\n".join(mcp_info) if mcp_info else "- (none configured)",
@@ -603,7 +667,7 @@ class AutonomousAgent:
             )
         except KeyError:
             pass  # template.md might not have all placeholders
-        
+
         return prompt + extra_prompts
 
     def _init_mcp(self):
@@ -620,6 +684,7 @@ class AutonomousAgent:
     def _init_modified_files(self):
         """Initialize modified files tracker."""
         from nanocode.modified_files import ModifiedFilesTracker
+
         self.modified_files = ModifiedFilesTracker()
 
     def _init_planning(self):
@@ -643,7 +708,9 @@ class AutonomousAgent:
         """Initialize snapshot manager for git-based snapshots at step boundaries."""
         base_dir = str(self.config.get("base_dir", "."))
         self.snapshot_manager = create_snapshot_manager(base_dir)
-        logger.debug(f"Snapshot manager initialized: {self.snapshot_manager.snapshot_dir}")
+        logger.debug(
+            f"Snapshot manager initialized: {self.snapshot_manager.snapshot_dir}"
+        )
 
     def _handle_mcp_tool(self, **kwargs):
         """Handle MCP tool calls."""
@@ -652,17 +719,21 @@ class AutonomousAgent:
     def _check_context_overflow(self) -> tuple[bool, int]:
         """Check if context is approaching overflow. Returns (is_overflow, current_tokens)."""
         from nanocode.context import TokenCounter
-        
+
         total = TokenCounter.count_messages_tokens(self.context_manager._messages)
         if self.context_manager._system_parts:
             total += sum(p.tokens for p in self.context_manager._system_parts)
-        
-        usable_context = self.context_manager._context_limit - self.context_manager._reserved_tokens
+
+        usable_context = (
+            self.context_manager._context_limit - self.context_manager._reserved_tokens
+        )
         is_overflow = total >= usable_context
-        
+
         if is_overflow:
-            logger.info(f"[{self.current_agent.name if self.current_agent else 'unknown'}] Context overflow: {total} >= {usable_context}")
-        
+            logger.info(
+                f"[{self.current_agent.name if self.current_agent else 'unknown'}] Context overflow: {total} >= {usable_context}"
+            )
+
         return is_overflow, total
 
     def _prune_old_tool_results(self) -> int:
@@ -670,16 +741,16 @@ class AutonomousAgent:
         messages = self.context_manager._messages
         if len(messages) < 6:
             return 0
-        
+
         PRUNE_MINIMUM = 20000
         PRUNE_PROTECT = 40000
         PRUNE_PROTECTED_TOOLS = {"skill"}
-        
+
         total = 0
         pruned = 0
         to_remove = []
         turns = 0
-        
+
         for i in range(len(messages) - 1, -1, -1):
             msg = messages[i]
             if msg.role == "user":
@@ -688,11 +759,11 @@ class AutonomousAgent:
                 continue
             if msg.role == "assistant" and getattr(msg, "summary", None):
                 break
-            
+
             for j in range(len(msg.parts) - 1, -1, -1):
                 part = msg.parts[j]
                 if part.part_type == MessagePartType.TOOL_RESULT:
-                    tool_name = getattr(part, 'tool_name', None) or ""
+                    tool_name = getattr(part, "tool_name", None) or ""
                     if tool_name in PRUNE_PROTECTED_TOOLS:
                         continue
                     estimate = len(str(part.content)) // 4
@@ -700,37 +771,37 @@ class AutonomousAgent:
                     if total > PRUNE_PROTECT:
                         pruned += estimate
                         to_remove.append((i, j))
-        
+
         if pruned > PRUNE_MINIMUM:
             for i, j in reversed(to_remove):
                 msg = messages[i]
                 if j < len(msg.parts):
                     del msg.parts[j]
                     msg.tokens = max(1, msg.tokens - estimate)
-            logger.info(f"[{self.current_agent.name if self.current_agent else 'unknown'}] Pruned {len(to_remove)} tool results ({pruned} tokens)")
+            logger.info(
+                f"[{self.current_agent.name if self.current_agent else 'unknown'}] Pruned {len(to_remove)} tool results ({pruned} tokens)"
+            )
             return len(to_remove)
-        
+
         return 0
 
     async def _compact_context(self) -> str:
         """Compact context by summarizing old messages. Returns summary text."""
         if not self.llm:
             return ""
-        
+
         messages = self.context_manager._messages
         if len(messages) < 4:
             return ""
-        
-        recent = messages[-self.context_manager.preserve_last_n:]
-        older = messages[:-self.context_manager.preserve_last_n]
-        
+
+        recent = messages[-self.context_manager.preserve_last_n :]
+        older = messages[: -self.context_manager.preserve_last_n]
+
         if not older:
             return ""
-        
-        conversation = "\n".join(
-            f"{m.role}: {m.get_text_content()}" for m in older
-        )
-        
+
+        conversation = "\n".join(f"{m.role}: {m.get_text_content()}" for m in older)
+
         prompt = f"""Provide a detailed summary for continuing our conversation.
 Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.
 The summary that you construct will be used so that another agent can read it and continue the work.
@@ -757,22 +828,29 @@ Do not call any tools. Respond only with the summary text.
 Conversation:
 {conversation}
 """
-        
+
         try:
             from nanocode.llm import Message as LLMMessage
+
             response = await self.llm.chat([LLMMessage("user", prompt)])
-            summary_text = response.content or f"[{len(older)} messages from earlier in the conversation]"
-            
+            summary_text = (
+                response.content
+                or f"[{len(older)} messages from earlier in the conversation]"
+            )
+
             self.context_manager._messages = [msg for msg in recent]
             self.context_manager.add_message(
-                "assistant",
-                f"[Previous conversation summarized]\n\n{summary_text}"
+                "assistant", f"[Previous conversation summarized]\n\n{summary_text}"
             )
-            
-            logger.info(f"[{self.current_agent.name if self.current_agent else 'unknown'}] Context compacted: {len(older)} messages summarized")
+
+            logger.info(
+                f"[{self.current_agent.name if self.current_agent else 'unknown'}] Context compacted: {len(older)} messages summarized"
+            )
             return summary_text
         except Exception as e:
-            logger.warning(f"[{self.current_agent.name}] Context compaction failed: {e}")
+            logger.warning(
+                f"[{self.current_agent.name}] Context compaction failed: {e}"
+            )
             return ""
 
     async def _chat_with_retry(
@@ -784,64 +862,86 @@ Conversation:
     ) -> Any:
         """Chat with retry on tool ID mismatch errors and exponential backoff."""
         import asyncio
-        import re
 
         retry_count = 0
         last_error = None
 
         while retry_count < max_retries:
             try:
-                return await self.llm.chat(messages=messages, tools=tools, on_token=on_token)
+                return await self.llm.chat(
+                    messages=messages, tools=tools, on_token=on_token
+                )
             except Exception as e:
                 error_str = str(e)
                 retryable, reason = is_retryable_error(e)
-                
+
                 if not retryable:
-                    logger.error(f"[{self.current_agent.name if self.current_agent else 'unknown'}] Non-retryable error: {error_str[:500]}")
+                    logger.error(
+                        f"[{self.current_agent.name if self.current_agent else 'unknown'}] Non-retryable error: {error_str[:500]}"
+                    )
                     raise
-                
+
                 retry_count += 1
-                
+
                 if retry_count >= max_retries:
-                    logger.error(f"[{self.current_agent.name if self.current_agent else 'unknown'}] Max retries ({max_retries}) reached")
-                    logger.error(f"[{self.current_agent.name}] Last error: {error_str[:500]}")
+                    logger.error(
+                        f"[{self.current_agent.name if self.current_agent else 'unknown'}] Max retries ({max_retries}) reached"
+                    )
+                    logger.error(
+                        f"[{self.current_agent.name}] Last error: {error_str[:500]}"
+                    )
                     raise
-                
+
                 delay = calculate_retry_delay(retry_count, error_str)
-                logger.warning(f"[{self.current_agent.name if self.current_agent else 'unknown'}] Retry {retry_count}/{max_retries}: {reason}, waiting {delay:.1f}s")
-                
+                logger.warning(
+                    f"[{self.current_agent.name if self.current_agent else 'unknown'}] Retry {retry_count}/{max_retries}: {reason}, waiting {delay:.1f}s"
+                )
+
                 await asyncio.sleep(delay)
-                
+
                 fresh_messages = []
                 seen_user = False
                 for msg in messages:
-                    role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
+                    role = (
+                        msg.get("role")
+                        if isinstance(msg, dict)
+                        else getattr(msg, "role", None)
+                    )
                     if role == "system":
-                        fresh_messages.append(msg if isinstance(msg, dict) else msg.to_dict())
+                        fresh_messages.append(
+                            msg if isinstance(msg, dict) else msg.to_dict()
+                        )
                     elif role == "user" and not seen_user:
-                        fresh_messages.append(msg if isinstance(msg, dict) else msg.to_dict())
+                        fresh_messages.append(
+                            msg if isinstance(msg, dict) else msg.to_dict()
+                        )
                         seen_user = True
-                
-                result = await self.llm.chat(messages=fresh_messages, tools=tools, on_token=on_token)
+
+                result = await self.llm.chat(
+                    messages=fresh_messages, tools=tools, on_token=on_token
+                )
                 return result
-        
+
         raise last_error or Exception("Max retries exceeded")
 
     def _extract_commands_from_output(self, output: str) -> list[str]:
         """Extract executable commands from file content (bash, curl, etc)."""
         import re
+
         if not output:
             return []
         commands = []
         # Find bash code blocks
-        bash_blocks = re.findall(r'```bash\n(.*?)```', output, re.DOTALL)
+        bash_blocks = re.findall(r"```bash\n(.*?)```", output, re.DOTALL)
         for block in bash_blocks:
-            for line in block.strip().split('\n'):
+            for line in block.strip().split("\n"):
                 line = line.strip()
-                if line and not line.startswith('#'):
+                if line and not line.startswith("#"):
                     commands.append(line)
         # Also find inline commands (command at start of line)
-        inline = re.findall(r'^\s*(mkdir|curl|wget|pip|npm|yarn|apt|yum)\s+\S+', output, re.MULTILINE)
+        inline = re.findall(
+            r"^\s*(mkdir|curl|wget|pip|npm|yarn|apt|yum)\s+\S+", output, re.MULTILINE
+        )
         for cmd in inline:
             commands.append(cmd.strip())
         return commands
@@ -860,7 +960,7 @@ Conversation:
             )
 
             # Call on_tool_start callback
-            if hasattr(self, '_on_tool_start') and self._on_tool_start:
+            if hasattr(self, "_on_tool_start") and self._on_tool_start:
                 try:
                     self._on_tool_start(tool_name, args)
                 except Exception as e:
@@ -869,8 +969,10 @@ Conversation:
             is_doom_loop = self.doom_loop_handler.check_tool_call(tool_name, args)
             if is_doom_loop:
                 loop_info = self.doom_loop_handler.detection.get_loop_info()
-                should_show_warning = loop_info.get("show_warning", True) if loop_info else True
-                
+                should_show_warning = (
+                    loop_info.get("show_warning", True) if loop_info else True
+                )
+
                 if should_show_warning:
                     warning = self.doom_loop_handler.get_loop_warning()
                     if warning:
@@ -879,7 +981,7 @@ Conversation:
                         )
                         if self.debug:
                             console.print(f"\n[red]{warning}[/red]\n")
-                
+
                 doom_loop_msg = f"\n[DOOM LOOP WARNING] {self.doom_loop_handler.get_loop_warning()}\n"
 
                 if self.current_agent:
@@ -907,7 +1009,9 @@ Conversation:
                         )
                         try:
                             await self.permission_handler.request_permission(
-                                self.current_agent, "doom_loop", {"tool": tool_name, "args": args}
+                                self.current_agent,
+                                "doom_loop",
+                                {"tool": tool_name, "args": args},
                             )
                             logger.debug(
                                 f"[{agent_name}] Doom loop permission granted for '{tool_name}'"
@@ -934,7 +1038,8 @@ Conversation:
                             {
                                 "tool_call_id": tc.id,
                                 "tool_name": tool_name,
-                                "result": doom_loop_msg + "Tool executed but doom loop detected.",
+                                "result": doom_loop_msg
+                                + "Tool executed but doom loop detected.",
                                 "success": True,
                             }
                         )
@@ -991,7 +1096,9 @@ Conversation:
                         continue
 
             logger.debug(f"[{agent_name}] Executing tool: {tool_name}")
-            result = await self.tool_executor.execute(tool_name, args, self._session_id, agent_name)
+            result = await self.tool_executor.execute(
+                tool_name, args, self._session_id, agent_name
+            )
 
             if result.success:
                 logger.info(f"[{agent_name}] Tool '{tool_name}' succeeded")
@@ -1001,11 +1108,15 @@ Conversation:
                 )
 
             # Call on_tool_complete callback
-            if hasattr(self, '_on_tool_complete') and self._on_tool_complete:
+            if hasattr(self, "_on_tool_complete") and self._on_tool_complete:
                 try:
-                    self._on_tool_complete(tool_name, self.tool_executor.format_result(result))
+                    self._on_tool_complete(
+                        tool_name, self.tool_executor.format_result(result)
+                    )
                 except Exception as e:
-                    logger.warning(f"[{agent_name}] on_tool_complete callback failed: {e}")
+                    logger.warning(
+                        f"[{agent_name}] on_tool_complete callback failed: {e}"
+                    )
 
             tool_logger.debug(
                 f"[{agent_name}] Tool call: {tool_name}({args}) -> success={result.success}"
@@ -1044,7 +1155,7 @@ Conversation:
             parts.append(json.dumps(tools, sort_keys=True))
 
         key = "".join(parts)
-        
+
         # DEBUG: Log what we're hashing
         logger.warning(f"[CACHE KEY DEBUG] Number of messages: {len(messages)}")
         for i, msg in enumerate(messages):
@@ -1058,8 +1169,10 @@ Conversation:
             content = d.get("content", "") or ""
             if isinstance(content, list):
                 content = str(content[:2])  # First 2 items only
-            logger.warning(f"[CACHE KEY DEBUG] Msg {i}: role={role}, content_len={len(str(content))}, content_preview={str(content)[:80]}")
-        
+            logger.warning(
+                f"[CACHE KEY DEBUG] Msg {i}: role={role}, content_len={len(str(content))}, content_preview={str(content)[:80]}"
+            )
+
         cache_key = hashlib.sha256(key.encode()).hexdigest()
         logger.warning(f"[CACHE KEY DEBUG] Final cache key: {cache_key}")
         return cache_key
@@ -1136,6 +1249,7 @@ Conversation:
     ) -> str:
         """Process a user input through the agent."""
         import traceback
+
         try:
             return await self._process_input_impl(
                 user_input,
@@ -1193,7 +1307,7 @@ Conversation:
 
             messages = self.context_manager.prepare_messages()
             logger.debug(f"[{agent_name}] Context has {len(messages)} messages")
-# DEBUG: Print all messages being sent to LLM
+            # DEBUG: Print all messages being sent to LLM
             # logger.warning(f"[DEBUG LLM] ===== MESSAGES TO LLM =====")
             # for i, m in enumerate(messages):
             #     role = m.get("role", "?") if isinstance(m, dict) else getattr(m, "role", "?")
@@ -1202,7 +1316,9 @@ Conversation:
             #         logger.warning(f"[DEBUG LLM] Msg {i}: {role}: {str(content)[:200]}")
 
             if self.debug:
-                console.print(f"\n[debug][DEBUG] Sending {len(messages)} messages to LLM...[/debug]")
+                console.print(
+                    f"\n[debug][DEBUG] Sending {len(messages)} messages to LLM...[/debug]"
+                )
                 for i, msg in enumerate(messages):
                     content = (
                         msg.content
@@ -1235,24 +1351,34 @@ Conversation:
             logger.debug(f"[DEBUG] User input: '{user_input}'")
             logger.debug(f"[DEBUG] Context messages before LLM: {len(messages)}")
             if cached_response:
-                cache_logger.warning(f"[{agent_name}] Using CACHED response (this is a bug if input changed!)")
-                logger.warning(f"[{agent_name}] Cache hit! Messages: {len(messages)}, User input: {user_input[:50]}")
+                cache_logger.warning(
+                    f"[{agent_name}] Using CACHED response (this is a bug if input changed!)"
+                )
+                logger.warning(
+                    f"[{agent_name}] Cache hit! Messages: {len(messages)}, User input: {user_input[:50]}"
+                )
                 if self.debug:
-                    console.print("\n[warning][WARN] CACHE HIT - Previous response reused![/warning]")
+                    console.print(
+                        "\n[warning][WARN] CACHE HIT - Previous response reused![/warning]"
+                    )
                 response = cached_response
             else:
-                response = await self._chat_with_retry(messages, tools, on_token=self._on_token)
+                response = await self._chat_with_retry(
+                    messages, tools, on_token=self._on_token
+                )
                 self._put_cache(messages, tools, response)
                 logger.info(f"[{agent_name}] LLM response received")
 
             # Track thinking for output
-            if hasattr(self, '_last_thinking') and response.thinking:
+            if hasattr(self, "_last_thinking") and response.thinking:
                 self._last_thinking = response.thinking
 
             if self.debug:
                 console.print("\n[debug][DEBUG] LLM Response:[/debug]")
                 if response.thinking:
-                    console.print(f"  [thought]| Thinking:[/thought]\n{response.thinking}")
+                    console.print(
+                        f"  [thought]| Thinking:[/thought]\n{response.thinking}"
+                    )
                 if response.has_tool_calls:
                     console.print(
                         f"  [tool_call]Tool Calls: {[tc.name for tc in response.tool_calls]}[/tool_call]"
@@ -1263,7 +1389,9 @@ Conversation:
             if show_messages:
                 console.print("\n[debug]=== LLM RESPONSE ===[/debug]")
                 if response.thinking:
-                    console.print(f"\n[thought]| Thinking:[/thought]\n{response.thinking}")
+                    console.print(
+                        f"\n[thought]| Thinking:[/thought]\n{response.thinking}"
+                    )
                 if response.has_tool_calls:
                     print("\nTool Calls:")
                     for tc in response.tool_calls:
@@ -1285,10 +1413,10 @@ Conversation:
                     console.print(
                         f"\n[debug][DEBUG] Handling {len(response.tool_calls)} tool calls...[/debug]"
                     )
-                
+
                 tool_results = await self._handle_tool_calls(response.tool_calls)
                 tool_results_history.extend(tool_results)
-                if hasattr(self, '_last_tool_results'):
+                if hasattr(self, "_last_tool_results"):
                     self._last_tool_results.extend(tool_results)
 
                 for tr in tool_results:
@@ -1300,7 +1428,7 @@ Conversation:
                     result_content = self.context_manager.truncate_tool_result(
                         result_content
                     )
-                
+
                 # Add assistant message with tool_calls FIRST (before tool results)
                 # This ensures correct order: user → assistant → tool result
                 self.context_manager.add_message(
@@ -1308,27 +1436,38 @@ Conversation:
                     None,
                     tool_calls=response.tool_calls,
                 )
-                
+
                 # Then add tool results
                 for tr in tool_results:
                     result_content = tr["result"]
                     result_content = self.context_manager.truncate_tool_result(
                         result_content
                     )
-                    
+
                     # AUTO-EXECUTE: If enabled, run commands found in file contents
-                    if self.auto_execute and tr["tool_name"] == "read" and result_content:
+                    if (
+                        self.auto_execute
+                        and tr["tool_name"] == "read"
+                        and result_content
+                    ):
                         commands = self._extract_commands_from_output(result_content)
                         if commands:
-                            logger.info(f"[{agent_name}] Auto-executing {len(commands)} commands from file content")
+                            logger.info(
+                                f"[{agent_name}] Auto-executing {len(commands)} commands from file content"
+                            )
                             for cmd in commands:
                                 try:
-                                    exec_result = await self.tool_registry.get("bash").execute(command=cmd)
-                                    logger.info(f"[{agent_name}] Auto-exec '{cmd[:30]}...': {exec_result.success}")
+                                    exec_result = await self.tool_registry.get(
+                                        "bash"
+                                    ).execute(command=cmd)
+                                    logger.info(
+                                        f"[{agent_name}] Auto-exec '{cmd[:30]}...': {exec_result.success}"
+                                    )
                                 except Exception as e:
-                                    logger.warning(f"[{agent_name}] Auto-exec failed: {e}")
-                     
-                    
+                                    logger.warning(
+                                        f"[{agent_name}] Auto-exec failed: {e}"
+                                    )
+
                     self.context_manager.add_tool_result(
                         tr["tool_name"],
                         tr["tool_call_id"],
@@ -1338,12 +1477,16 @@ Conversation:
                 messages = self.context_manager.prepare_messages()
                 for i, m in enumerate(messages):
                     if m.get("role") == "tool":
-                        logger.info(f"[{agent_name}] Message {i} tool result: {m.get('content', '')[:100]}...")
+                        logger.info(
+                            f"[{agent_name}] Message {i} tool result: {m.get('content', '')[:100]}..."
+                        )
 
                 # Check for context overflow before LLM call
                 is_overflow, tokens = self._check_context_overflow()
                 if is_overflow:
-                    logger.info(f"[{agent_name}] Context overflow detected ({tokens} tokens)")
+                    logger.info(
+                        f"[{agent_name}] Context overflow detected ({tokens} tokens)"
+                    )
                     # Try to prune old tool results first
                     pruned = self._prune_old_tool_results()
                     if pruned == 0:
@@ -1361,7 +1504,9 @@ Conversation:
                     console.print(self._format_thinking(final_response.thinking))
 
                 # Continue handling tool calls in a loop until no more are requested
-                max_agent_steps = self.get_agent_steps() if self.get_agent_steps() else 20
+                max_agent_steps = (
+                    self.get_agent_steps() if self.get_agent_steps() else 20
+                )
                 iteration = 0
                 last_snapshot_hash = None
                 while final_response.has_tool_calls and iteration < max_agent_steps:
@@ -1369,11 +1514,16 @@ Conversation:
                     is_last_step = iteration >= max_agent_steps
 
                     # Take snapshot at step boundary (like opencode)
-                    if hasattr(self, 'snapshot_manager') and self.snapshot_manager.enabled:
+                    if (
+                        hasattr(self, "snapshot_manager")
+                        and self.snapshot_manager.enabled
+                    ):
                         try:
                             last_snapshot_hash = await self.snapshot_manager.track()
                             if last_snapshot_hash and self.debug:
-                                logger.debug(f"[{agent_name}] Snapshot taken: {last_snapshot_hash[:8]}...")
+                                logger.debug(
+                                    f"[{agent_name}] Snapshot taken: {last_snapshot_hash[:8]}..."
+                                )
                         except Exception as e:
                             logger.debug(f"[{agent_name}] Snapshot failed: {e}")
 
@@ -1381,12 +1531,16 @@ Conversation:
                         f"[{agent_name}] Tool call iteration {iteration}/{max_agent_steps}: {[tc.name for tc in final_response.tool_calls]}"
                     )
 
-                    tool_results = await self._handle_tool_calls(final_response.tool_calls)
+                    tool_results = await self._handle_tool_calls(
+                        final_response.tool_calls
+                    )
                     tool_results_history.extend(tool_results)
 
                     for tr in tool_results:
                         result_content = tr["result"]
-                        result_content = self.context_manager.truncate_tool_result(result_content)
+                        result_content = self.context_manager.truncate_tool_result(
+                            result_content
+                        )
                         self.context_manager.add_tool_result(
                             tr["tool_name"],
                             tr["tool_call_id"],
@@ -1398,7 +1552,9 @@ Conversation:
                     # Check for context overflow after each iteration
                     is_overflow, tokens = self._check_context_overflow()
                     if is_overflow:
-                        logger.info(f"[{agent_name}] Context overflow in iteration {iteration}")
+                        logger.info(
+                            f"[{agent_name}] Context overflow in iteration {iteration}"
+                        )
                         pruned = self._prune_old_tool_results()
                         if pruned == 0:
                             await self._compact_context()
@@ -1408,24 +1564,38 @@ Conversation:
                     if final_response.thinking:
                         self._last_thinking = final_response.thinking
                         if show_thinking and self.debug:
-                            console.print(self._format_thinking(final_response.thinking))
+                            console.print(
+                                self._format_thinking(final_response.thinking)
+                            )
 
                     # On last step, inject MAX_STEPS message and disable tools (like opencode)
                     if is_last_step:
                         messages.append({"role": "user", "content": MAX_STEPS_MESSAGE})
-                        logger.debug(f"[{agent_name}] Forcing text-only response (max steps reached)")
-                        final_response = await self._chat_with_retry(messages, None, on_token=self._on_token)
+                        logger.debug(
+                            f"[{agent_name}] Forcing text-only response (max steps reached)"
+                        )
+                        final_response = await self._chat_with_retry(
+                            messages, None, on_token=self._on_token
+                        )
                     else:
-                        final_response = await self._chat_with_retry(messages, tools, on_token=self._on_token)
+                        final_response = await self._chat_with_retry(
+                            messages, tools, on_token=self._on_token
+                        )
 
                 if iteration >= max_agent_steps:
-                    logger.warning(f"[{agent_name}] Hit max iterations ({max_agent_steps})")
+                    logger.warning(
+                        f"[{agent_name}] Hit max iterations ({max_agent_steps})"
+                    )
                 elif final_response.has_tool_calls:
                     # Auto-continue: inject message to continue if there are still tool calls
                     self.context_manager.add_message("user", AUTO_CONTINUE_MESSAGE)
-                    logger.info(f"[{agent_name}] Auto-continue: injected continue message")
+                    logger.info(
+                        f"[{agent_name}] Auto-continue: injected continue message"
+                    )
                     messages = self.context_manager.prepare_messages()
-                    final_response = await self._chat_with_retry(messages, tools, on_token=self._on_token)
+                    final_response = await self._chat_with_retry(
+                        messages, tools, on_token=self._on_token
+                    )
                     if not final_response.has_tool_calls:
                         content = final_response.content
                         self.context_manager.add_message("assistant", content)
@@ -1440,10 +1610,17 @@ Conversation:
                 logger.info(f"[{agent_name}] Empty response - forcing NO-TOOLS retry")
                 messages = self.context_manager.prepare_messages()
                 # Add explicit instruction not to call tools
-                messages.append({"role": "user", "content": "DO NOT call any more tools. Analyze the tool results above and provide your final answer to the user."})
-                retry_response = await self._chat_with_retry(messages, None, on_token=self._on_token)
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "DO NOT call any more tools. Analyze the tool results above and provide your final answer to the user.",
+                    }
+                )
+                retry_response = await self._chat_with_retry(
+                    messages, None, on_token=self._on_token
+                )
                 content = retry_response.content
-                
+
             # Final fallback
             if not content:
                 if tool_results_history:
@@ -1458,15 +1635,18 @@ Conversation:
                         f"[{agent_name}] Detected {len(detected)} command(s) in text that were not executed"
                     )
                     if self.debug:
-                        console.print("\n[warning][WARN] Detected unexecuted commands:[/warning]")
+                        console.print(
+                            "\n[warning][WARN] Detected unexecuted commands:[/warning]"
+                        )
                         for cmd in detected:
-                            console.print(f"  - [{cmd.tool_name}] {cmd.command[:60]}...")
+                            console.print(
+                                f"  - [{cmd.tool_name}] {cmd.command[:60]}..."
+                            )
 
                 # Check if model should have used tools but didn't
                 tools = self.tool_registry.get_schemas()
                 should_reprompt, reason = should_reprompt_for_tools(
-                    content,
-                    tools_were_expected=bool(tools)
+                    content, tools_were_expected=bool(tools)
                 )
 
                 if should_reprompt:
@@ -1487,27 +1667,31 @@ Conversation:
 
             # Build augmented content with thinking and tool use info
             augmented = content
-            
+
             # Always include thinking if available
-            if show_thinking and hasattr(self, '_last_thinking') and self._last_thinking:
+            if (
+                show_thinking
+                and hasattr(self, "_last_thinking")
+                and self._last_thinking
+            ):
                 augmented += f"\n\n[thought]| Thinking:[/thought] {self._last_thinking}"
-            
+
             # Include tool use info (full output, not truncated)
             if tool_results_history:
                 if show_thinking:
                     tool_info = "\n\n[thought]| Tool Use:[/thought]"
                     for tr in tool_results_history:
-                        result_str = str(tr['result'])
+                        result_str = str(tr["result"])
                         # Include full result for display
                         tool_info += f"\n- {tr['tool_name']}:\n{result_str}"
                     augmented += tool_info
-                    
+
                 if show_messages:
                     tool_summary = "\n\n[Tool Summary]"
                     for tr in tool_results_history:
                         tool_summary += f"\n- {tr['tool_name']}: executed"
                     augmented += tool_summary
-            
+
             self.state.state = AgentState.COMPLETE
 
             return augmented
@@ -1638,8 +1822,7 @@ Conversation:
 
             detected = detect_commands_in_text(last_content)
             should_reprompt, reason = should_reprompt_for_tools(
-                last_content,
-                tools_were_expected=bool(tools)
+                last_content, tools_were_expected=bool(tools)
             )
 
             if not should_reprompt and not detected:
@@ -1655,22 +1838,30 @@ Conversation:
             )
 
             if self.debug:
-                console.print(f"\n[warning][WARN] Re-prompting for tools (attempt {attempt}/{max_retries}):[/warning]")
+                console.print(
+                    f"\n[warning][WARN] Re-prompting for tools (attempt {attempt}/{max_retries}):[/warning]"
+                )
                 console.print(f"  Reason: {reason}")
                 if detected:
                     console.print(f"  Detected commands: {len(detected)}")
 
             # Process the re-prompt
             messages = self.context_manager.prepare_messages()
-            response = await self._chat_with_retry(messages, tools, on_token=self._on_token)
+            response = await self._chat_with_retry(
+                messages, tools, on_token=self._on_token
+            )
 
             if response.has_tool_calls:
-                logger.info(f"[{agent_name}] Re-prompt produced {len(response.tool_calls)} tool calls")
+                logger.info(
+                    f"[{agent_name}] Re-prompt produced {len(response.tool_calls)} tool calls"
+                )
                 # Handle the tool calls
                 tool_results = await self._handle_tool_calls(response.tool_calls)
                 for tr in tool_results:
                     result_content = tr["result"]
-                    result_content = self.context_manager.truncate_tool_result(result_content)
+                    result_content = self.context_manager.truncate_tool_result(
+                        result_content
+                    )
                     self.context_manager.add_message(
                         "tool",
                         result_content,
