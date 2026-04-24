@@ -62,10 +62,6 @@ class OpenAILLM(LLMBase):
             **kwargs,
         }
 
-        # Enable streaming if on_token callback is provided
-        if on_token:
-            payload["stream"] = True
-
         # DEBUG: Print request details only in verbose mode
         if self.debug:
             print(f"\n[DEBUG] OpenAI Request:")
@@ -123,7 +119,7 @@ class OpenAILLM(LLMBase):
         if on_token:
             # Streaming: parse SSE events and call on_token
             payload["stream"] = True
-            return await self._stream_chat(payload, headers, on_retry, on_token)
+            return await self._stream_chat(payload, headers, on_token)
         else:
             # Non-streaming: normal request
             response = await self._request_with_retry(
@@ -206,51 +202,49 @@ class OpenAILLM(LLMBase):
                 thinking=msg_data.get("reasoning"),
             )
 
-    async def _stream_chat(self, payload: dict, headers: dict, on_retry, on_token: callable) -> LLMResponse:
+    async def _stream_chat(self, payload: dict, headers: dict, on_token: callable) -> LLMResponse:
         """Handle streaming chat request with SSE parsing."""
-        response = await self._request_with_retry(
-            "POST",
-            f"{self.base_url}/chat/completions",
-            headers=headers,
-            json=payload,
-            on_retry=on_retry,
-        )
+        # Use streaming client
+        async with httpx.AsyncClient(proxy=self.proxy) as client:
+            async with client.stream(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers=headers,
+                timeout=120.0,
+            ) as response:
+                # Parse SSE stream
+                full_content = ""
+                tool_calls = []
+                finish_reason = None
+                thinking = None
 
-        # Parse SSE stream
-        full_content = ""
-        tool_calls = []
-        finish_reason = None
-        thinking = None
+                async for event in parse_stream_events(response):
+                    if event["type"] == "text":
+                        content = event["content"]
+                        full_content += content
+                        if on_token:
+                            try:
+                                on_token(content)
+                            except Exception as e:
+                                logger.warning(f"[OpenAI] on_token callback failed: {e}")
+                    elif event["type"] == "tool_call":
+                        tool_calls.append(
+                            ToolCall(
+                                name=event["name"],
+                                arguments=event["arguments"],
+                                id=event["id"],
+                            )
+                        )
+                    elif event["type"] == "finish":
+                        finish_reason = event.get("reason")
 
-        async for event in parse_stream_events(response):
-            if event["type"] == "text":
-                content = event["content"]
-                full_content += content
-                if on_token:
-                    try:
-                        on_token(content)
-                    except Exception as e:
-                        logger.warning(f"[OpenAI] on_token callback failed: {e}")
-            elif event["type"] == "tool_call":
-                tool_calls.append(
-                    ToolCall(
-                        name=event["name"],
-                        arguments=event["arguments"],
-                        id=event["id"],
-                    )
+                return LLMResponse(
+                    content=full_content,
+                    tool_calls=tool_calls,
+                    finish_reason=finish_reason,
+                    thinking=thinking,
                 )
-            elif event["type"] == "finish":
-                finish_reason = event.get("reason")
-                if "usage" in event:
-                    # Store usage if needed
-                    pass
-
-        return LLMResponse(
-            content=full_content,
-            tool_calls=tool_calls,
-            finish_reason=finish_reason,
-            thinking=thinking,
-        )
 
     def get_tool_schema(self) -> list[dict]:
         """Get OpenAI function calling format."""
