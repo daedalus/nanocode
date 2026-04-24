@@ -29,6 +29,18 @@ pip install -e ".[dev,test,lint]"  # Full dev setup
 pip install -e ".[tui]"          # With Textual TUI
 ```
 
+## TUI Development
+
+Always verify the TUI loads correctly after making changes:
+
+```bash
+# Verify syntax
+python3 -m py_compile nanocode/tui/app.py
+
+# Test import
+python3 -c "from nanocode.tui.app import App"
+```
+
 ## Architecture
 
 ```
