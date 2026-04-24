@@ -252,64 +252,6 @@ class OpenAILLM(LLMBase):
             thinking=thinking,
         )
 
-    async def chat_stream(
-        self, messages: list[Message], tools: list[dict] = None, **kwargs
-    ) -> AsyncIterator[StreamEvent]:
-        """Stream chat completion responses with tool call support.
-
-        Yields StreamEvent objects for text, tool calls, and metadata.
-        """
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-
-        payload = {
-            "model": self.model,
-            "messages": [m.to_dict() for m in messages],
-            "stream": True,
-            **kwargs,
-        }
-
-        if tools:
-            payload["tools"] = tools
-
-        async with httpx.AsyncClient(proxy=self.proxy) as client:
-            async with client.stream(
-                "POST",
-                f"{self.base_url}/chat/completions",
-                json=payload,
-                headers=headers,
-                timeout=120.0,
-            ) as response:
-                async for event in parse_stream_events(response):
-                    if event["type"] == "text":
-                        yield StreamEvent(type="text", content=event["content"])
-                    elif event["type"] == "tool_start":
-                        yield StreamEvent(
-                            type="tool_start",
-                            tool_id=event["id"],
-                            tool_name=event["name"],
-                        )
-                    elif event["type"] == "tool_delta":
-                        yield StreamEvent(
-                            type="tool_delta",
-                            tool_id=event["id"],
-                            content=event["delta"],
-                        )
-                    elif event["type"] == "tool_end":
-                        yield StreamEvent(type="tool_end", tool_id=event["id"])
-                    elif event["type"] == "tool_call":
-                        yield StreamEvent(
-                            type="tool_call",
-                            tool_id=event["id"],
-                            tool_name=event["name"],
-                            tool_args=event["arguments"],
-                        )
-                    elif event["type"] == "finish":
-                        yield StreamEvent(
-                            type="finish", finish_reason=event["reason"]
-                        )
-                    elif event["type"] == "usage":
-                        yield StreamEvent(type="usage", usage=event["usage"])
-
     def get_tool_schema(self) -> list[dict]:
         """Get OpenAI function calling format."""
         return []
