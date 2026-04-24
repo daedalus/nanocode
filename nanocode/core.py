@@ -1197,7 +1197,7 @@ Conversation:
                     console.print("\n[warning][WARN] CACHE HIT - Previous response reused![/warning]")
                 response = cached_response
             else:
-                response = await self._chat_with_retry(self, messages, tools)
+                response = await self._chat_with_retry(messages, tools)
                 self._put_cache(messages, tools, response)
                 logger.info(f"[{agent_name}] LLM response received")
 
@@ -1297,19 +1297,19 @@ Conversation:
                         logger.info(f"[{agent_name}] Message {i} tool result: {m.get('content', '')[:100]}...")
 
                 # Check for context overflow before LLM call
-                is_overflow, tokens = _check_context_overflow(self)
+                is_overflow, tokens = self._check_context_overflow()
                 if is_overflow:
                     logger.info(f"[{agent_name}] Context overflow detected ({tokens} tokens)")
                     # Try to prune old tool results first
-                    pruned = _prune_old_tool_results(self)
+                    pruned = self._prune_old_tool_results()
                     if pruned == 0:
                         # If pruning didn't help, compact context
-                        await _compact_context(self)
+                        await self._compact_context()
                     else:
                         # Re-prepare messages after pruning
                         messages = self.context_manager.prepare_messages()
 
-                final_response = await self._chat_with_retry(self, messages, tools)
+                final_response = await self._chat_with_retry(messages, tools)
 
                 # Track thinking from second response
                 if final_response.thinking and show_thinking and self.debug:
@@ -1352,12 +1352,12 @@ Conversation:
                     messages = self.context_manager.prepare_messages()
 
                     # Check for context overflow after each iteration
-                    is_overflow, tokens = _check_context_overflow(self)
+                    is_overflow, tokens = self._check_context_overflow()
                     if is_overflow:
                         logger.info(f"[{agent_name}] Context overflow in iteration {iteration}")
-                        pruned = _prune_old_tool_results(self)
+                        pruned = self._prune_old_tool_results()
                         if pruned == 0:
-                            await _compact_context(self)
+                            await self._compact_context()
                         messages = self.context_manager.prepare_messages()
 
                     # Track thinking from each iteration
@@ -1370,9 +1370,9 @@ Conversation:
                     if is_last_step:
                         messages.append({"role": "user", "content": MAX_STEPS_MESSAGE})
                         logger.debug(f"[{agent_name}] Forcing text-only response (max steps reached)")
-                        final_response = await self._chat_with_retry(self, messages, None)
+                        final_response = await self._chat_with_retry(messages, None)
                     else:
-                        final_response = await self._chat_with_retry(self, messages, tools)
+                        final_response = await self._chat_with_retry(messages, tools)
 
                 if iteration >= max_agent_steps:
                     logger.warning(f"[{agent_name}] Hit max iterations ({max_agent_steps})")
@@ -1381,7 +1381,7 @@ Conversation:
                     self.context_manager.add_message("user", AUTO_CONTINUE_MESSAGE)
                     logger.info(f"[{agent_name}] Auto-continue: injected continue message")
                     messages = self.context_manager.prepare_messages()
-                    final_response = await self._chat_with_retry(self, messages, tools)
+                    final_response = await self._chat_with_retry(messages, tools)
                     if not final_response.has_tool_calls:
                         content = final_response.content
                         self.context_manager.add_message("assistant", content)
@@ -1397,7 +1397,7 @@ Conversation:
                 messages = self.context_manager.prepare_messages()
                 # Add explicit instruction not to call tools
                 messages.append({"role": "user", "content": "DO NOT call any more tools. Analyze the tool results above and provide your final answer to the user."})
-                retry_response = await self._chat_with_retry(self, messages, None)
+                retry_response = await self._chat_with_retry(messages, None)
                 content = retry_response.content
                 
             # Final fallback
@@ -1616,7 +1616,7 @@ Conversation:
 
             # Process the re-prompt
             messages = self.context_manager.prepare_messages()
-            response = await self._chat_with_retry(self, messages, tools)
+            response = await self._chat_with_retry(messages, tools)
 
             if response.has_tool_calls:
                 logger.info(f"[{agent_name}] Re-prompt produced {len(response.tool_calls)} tool calls")
