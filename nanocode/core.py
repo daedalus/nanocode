@@ -1605,19 +1605,18 @@ Conversation:
             else:
                 content = response.content
 
-            # Force retry WITHOUT tools - explicitly tell model to respond, not call more tools
+            # Force retry to complete task - if model listed tools but didn't finish, make it work
             if not content and tool_results_history:
-                logger.info(f"[{agent_name}] Empty response - forcing NO-TOOLS retry")
+                logger.info(f"[{agent_name}] Empty response - retrying to complete task")
                 messages = self.context_manager.prepare_messages()
-                # Add explicit instruction not to call tools
                 messages.append(
                     {
                         "role": "user",
-                        "content": "DO NOT call any more tools. Analyze the tool results above and provide your final answer to the user.",
+                        "content": "Based on the tool results above, you MUST now complete the user's request. If the user asked for a skill (like 'mcp-builder'), call the 'skill' tool with the appropriate name and input. Do not just summarize - actually complete the task.",
                     }
                 )
                 retry_response = await self._chat_with_retry(
-                    messages, None, on_token=self._on_token
+                    messages, tools, on_token=self._on_token
                 )
                 content = retry_response.content
 
