@@ -1844,20 +1844,34 @@ Footer {
             # Save to config.yaml
             try:
                 import yaml
+                from pathlib import Path
 
-                config_path = "config.yaml"
-                with open(config_path) as f:
-                    config = yaml.safe_load(f)
+                config_path = Path("config.yaml")
+                if config_path.exists():
+                    with open(config_path) as f:
+                        config = yaml.safe_load(f) or {}
+                else:
+                    config = {}
+                
+                # Set default provider
+                if "llm" not in config:
+                    config["llm"] = {}
                 config["llm"]["default_provider"] = provider
-                # Extract model name from full_id (e.g., "tencent/hy3" -> "hy3")
+                
+                # Extract model name from full_id (e.g., "openai/gpt-4o" -> "gpt-4o")
                 model_name = full_id.split("/")[-1]
-                if provider:
-                    config["llm"]["providers"][provider] = config["llm"][
-                        "providers"
-                    ].get(provider, {})
-                    config["llm"]["providers"][provider]["model"] = model_name
+                
+                # Set provider-specific model
+                if "providers" not in config["llm"]:
+                    config["llm"]["providers"] = {}
+                if provider not in config["llm"]["providers"]:
+                    config["llm"]["providers"][provider] = {}
+                config["llm"]["providers"][provider]["model"] = model_name
+                
+                # Save
                 with open(config_path, "w") as f:
-                    yaml.dump(config, f, default_flow_style=False)
+                    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+                
                 self.notify(f"Model set to {full_id}", severity="success")
             except Exception as e:
                 self.notify(f"Failed to save: {e}", severity="error")
