@@ -134,98 +134,13 @@ class PermissionScreen(ModalScreen):
     }
     """
 
-    def __init__(self, request, *args, **kwargs):
+def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.request = request
         self._result = None
 
-    def compose(self) -> ComposeResult:
-        from nanocode.agents.permission import PermissionReply, PermissionReplyType
 
-        tool_name = self.request.tool_name
-        agent_name = self.request.agent_name
-        args_str = str(self.request.arguments)[:200] if self.request.arguments else ""
-
-        yield Vertical(
-            Static(f"Permission Request", id="dialog-title"),
-            Static(f"[{agent_name}] wants to run: {tool_name}", id="dialog-info"),
-            Static(f"Args: {args_str}", id="dialog-args"),
-            Horizontal(
-                Button("[y]es", id="btn-yes", variant="primary"),
-                Button("[N]o", id="btn-no", variant="default"),
-                Button("[a]lways", id="btn-always", variant="default"),
-                Button("[C]ancel", id="btn-cancel", variant="default"),
-                id="dialog-buttons",
-            ),
-            id="dialog",
-        )
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        from nanocode.agents.permission import PermissionReply, PermissionReplyType
-
-        action = event.button.id
-        if action == "btn-yes":
-            self._result = PermissionReply(
-                request_id=self.request.id,
-                reply=PermissionReplyType.ONCE,
-            )
-        elif action == "btn-no":
-            self._result = PermissionReply(
-                request_id=self.request.id,
-                reply=PermissionReplyType.REJECT,
-                message="Permission denied by user",
-            )
-        elif action == "btn-always":
-            self._result = PermissionReply(
-                request_id=self.request.id,
-                reply=PermissionReplyType.ALWAYS,
-            )
-        else:
-            # Cancel
-            self._result = PermissionReply(
-                request_id=self.request.id,
-                reply=PermissionReplyType.REJECT,
-                message="Cancelled",
-            )
-        self.dismiss(self._result)
-
-    def action_allow_once(self):
-        from nanocode.agents.permission import PermissionReply, PermissionReplyType
-
-        self._result = PermissionReply(
-            request_id=self.request.id,
-            reply=PermissionReplyType.ONCE,
-        )
-        self.dismiss(self._result)
-
-    def action_deny(self):
-        from nanocode.agents.permission import PermissionReply, PermissionReplyType
-
-        self._result = PermissionReply(
-            request_id=self.request.id,
-            reply=PermissionReplyType.REJECT,
-            message="Permission denied by user",
-        )
-        self.dismiss(self._result)
-
-    def action_allow_always(self):
-        from nanocode.agents.permission import PermissionReply, PermissionReplyType
-
-        self._result = PermissionReply(
-            request_id=self.request.id,
-            reply=PermissionReplyType.ALWAYS,
-        )
-        self.dismiss(self._result)
-
-    def action_cancel(self):
-        from nanocode.agents.permission import PermissionReply, PermissionReplyType
-
-        self._result = PermissionReply(
-            request_id=self.request.id,
-            reply=PermissionReplyType.REJECT,
-            message="Cancelled",
-        )
-        self.dismiss(self._result)
+class ModelExplorerScreen(ModalScreen):
     """Modal screen for exploring available models from models.dev."""
 
     CSS = """
@@ -281,9 +196,7 @@ class PermissionScreen(ModalScreen):
     def __init__(self, on_select=None, **kwargs):
         super().__init__(**kwargs)
         self._on_select = on_select
-        self._models: list[
-            tuple[str, str, int]
-        ] = []  # (provider/model, provider, context_limit)
+        self._models: list[tuple[str, str, int]] = []  # (provider/model, provider, context_limit)
         self._filtered: list[tuple[str, str, int]] = []
         self._loading = True
         self._refresh_time = None
@@ -295,15 +208,11 @@ class PermissionScreen(ModalScreen):
             Static("Loading...", id="model-subtitle"),
             Input(placeholder="Search models...", id="search-input"),
             DataTable(id="model-list"),
-            Static(
-                "↑↓: navigate | Enter: select | Ctrl+R: refresh | Escape: cancel",
-                id="help-text",
-            ),
+            Static("↑↓: navigate | Enter: select | Ctrl+R: refresh | Escape: cancel", id="help-text"),
         )
 
     def on_mount(self):
         self._load_registry()
-        # Focus the DataTable by default so Enter works
         self.query_one("#model-list", DataTable).focus()
 
     def on_key(self, event):
@@ -317,8 +226,8 @@ class PermissionScreen(ModalScreen):
 
     def _load_registry(self, force: bool = False):
         async def load_models():
-            from nanocode.llm.registry import CACHE_TTL_SECONDS, get_registry
-
+            from nanocode.llm.registry import get_registry
+            from nanocode.llm.registry import CACHE_TTL_SECONDS
             registry = get_registry()
             await registry.load(force_refresh=force)
             age = registry._cache_age_seconds() if not force else 0
@@ -329,14 +238,10 @@ class PermissionScreen(ModalScreen):
             registry, age, remaining = result
             subtitle = self.query_one("#model-subtitle", Static)
             if age < 60:
-                subtitle.update(
-                    f"Cache: just refreshed ({len(registry._providers)} providers)"
-                )
+                subtitle.update(f"Cache: just refreshed ({len(registry._providers)} providers)")
             else:
                 mins = int(remaining / 60)
-                subtitle.update(
-                    f"Cache: {mins}m remaining ({len(registry._providers)} providers)"
-                )
+                subtitle.update(f"Cache: {mins}m remaining ({len(registry._providers)} providers)")
 
             models = []
             for pid, provider in registry._providers.items():
@@ -372,8 +277,7 @@ class PermissionScreen(ModalScreen):
         query = event.value.lower()
         if query:
             self._filtered = [
-                (m, p, c)
-                for m, p, c in self._models
+                (m, p, c) for m, p, c in self._models
                 if query in m.lower() or query in p.lower()
             ][:50]
         else:
@@ -410,9 +314,7 @@ class PermissionScreen(ModalScreen):
     def action_move_down(self):
         """Move selection down."""
         if self._filtered:
-            self._selected_index = min(
-                len(self._filtered) - 1, self._selected_index + 1
-            )
+            self._selected_index = min(len(self._filtered) - 1, self._selected_index + 1)
             table = self.query_one("#model-list", DataTable)
             table.cursor_position = self._selected_index
 
