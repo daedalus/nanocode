@@ -318,7 +318,7 @@ class AgentPermissionsScreen(ModalScreen):
     }
 
     AgentPermissionsScreen > #agent-dialog {
-        width: 70;
+        width: 80;
         height: 80%;
         border: solid #689d6a;
         background: #282828;
@@ -360,34 +360,63 @@ class AgentPermissionsScreen(ModalScreen):
     def __init__(self, on_select=None, **kwargs):
         super().__init__(**kwargs)
         self._on_select = on_select
-        self._agents: list[dict] = []  # {name, permission, description}
+        self._agents: list[dict] = []  # {name, rules}
         self._filtered: list[dict] = []
         self._selected_index = 0
 
     def compose(self) -> ComposeResult:
         yield Vertical(
             Static("Agent Permissions", id="agent-title"),
-            Static("Manage agent tool permissions", id="agent-subtitle"),
+            Static("Manage agent tool permissions (permission, pattern, action)", id="agent-subtitle"),
             Input(placeholder="Search agents...", id="search-input"),
             DataTable(id="agent-list"),
-            Static("↑↓: navigate | Enter: toggle | Escape: cancel", id="help-text"),
+            Static("↑↓: navigate | Enter: toggle rule | Escape: cancel", id="help-text"),
         )
 
     def on_mount(self):
         self._load_agents()
 
     def _load_agents(self):
-        from nanocode.agents import get_agent_registry
+        from nanocode.agents import get_agent_registry, AgentMode
+        from pathlib import Path
+        import yaml
         registry = get_agent_registry()
+        
+        # Load permission overrides from config
+        config_path = "config.yaml"
+        perm_overrides = {}
+        if Path(config_path).exists():
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+            agents_config = config.get("agents", {})
+            perm_overrides = agents_config.get("permissions", {})
+            # Apply config to registry
+            registry.apply_config(config)
+
         agents = []
 
-        for agent in registry.list_primary():
-            # Get current permission mode
-            perm = agent.permission.value if hasattr(agent, 'permission') else 'ask'
+        # Get all non-hidden agents (primary + subagents)
+        for agent in registry.list_all():
+            if agent.hidden:
+                continue
+            
+            # Get permission rules
+            rules = agent.permission if hasattr(agent, 'permission') else []
+            
+            # Get base permission from config overrides or default rule
+            base_perm = 'ask'
+            if agent.name in perm_overrides:
+                base_perm = perm_overrides[agent.name]
+            elif rules:
+                for rule in rules:
+                    if rule.permission == '*' and rule.pattern == '*':
+                        base_perm = rule.action.value
+                        break
+
             agents.append({
                 'name': agent.name,
-                'permission': perm,
-                'description': getattr(agent, 'description', '')[:50],
+                'rules': rules,
+                'base_permission': base_perm,
             })
 
         self._agents = agents
@@ -397,16 +426,22 @@ class AgentPermissionsScreen(ModalScreen):
     def _update_list(self):
         table = self.query_one("#agent-list", DataTable)
         table.clear()
-        table.add_columns("Agent", "Permission", "Description")
+        table.add_columns("Agent", "Base Permission", "Rules Count", "Description")
         for agent in self._filtered:
-            table.add_row(agent['name'], agent['permission'], agent['description'][:50])
+            desc = agent.get('description', '')[:30]
+            table.add_row(
+                agent['name'],
+                agent['base_permission'],
+                str(len(agent['rules'])),
+                desc
+            )
 
     def on_input_changed(self, event: Input.Changed):
         query = event.value.lower()
         if query:
             self._filtered = [
                 a for a in self._agents
-                if query in a['name'].lower() or query in a['permission'].lower()
+                if query in a['name'].lower() or query in a['base_permission'].lower()
             ]
         else:
             self._filtered = self._agents
@@ -420,40 +455,169 @@ class AgentPermissionsScreen(ModalScreen):
         row_index = event.cursor_row
         if 0 <= row_index < len(self._filtered):
             self._selected_index = row_index
-            self._toggle_permission()
+            self._show_rules()
 
     def action_cancel(self):
         self.dismiss(None)
 
     def action_toggle(self):
-        """Toggle permission for current agent."""
+        """Show rules for current agent."""
         if self._filtered and 0 <= self._selected_index < len(self._filtered):
-            self._toggle_permission()
+            self._show_rules()
 
-    def _toggle_permission(self):
-        """Toggle between allow/ask/deny."""
-        if 0 <= self._selected_index < len(self._filtered):
-            agent = self._filtered[self._selected_index]
-            current = agent['permission']
-            # Cycle: ask -> allow -> deny -> ask
-            if current == 'ask':
-                new_perm = 'allow'
-            elif current == 'allow':
-                new_perm = 'deny'
-            else:
-                new_perm = 'ask'
-
-            # Update agent permission in registry
-            from nanocode.agents import get_agent_registry
-            registry = get_agent_registry()
-            ag = registry.get(agent['name'])
-            if ag and hasattr(ag, 'permission'):
-                from nanocode.agents.permission import PermissionAction
-                ag.permission = PermissionAction(new_perm)
-
-            # Update local data
-            agent['permission'] = new_perm
+    def _show_rules(self):
+        """Show a screen to manage rules for the selected agent."""
+        from nanocode.tui.app import AgentRulesScreen
+        screen = AgentRulesScreen(self._filtered[self._selected_index])
+        result = self.app.push_screen(screen)
+        if result:
+            # Reload agents after rules were modified
+            self._load_agents()
             self._update_list()
+
+
+class AgentRulesScreen(ModalScreen):
+    """Screen for managing individual permission rules of an agent."""
+
+    CSS = """
+    AgentRulesScreen {
+        align: center middle;
+    }
+
+    AgentRulesScreen > #rules-dialog {
+        width: 90;
+        height: 90%;
+        border: solid #b16286;
+        background: #282828;
+        padding: 1 2;
+    }
+
+    #rules-title {
+        text-align: center;
+        text-style: bold;
+        color: #b16286;
+    }
+
+    #rules-list {
+        height: 1fr;
+    }
+
+    DataTable {
+        height: 100%;
+    }
+
+    #rule-help {
+        color: #928374;
+        padding: 0 2 1 2;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Close"),
+        Binding("enter", "add_rule", "Add"),
+        Binding("up", "move_up", "Up"),
+        Binding("down", "move_down", "Down"),
+        Binding("delete", "delete_rule", "Delete"),
+    ]
+
+    def __init__(self, agent_data, **kwargs):
+        super().__init__(**kwargs)
+        self.agent_name = agent_data['name']
+        self.rules = list(agent_data['rules'])  # Copy to avoid modifying original
+        self._selected_index = 0
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Static(f"Rules for '{self.agent_name}'", id="rules-title"),
+            Input(placeholder="Filter rules...", id="filter-input"),
+            DataTable(id="rules-list"),
+            Static("↑↓: navigate | Enter: edit | Delete: remove | Escape: close | A: add | S: save", id="rule-help"),
+        )
+
+    def on_mount(self):
+        self._update_table()
+
+    def _update_table(self):
+        table = self.query_one("#rules-list", DataTable)
+        table.clear()
+        table.add_columns("Permission", "Pattern", "Action", "Description")
+        for rule in self.rules:
+            table.add_row(
+                rule.permission,
+                rule.pattern,
+                rule.action.value,
+                f"{rule.permission}@{rule.pattern}"
+            )
+        if 0 <= self._selected_index < len(self.rules):
+            table.cursor_position = self._selected_index
+
+    def on_input_changed(self, event: Input.Changed):
+        query = event.value.lower()
+        if query:
+            filtered = [
+                r for r in self.rules
+                if query in r.permission.lower() or 
+                   query in r.pattern.lower() or
+                   query in r.action.value.lower()
+            ]
+        else:
+            filtered = self.rules
+        self._update_table()
+
+    def action_add_rule(self):
+        """Add a new permission rule."""
+        from nanocode.agents import PermissionRule, PermissionAction
+        self.rules.append(
+            PermissionRule(
+                permission="*",
+                pattern="*",
+                action=PermissionAction.ASK
+            )
+        )
+        self._selected_index = len(self.rules) - 1
+        self._update_table()
+
+    def action_delete_rule(self):
+        """Delete the selected rule."""
+        if 0 <= self._selected_index < len(self.rules):
+            self.rules.pop(self._selected_index)
+            if self._selected_index >= len(self.rules):
+                self._selected_index = max(0, len(self.rules) - 1)
+            self._update_table()
+
+    def action_dismiss(self):
+        self.app.pop_screen()
+
+    def action_save(self):
+        """Save rules and update config."""
+        from pathlib import Path
+        import yaml
+        
+        # Update config.yaml with the new rules
+        config_path = Path("config.yaml")
+        if config_path.exists():
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+            
+            if "agents" not in config:
+                config["agents"] = {}
+            if "permissions" not in config["agents"]:
+                config["agents"]["permissions"] = {}
+            
+            # Store as list of rules for granular control
+            config["agents"]["permissions"][self.agent_name] = [
+                {
+                    "permission": rule.permission,
+                    "pattern": rule.pattern,
+                    "action": rule.action.value
+                }
+                for rule in self.rules
+            ]
+            
+            with open(config_path, "w") as f:
+                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+        
+        self.dismiss(self.rules)
 
 
 class MessageActionScreen(ModalScreen):

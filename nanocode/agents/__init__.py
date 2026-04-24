@@ -87,6 +87,24 @@ class AgentRegistry:
         logger.debug(f"get_agent({name}) -> {agent.name if agent else None}")
         return agent
 
+    def update_permission(self, name: str, permission: str):
+        """Update the default permission for an agent (from config)."""
+        ag = self._agents.get(name)
+        if ag and hasattr(ag, 'permission') and ag.permission:
+            # Find and update the default rule (*/*)
+            for rule in ag.permission:
+                if rule.permission == '*' and rule.pattern == '*':
+                    rule.action = PermissionAction(permission)
+                    break
+
+    def apply_config(self, config: dict):
+        """Apply permission overrides from config."""
+        agents_config = config.get("agents", {})
+        perm_overrides = agents_config.get("permissions", {})
+        for name, perm in perm_overrides.items():
+            if isinstance(perm, str):
+                self.update_permission(name, perm)
+
     def list(self) -> list[AgentInfo]:
         """List all agents."""
         agents = list(self._agents.values())

@@ -60,6 +60,11 @@ class Config:
             target = target.setdefault(k, {})
         target[keys[-1]] = value
 
+    def save(self):
+        """Save configuration to file."""
+        with open(self._config_path, "w") as f:
+            yaml.dump(self._config, f, default_flow_style=False, sort_keys=False)
+
     @property
     def providers(self) -> dict:
         """Get LLM providers configuration."""

@@ -79,9 +79,15 @@ messaging:
     telegram:
       bot_token: ${TELEGRAM_BOT_TOKEN}
       enabled: false
+      phone_number_id: ${WHATSAPP_PHONE_NUMBER_ID}
+      verify_token: ${WHATSAPP_VERIFY_TOKEN}
+      webhook_port: 8080
     whatsapp:
       access_token: ${WHATSAPP_ACCESS_TOKEN}
       enabled: false
+      phone_number_id: ${WHATSAPP_PHONE_NUMBER_ID}
+      verify_token: ${WHATSAPP_VERIFY_TOKEN}
+      webhook_port: 8080
       phone_number_id: ${WHATSAPP_PHONE_NUMBER_ID}
       verify_token: ${WHATSAPP_VERIFY_TOKEN}
       webhook_port: 8080
@@ -89,10 +95,69 @@ planning:
   checkpoint_enabled: true
   max_retries: 3
   max_steps: 20
-skills:
-  directories:
-  - .nanocode/skills
-  - .nanocode/commands
+permissions:
+  # Granular permission rules per agent
+  # Format: agent_name: [{permission: "*", pattern: "*", action: "ask"}, ...]
+  # Action values: "ask", "allow", "deny"
+  # This maps directly to agent permission rules in the agent registry
+  # When an agent name is listed here with specific rules, it overrides the
+  # default permission rules from the agent's definition
+agents:
+  # Default permissions override - specific permission rules per agent
+  # Each rule can specify: permission (tool name), pattern (wildcard), action (ask/allow/deny)
+  build:
+    - {permission: "*", pattern: "*", action: "allow"}
+    - {permission: "doom_loop", pattern: "*", action: "ask"}
+    - {permission: "external_directory", pattern: "*", action: "ask"}
+    - {permission: "external_directory", pattern: "${HOME}/*", action: "allow"}
+    - {permission: "question", pattern: "*", action: "deny"}
+    - {permission: "plan_enter", pattern: "*", action: "deny"}
+    - {permission: "plan_exit", pattern: "*", action: "deny"}
+    - {permission: "read", pattern: "*.env", action: "ask"}
+    - {permission: "read", pattern: "*.env.*", action: "ask"}
+    - {permission: "read", pattern: "*.env.example", action: "allow"}
+    - {permission: "task", pattern: "*", action: "allow"}
+    - {permission: "todo", pattern: "*", action: "allow"}
+  plan:
+    - {permission: "*", pattern: "*", action: "allow"}
+    - {permission: "doom_loop", pattern: "*", action: "ask"}
+    - {permission: "external_directory", pattern: "${HOME}/.opencode/plans/*", action: "allow"}
+    - {permission: "question", pattern: "*", action: "allow"}
+    - {permission: "plan_enter", pattern: "*", action: "deny"}
+    - {permission: "plan_exit", pattern: "*", action: "allow"}
+    - {permission: "edit", pattern: "*", action: "deny"}
+    - {permission: "write", pattern: "*", action: "deny"}
+    - {permission: "patch", pattern: "*", action: "deny"}
+    - {permission: "apply_patch", pattern: "*", action: "deny"}
+    - {permission: "multiedit", pattern: "*", action: "deny"}
+    - {permission: "read", pattern: "*.env", action: "ask"}
+    - {permission: "read", pattern: "*.env.*", action: "ask"}
+    - {permission: "read", pattern: "*.env.example", action: "allow"}
+    - {permission: "todo", pattern: "*", action: "allow"}
+    - {permission: "task", pattern: "*", action: "allow"}
+  # Add more agents as needed with their granular permissions
+  # general:
+  #   - {permission: "*", pattern: "*", action: "allow"}
+  #   - {permission: "doom_loop", pattern: "*", action: "ask"}
+  #   - {permission: "external_directory", pattern: "*", action: "ask"}
+  #   - {permission: "external_directory", pattern: "${HOME}/*", action: "allow"}
+  #   - {permission: "question", pattern: "*", action: "deny"}
+  #   - {permission: "plan_enter", pattern: "*", action: "deny"}
+  #   - {permission: "plan_exit", pattern: "*", action: "deny"}
+  #   - {permission: "read", pattern: "*.env", action: "ask"}
+  #   - {permission: "read", pattern: "*.env.*", action: "ask"}
+  #   - {permission: "read", pattern: "*.env.example", action: "allow"}
+  #   - {permission: "todo", pattern: "*", action: "allow"}
+  #   - {permission: "task", pattern: "*", action: "allow"}
+  # explore:
+  #   - {permission: "*", pattern: "*", action: "allow"}
+  #   - {permission: "task", pattern: "*", action: "deny"}
+  #   - {permission: "doom_loop", pattern: "*", action: "ask"}
+  #   - {permission: "external_directory", pattern: "*", action: "ask"}
+  #   - {permission: "external_directory", pattern: "${HOME}/*", action: "allow"}
+  #   - {permission: "edit", pattern: "*", action: "deny"}
+  #   - {permission: "write", pattern: "*", action: "deny"}
+  #   - {permission: "task", pattern: "*", action: "deny"}
 snapshot:
   enabled: true
   prune_days: 7
@@ -115,3 +180,4 @@ tools:
   - free_exa
   - openwebsearch
   - todo
+  - task
