@@ -250,11 +250,7 @@ class ModelExplorerScreen(ModalScreen):
         table.add_columns("Provider/Model", "Context", "Output")
         for i, (full_id, provider, ctx) in enumerate(self._filtered[:50]):
             output = min(ctx // 8, 16384)
-            # Highlight selected row
             table.add_row(full_id, f"{ctx:,}", f"{output:,}")
-        # Ensure selected row is visible
-        if 0 <= self._selected_index < len(self._filtered):
-            table.cursor_row = self._selected_index
 
     def on_input_changed(self, event: Input.Changed):
         query = event.value.lower()
@@ -288,16 +284,14 @@ class ModelExplorerScreen(ModalScreen):
         if self._filtered:
             self._selected_index = max(0, self._selected_index - 1)
             table = self.query_one("#model-list", DataTable)
-            table.cursor_row = self._selected_index
-            table.scroll_visible()
+            table.cursor_position = self._selected_index
 
     def action_move_down(self):
         """Move selection down."""
         if self._filtered:
             self._selected_index = min(len(self._filtered) - 1, self._selected_index + 1)
             table = self.query_one("#model-list", DataTable)
-            table.cursor_row = self._selected_index
-            table.scroll_visible()
+            table.cursor_position = self._selected_index
 
 
 class MessageActionScreen(ModalScreen):
