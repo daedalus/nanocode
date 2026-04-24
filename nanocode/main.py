@@ -26,6 +26,12 @@ def parse_args():
         description="Autonomous AI Agent with advanced tool use"
     )
     parser.add_argument(
+        "prompt",
+        nargs="*",
+        default=[],
+        help="Prompt to send to the agent (positional argument)",
+    )
+    parser.add_argument(
         "--config",
         "-c",
         type=str,

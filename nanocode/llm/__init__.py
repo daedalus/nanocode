@@ -24,7 +24,12 @@ def create_llm(provider: str, **config) -> LLMBase:
             f"Unknown provider: {provider}. Available: {list(providers.keys())}"
         )
 
-    return providers[provider](**config)
+    llm_class = providers.get(provider)
+    if not llm_class:
+        raise ValueError(
+            f"Unknown provider: {provider}. Available: {list(providers.keys())}"
+        )
+    return llm_class(**config)
 
 
 async def create_llm_from_model_id(

@@ -202,7 +202,7 @@ class OpenAILLM(LLMBase):
                 thinking=msg_data.get("reasoning"),
             )
 
-async def _stream_chat(self, payload: dict, headers: dict, on_token: callable) -> LLMResponse:
+    async def _stream_chat(self, payload: dict, headers: dict, on_token: callable) -> LLMResponse:
         """Handle streaming chat request with SSE parsing."""
         # Use streaming client
         async with httpx.AsyncClient(proxy=self.proxy) as client:
@@ -245,16 +245,6 @@ async def _stream_chat(self, payload: dict, headers: dict, on_token: callable) -
                     finish_reason=finish_reason,
                     thinking=thinking,
                 )
-                        )
-                    elif event["type"] == "finish":
-                        finish_reason = event.get("reason")
-
-        return LLMResponse(
-            content=full_content,
-            tool_calls=tool_calls,
-            finish_reason=finish_reason,
-            thinking=thinking,
-        )
 
     def get_tool_schema(self) -> list[dict]:
         """Get OpenAI function calling format."""
