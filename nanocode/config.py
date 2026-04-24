@@ -18,7 +18,20 @@ class Config:
 
     def __init__(self, config_path: str | None = None):
         self._config: dict = {}
-        self._config_path = config_path or os.getenv("AGENT_CONFIG", "config.yaml")
+        # Look in current dir, then ~/.config/nanocode/, then home
+        if config_path is None:
+            search_paths = [
+                Path("config.yaml"),
+                Path.home() / ".config" / "nanocode" / "config.yaml",
+                Path.home() / "nanocode" / "config.yaml",
+            ]
+            for p in search_paths:
+                if p.exists():
+                    config_path = str(p)
+                    break
+            else:
+                config_path = "config.yaml"
+        self._config_path = config_path
         self.load()
 
     def load(self):
