@@ -49,7 +49,7 @@ class OpenAILLM(LLMBase):
             self.api_key = os.getenv(env_var, self.api_key)
 
     async def chat(
-        self, messages: list, tools: list[dict] = None, **kwargs
+        self, messages: list, tools: list[dict] = None, on_token: callable = None, **kwargs
     ) -> LLMResponse:
         """Send a chat completion request."""
         messages = self._normalize_messages(messages)
@@ -61,6 +61,10 @@ class OpenAILLM(LLMBase):
             "messages": [m.to_dict() for m in messages],
             **kwargs,
         }
+
+        # Enable streaming if on_token callback is provided
+        if on_token:
+            payload["stream"] = True
 
         # DEBUG: Print request details only in verbose mode
         if self.debug:
@@ -111,6 +115,99 @@ class OpenAILLM(LLMBase):
             print(f"  Tools: {len(payload['tools'])} (first: {payload['tools'][0].get('name', 'unknown')})")
         print(f"  max_tokens: {payload.get('max_tokens')}")
         
+        if payload.get('tools'):
+            print(f"  Tools: {len(payload['tools'])} (first: {payload['tools'][0].get('name', 'unknown')})")
+        print(f"  max_tokens: {payload.get('max_tokens')}")
+
+        # Handle streaming vs non-streaming
+        if on_token:
+            # Streaming: parse SSE events and call on_token
+            payload["stream"] = True
+            return await self._stream_chat(payload, headers, on_retry, on_token)
+        else:
+            # Non-streaming: normal request
+            response = await self._request_with_retry(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                on_retry=on_retry,
+            )
+
+            # Debug: Print status code
+            status_code = response.status_code
+            content_type = response.headers.get("content-type", "")
+            print(f"[DEBUG] HTTP Response status: {status_code}, content-type: {content_type}")
+
+            # Handle non-JSON responses (like plain text "Hi there!")
+            if "application/json" not in content_type:
+                text_content = response.text
+                print(f"[DEBUG] Non-JSON response: {text_content[:200]}")
+                # Return as simple text response
+                return LLMResponse(
+                    content=text_content,
+                    tool_calls=[],
+                    finish_reason="stop",
+                    thinking=None,
+                )
+
+            try:
+                data = response.json()
+            except Exception as e:
+                print(f"[DEBUG] Failed to parse JSON response: {e}")
+                print(f"[DEBUG] Response text: {response.text[:500] if response.text else '(empty)'}")
+                raise
+
+            # DEBUG: Print raw response on error
+            if response.status_code != 200:
+                print(f"\n[DEBUG] OpenAI status={response.status_code}")
+                print(f"[DEBUG] OpenAI Response text: {response.text}")
+                logger.error(f"[OpenAI] API Error: status={response.status_code}")
+                logger.error(f"[OpenAI] Response text: {response.text}")
+            # DEBUG: Print response
+            if "error" in data:
+                error_msg = data.get("error", {}).get("message", str(data))
+                print(f"[DEBUG] OpenAI Error: {error_msg}")
+                logger.error(f"[OpenAI] API Error: {error_msg}")
+                # Handle specific error types - include provider wrapped errors
+                raw_error = data.get("error", {}).get("metadata", {}).get("raw", "")
+                if "tool id" in error_msg.lower() or "tool_call_id" in error_msg.lower() or ("tool" in raw_error.lower() and "not found" in raw_error.lower()):
+                    raise RuntimeError(f"Tool call error: {error_msg}. Try starting a new session.")
+                if response.status_code == 400:
+                    raise RuntimeError(f"Bad request: {error_msg}")
+            if "choices" not in data:
+                error_msg = data.get("error", {}).get("message", str(data))
+                raise RuntimeError(f"LLM API error: {error_msg}")
+
+            choice = data["choices"][0]
+            msg_data = choice["message"]
+
+            tool_calls = []
+            if tc_data := msg_data.get("tool_calls"):
+                for tc in tc_data:
+                    func = tc.get("function", {})
+                    args_str = func.get("arguments", "{}")
+                    try:
+                        arguments = json.loads(args_str) if args_str else {}
+                    except json.JSONDecodeError:
+                        arguments = {}
+                    tool_calls.append(
+                        ToolCall(
+                            name=func.get("name", ""),
+                            arguments=arguments,
+                            id=tc.get("id"),
+                        )
+                    )
+
+            return LLMResponse(
+                content=msg_data.get("content", ""),
+                tool_calls=tool_calls,
+                finish_reason=choice.get("finish_reason"),
+                thinking=msg_data.get("reasoning"),
+            )
+
+    async def _stream_chat(self, payload: dict, headers: dict, on_retry, on_token: callable) -> LLMResponse:
+        """Handle streaming chat request with SSE parsing."""
         response = await self._request_with_retry(
             "POST",
             f"{self.base_url}/chat/completions",
@@ -118,77 +215,41 @@ class OpenAILLM(LLMBase):
             json=payload,
             on_retry=on_retry,
         )
-        
-        # Debug: Print status code
-        status_code = response.status_code
-        content_type = response.headers.get("content-type", "")
-        print(f"[DEBUG] HTTP Response status: {status_code}, content-type: {content_type}")
 
-        # Handle non-JSON responses (like plain text "Hi there!")
-        if "application/json" not in content_type:
-            text_content = response.text
-            print(f"[DEBUG] Non-JSON response: {text_content[:200]}")
-            # Return as simple text response
-            return LLMResponse(
-                content=text_content,
-                tool_calls=[],
-                finish_reason="stop",
-                thinking=None,
-            )
-
-        try:
-            data = response.json()
-        except Exception as e:
-            print(f"[DEBUG] Failed to parse JSON response: {e}")
-            print(f"[DEBUG] Response text: {response.text[:500] if response.text else '(empty)'}")
-            raise
-
-        # DEBUG: Print raw response on error
-        if response.status_code != 200:
-            print(f"\n[DEBUG] OpenAI status={response.status_code}")
-            print(f"[DEBUG] OpenAI Response text: {response.text}")
-            logger.error(f"[OpenAI] API Error: status={response.status_code}")
-            logger.error(f"[OpenAI] Response text: {response.text}")
-        # DEBUG: Print response
-        if "error" in data:
-            error_msg = data.get("error", {}).get("message", str(data))
-            print(f"[DEBUG] OpenAI Error: {error_msg}")
-            logger.error(f"[OpenAI] API Error: {error_msg}")
-            # Handle specific error types - include provider wrapped errors
-            raw_error = data.get("error", {}).get("metadata", {}).get("raw", "")
-            if "tool id" in error_msg.lower() or "tool_call_id" in error_msg.lower() or ("tool" in raw_error.lower() and "not found" in raw_error.lower()):
-                raise RuntimeError(f"Tool call error: {error_msg}. Try starting a new session.")
-            if response.status_code == 400:
-                raise RuntimeError(f"Bad request: {error_msg}")
-        if "choices" not in data:
-            error_msg = data.get("error", {}).get("message", str(data))
-            raise RuntimeError(f"LLM API error: {error_msg}")
-
-        choice = data["choices"][0]
-        msg_data = choice["message"]
-
+        # Parse SSE stream
+        full_content = ""
         tool_calls = []
-        if tc_data := msg_data.get("tool_calls"):
-            for tc in tc_data:
-                func = tc.get("function", {})
-                args_str = func.get("arguments", "{}")
-                try:
-                    arguments = json.loads(args_str) if args_str else {}
-                except json.JSONDecodeError:
-                    arguments = {}
+        finish_reason = None
+        thinking = None
+
+        async for event in parse_stream_events(response):
+            if event["type"] == "text":
+                content = event["content"]
+                full_content += content
+                if on_token:
+                    try:
+                        on_token(content)
+                    except Exception as e:
+                        logger.warning(f"[OpenAI] on_token callback failed: {e}")
+            elif event["type"] == "tool_call":
                 tool_calls.append(
                     ToolCall(
-                        name=func.get("name", ""),
-                        arguments=arguments,
-                        id=tc.get("id"),
+                        name=event["name"],
+                        arguments=event["arguments"],
+                        id=event["id"],
                     )
                 )
+            elif event["type"] == "finish":
+                finish_reason = event.get("reason")
+                if "usage" in event:
+                    # Store usage if needed
+                    pass
 
         return LLMResponse(
-            content=msg_data.get("content", ""),
+            content=full_content,
             tool_calls=tool_calls,
-            finish_reason=choice.get("finish_reason"),
-            thinking=msg_data.get("reasoning"),
+            finish_reason=finish_reason,
+            thinking=thinking,
         )
 
     async def chat_stream(

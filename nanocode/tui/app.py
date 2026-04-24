@@ -1353,8 +1353,24 @@ Footer {
                 root_logger.addHandler(fh)
                 
                 try:
+                    # Define callbacks for real-time updates
+                    def on_tool_start(tool_name, args):
+                        """Called when a tool starts execution."""
+                        args_str = str(args)[:100]  # Truncate long args
+                        self._print_line(f"▶ {tool_name}({args_str})...", Style.TOOL_MESSAGE)
+
+                    def on_tool_complete(tool_name, result):
+                        """Called when a tool completes."""
+                        # Show a summary (first 200 chars)
+                        preview = result[:200] + "..." if len(result) > 200 else result
+                        self._print_line(f"✓ {tool_name}: {preview}", Style.TOOL_MESSAGE)
+
                     result = await self.agent.process_input(
-                        text, show_thinking=True, show_messages=False
+                        text,
+                        show_thinking=True,
+                        show_messages=False,
+                        on_tool_start=on_tool_start,
+                        on_tool_complete=on_tool_complete,
                     )
                 finally:
                     # Restore logging

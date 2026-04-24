@@ -205,6 +205,11 @@ class AutonomousAgent:
         self._custom_system_prompt = system_prompt
         self.auto_execute = auto_execute
 
+        # Callbacks for real-time updates (set during process_input)
+        self._on_token = None
+        self._on_tool_start = None
+        self._on_tool_complete = None
+
         self._init_session()
         self._init_agents()
         self._init_storage()
@@ -774,18 +779,19 @@ Conversation:
         self,
         messages: list,
         tools: list = None,
-        max_retries: int = 3
+        max_retries: int = 3,
+        on_token: callable = None,
     ) -> Any:
         """Chat with retry on tool ID mismatch errors and exponential backoff."""
         import asyncio
         import re
-        
+
         retry_count = 0
         last_error = None
-        
+
         while retry_count < max_retries:
             try:
-                return await self.llm.chat(messages=messages, tools=tools)
+                return await self.llm.chat(messages=messages, tools=tools, on_token=on_token)
             except Exception as e:
                 error_str = str(e)
                 retryable, reason = is_retryable_error(e)
@@ -816,7 +822,7 @@ Conversation:
                         fresh_messages.append(msg if isinstance(msg, dict) else msg.to_dict())
                         seen_user = True
                 
-                result = await self.llm.chat(messages=fresh_messages, tools=tools)
+                result = await self.llm.chat(messages=fresh_messages, tools=tools, on_token=on_token)
                 return result
         
         raise last_error or Exception("Max retries exceeded")
@@ -852,6 +858,13 @@ Conversation:
             logger.debug(
                 f"[{agent_name}] Tool call {i + 1}/{len(tool_calls)}: {tool_name}({args})"
             )
+
+            # Call on_tool_start callback
+            if hasattr(self, '_on_tool_start') and self._on_tool_start:
+                try:
+                    self._on_tool_start(tool_name, args)
+                except Exception as e:
+                    logger.warning(f"[{agent_name}] on_tool_start callback failed: {e}")
 
             is_doom_loop = self.doom_loop_handler.check_tool_call(tool_name, args)
             if is_doom_loop:
@@ -987,6 +1000,13 @@ Conversation:
                     f"[{agent_name}] Tool '{tool_name}' failed: {result.error}"
                 )
 
+            # Call on_tool_complete callback
+            if hasattr(self, '_on_tool_complete') and self._on_tool_complete:
+                try:
+                    self._on_tool_complete(tool_name, self.tool_executor.format_result(result))
+                except Exception as e:
+                    logger.warning(f"[{agent_name}] on_tool_complete callback failed: {e}")
+
             tool_logger.debug(
                 f"[{agent_name}] Tool call: {tool_name}({args}) -> success={result.success}"
             )
@@ -1106,12 +1126,25 @@ Conversation:
         )
 
     async def process_input(
-        self, user_input: str, show_thinking: bool = True, show_messages: bool = False
+        self,
+        user_input: str,
+        show_thinking: bool = True,
+        show_messages: bool = False,
+        on_token: callable = None,
+        on_tool_start: callable = None,
+        on_tool_complete: callable = None,
     ) -> str:
         """Process a user input through the agent."""
         import traceback
         try:
-            return await self._process_input_impl(user_input, show_thinking, show_messages)
+            return await self._process_input_impl(
+                user_input,
+                show_thinking,
+                show_messages,
+                on_token=on_token,
+                on_tool_start=on_tool_start,
+                on_tool_complete=on_tool_complete,
+            )
         except Exception as e:
             if "Expecting value" in str(e) or isinstance(e, json.JSONDecodeError):
                 logger.error(f"JSON parsing error in process_input: {e}")
@@ -1120,7 +1153,13 @@ Conversation:
             raise
 
     async def _process_input_impl(
-        self, user_input: str, show_thinking: bool = True, show_messages: bool = False
+        self,
+        user_input: str,
+        show_thinking: bool = True,
+        show_messages: bool = False,
+        on_token: callable = None,
+        on_tool_start: callable = None,
+        on_tool_complete: callable = None,
     ) -> str:
         """Process a user input through the agent."""
         agent_name = self.current_agent.name if self.current_agent else "unknown"
@@ -1137,6 +1176,11 @@ Conversation:
 
         self.context_manager.add_message("user", user_input)
         logger.debug(f"[{agent_name}] User message added to context")
+
+        # Store callbacks for this processing session
+        self._on_token = on_token
+        self._on_tool_start = on_tool_start
+        self._on_tool_complete = on_tool_complete
 
         tool_results_history = []
 
@@ -1197,7 +1241,7 @@ Conversation:
                     console.print("\n[warning][WARN] CACHE HIT - Previous response reused![/warning]")
                 response = cached_response
             else:
-                response = await self._chat_with_retry(messages, tools)
+                response = await self._chat_with_retry(messages, tools, on_token=self._on_token)
                 self._put_cache(messages, tools, response)
                 logger.info(f"[{agent_name}] LLM response received")
 
@@ -1370,9 +1414,9 @@ Conversation:
                     if is_last_step:
                         messages.append({"role": "user", "content": MAX_STEPS_MESSAGE})
                         logger.debug(f"[{agent_name}] Forcing text-only response (max steps reached)")
-                        final_response = await self._chat_with_retry(messages, None)
+                        final_response = await self._chat_with_retry(messages, None, on_token=self._on_token)
                     else:
-                        final_response = await self._chat_with_retry(messages, tools)
+                        final_response = await self._chat_with_retry(messages, tools, on_token=self._on_token)
 
                 if iteration >= max_agent_steps:
                     logger.warning(f"[{agent_name}] Hit max iterations ({max_agent_steps})")
@@ -1381,7 +1425,7 @@ Conversation:
                     self.context_manager.add_message("user", AUTO_CONTINUE_MESSAGE)
                     logger.info(f"[{agent_name}] Auto-continue: injected continue message")
                     messages = self.context_manager.prepare_messages()
-                    final_response = await self._chat_with_retry(messages, tools)
+                    final_response = await self._chat_with_retry(messages, tools, on_token=self._on_token)
                     if not final_response.has_tool_calls:
                         content = final_response.content
                         self.context_manager.add_message("assistant", content)
@@ -1397,7 +1441,7 @@ Conversation:
                 messages = self.context_manager.prepare_messages()
                 # Add explicit instruction not to call tools
                 messages.append({"role": "user", "content": "DO NOT call any more tools. Analyze the tool results above and provide your final answer to the user."})
-                retry_response = await self._chat_with_retry(messages, None)
+                retry_response = await self._chat_with_retry(messages, None, on_token=self._on_token)
                 content = retry_response.content
                 
             # Final fallback
@@ -1616,7 +1660,7 @@ Conversation:
 
             # Process the re-prompt
             messages = self.context_manager.prepare_messages()
-            response = await self._chat_with_retry(messages, tools)
+            response = await self._chat_with_retry(messages, tools, on_token=self._on_token)
 
             if response.has_tool_calls:
                 logger.info(f"[{agent_name}] Re-prompt produced {len(response.tool_calls)} tool calls")
