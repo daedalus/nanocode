@@ -912,6 +912,22 @@ Footer {
         except Exception:
             pass
 
+    def _update_stream_display(self) -> None:
+        """Flush accumulated stream tokens to display."""
+        if not hasattr(self, '_stream_buffer') or not self._stream_buffer:
+            return
+        
+        output_area = self.query_one("#output-area", RichLog)
+        # Remove the timer so it can be rescheduled
+        if hasattr(self, '_stream_timer') and self._stream_timer:
+            self._stream_timer.stop()
+            self._stream_timer = None
+        
+        # Write the accumulated tokens
+        if self._stream_buffer:
+            output_area.write(self._stream_buffer)
+            self._stream_buffer = ""
+
     def _update_spinner(self) -> None:
         """Update spinner animation."""
         if not self._processing:
@@ -1353,7 +1369,20 @@ Footer {
                 root_logger.addHandler(fh)
                 
                 try:
+                    # Streaming buffer for real-time display
+                    self._stream_buffer = ""
+                    self._stream_timer = None
+
                     # Define callbacks for real-time updates
+                    def on_token(token: str):
+                        """Called for each token from LLM."""
+                        self._stream_buffer += token
+                        # Update display every 100ms (if not already scheduled)
+                        if self._stream_timer is None:
+                            self._stream_timer = self.set_interval(
+                                0.1, self._update_stream_display
+                            )
+
                     def on_tool_start(tool_name, args):
                         """Called when a tool starts execution."""
                         args_str = str(args)[:100]  # Truncate long args
@@ -1460,6 +1489,16 @@ Footer {
             spinner.update("")  # Clear spinner
             spinner.classes = ""  # Remove active class
             
+            # Clean up streaming
+            if hasattr(self, '_stream_timer') and self._stream_timer:
+                self._stream_timer.stop()
+                self._stream_timer = None
+            # Flush any remaining stream buffer
+            if hasattr(self, '_stream_buffer') and self._stream_buffer:
+                output_area = self.query_one("#output-area", RichLog)
+                output_area.write(self._stream_buffer)
+                self._stream_buffer = ""
+
             self._processing = False
             input_widget.disabled = False
             input_widget.focus()
