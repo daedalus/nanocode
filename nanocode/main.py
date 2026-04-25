@@ -647,11 +647,11 @@ async def main():
                 result = await agent.process_input(
                     prompt, show_thinking=show_thinking, show_messages=show_messages
                 )
-            except Exception:
+            except Exception as err:
                 import traceback as tb
 
                 tb.print_exc()
-                result = f"Error: {str(e)}"
+                result = f"Error: {str(err)}"
 
             results.append(result)
             print(f"Response: {result[:200]}{'...' if len(result) > 200 else ''}")
