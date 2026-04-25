@@ -14,6 +14,11 @@ from nanocode.config import Config
 from nanocode.core import AutonomousAgent
 from nanocode import __version__
 from nanocode.server import run_server
+from nanocode.agents.permission import (
+    PermissionHandler,
+    PermissionReply,
+    PermissionReplyType,
+)
 
 
 def _save_session_on_exit(agent: AutonomousAgent):
@@ -226,7 +231,7 @@ def parse_args():
         "--non-interactive",
         "-n",
         action="store_true",
-        help="Non-interactive mode: process input and exit (no prompts)",
+        help="Non-interactive mode: process input and exit (auto-allow permissions)",
     )
     parser.add_argument(
         "--input-file",
@@ -632,6 +637,15 @@ async def main():
             prompts = [p.strip() for p in content.split("\n---\n") if p.strip()]
         else:
             prompts = content.split(sep)
+
+        # Auto-allow all permissions in non-interactive mode
+        async def auto_allow_permission(request):
+            return PermissionReply(
+                request_id=request.id,
+                reply=PermissionReplyType.ALLOW,
+            )
+
+        agent.permission_handler.set_callback(auto_allow_permission)
 
         results = []
         output_file = getattr(args, "output", None)
