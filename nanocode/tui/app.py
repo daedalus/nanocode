@@ -2317,6 +2317,13 @@ Footer {
             input_widget.focus()
             _tui_logger.debug("Input re-enabled, processing complete")
 
+            # Force screen refresh after cancellation/error to fix black screen issue
+            try:
+                self.refresh()
+                self.screen.refresh()
+            except Exception as e:
+                _tui_logger.debug(f"Screen refresh failed: {e}")
+
     async def _handle_command(self, command: str):
         """Handle slash-prefixed commands locally."""
         cmd = command.lower()
