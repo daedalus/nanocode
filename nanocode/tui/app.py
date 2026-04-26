@@ -1586,9 +1586,13 @@ Footer {
         """Print simple banner."""
         self._print_line("NanoCode", Style.TEXT_INFO_BOLD)
 
-    def _print_line(self, text: str, style: str = ""):
+    def _print_line(self, text: str, style: str = "") -> None:
         """Print a line with optional style."""
-        output = self.query_one("#output-area")
+        try:
+            output = self.query_one("#output-area")
+        except Exception as e:
+            _tui_logger.debug(f"_print_line query failed: {e}")
+            raise
 
         # Convert ANSI style to simple Rich style name
         if style == Style.THINKING:
@@ -2012,6 +2016,11 @@ Footer {
     @work(exclusive=True)
     async def _process_input(self, text: str):
         import traceback
+        import logging
+
+        _tui_logger.debug(f"_process_input START: '{text[:50]}...'")
+        _tui_logger.debug(f"agent exists: {self.agent is not None}")
+        _tui_logger.debug(f"processing: {getattr(self, '_processing', 'N/A')}")
 
         self._print_line(f"> {text}", Style.USER_MESSAGE)
         self._print_empty()
@@ -2182,6 +2191,11 @@ Footer {
                             on_tool_complete=on_tool_complete,
                         )
                         _tui_logger.debug(f"agent.process_input returned: {type(result)}")
+                    except asyncio.CancelledError as e:
+                        _tui_logger.debug(f"CANCELLED_ERROR in process_input: {e}")
+                        _tui_logger.debug(f"Cancel traceback: {traceback.format_exc()}")
+                        self._print_error(f"Cancelled: {e}")
+                        result = None
                     except Exception as e:
                         _tui_logger.debug(f"EXCEPTION in process_input: {e}")
                         self._print_line(f"Error: {e}", Style.TEXT_DANGER)
@@ -2269,8 +2283,12 @@ Footer {
                 self._print_line("▣", Style.TEXT_SUCCESS_BOLD)
             else:
                 self._print_error("No agent configured")
+        except asyncio.CancelledError as e:
+            _tui_logger.debug(f"OUTER_CANCELLED_ERROR: {e}")
+            _tui_logger.debug(f"Outer Cancel traceback: {traceback.format_exc()}")
+            self._print_error(f"Cancelled: {e}")
         except Exception as e:
-            import traceback
+            _tui_logger.debug(f"OUTER_EXCEPTION: {e}")
 
             self._print_error(f"Error: {e}")
             traceback.print_exc()
