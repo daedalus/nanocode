@@ -649,21 +649,21 @@ class ReadFileTool(Tool):
     def __init__(self, root_dir: str = None, file_tracker=None):
         super().__init__(
             name="read",
-            description="Read file content. IMPORTANT: Call fstat(path) FIRST to get stats (lines, bytes, tokens), then use offset/limit to read in chunks.",
+            description="Read file content. Supports: read(path) to read full file, or read(path, offset, limit) to read chunk.",
             parameters={
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "The path to the file to read (relative or absolute)",
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Maximum number of lines to read",
+                        "description": "The path to the file to read (required)",
                     },
                     "offset": {
                         "type": "integer",
-                        "description": "Line number to start reading from (1-indexed)",
+                        "description": "Line number to start reading from (1-indexed, optional)",
+                    },
+                    "limit": {
+                        "type": "integer", 
+                        "description": "Number of lines to read (optional)",
                     },
                     "force_refresh": {
                         "type": "boolean",
