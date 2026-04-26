@@ -3,7 +3,6 @@
 import json
 import logging
 import os
-import uuid
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -16,21 +15,10 @@ from nanocode.retry import (
     RetryConfig,
     retry_with_backoff,
 )
+from nanocode.tools import ToolCall
 
 
 logger = logging.getLogger(__name__)
-
-
-class ToolCall:
-    """Represents a tool call from the LLM."""
-
-    def __init__(self, name: str, arguments: dict, id: str = None):
-        self.name = name
-        self.arguments = arguments
-        self.id = id or f"call_{name}_{uuid.uuid4().hex[:8]}"
-
-    def __repr__(self):
-        return f"ToolCall({self.name}, {self.arguments})"
 
 
 class Message:

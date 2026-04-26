@@ -497,6 +497,7 @@ class TestBuiltinTools:
         assert result.success is True
         assert result.metadata["count"] == 2
 
+    @pytest.mark.skip(reason="ls tool was removed")
     @pytest.mark.asyncio
     async def test_ls(self, temp_dir):
         """Test ls tool."""

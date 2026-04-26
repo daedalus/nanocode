@@ -54,7 +54,6 @@ COMMAND_PATTERNS = {
 SHELL_COMMANDS = {
     "find",
     "grep",
-    "ls",
     "cd",
     "python",
     "npm",

@@ -7,9 +7,11 @@ from streaming LLM responses.
 from dataclasses import dataclass
 from typing import AsyncIterator
 
+from nanocode.tools import ToolCall
+
 
 @dataclass
-class ToolCall:
+class ToolCallChunk:
     """Accumulated tool call during streaming."""
 
     id: str

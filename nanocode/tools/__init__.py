@@ -18,8 +18,8 @@ logger = logging.getLogger("nanocode.tools")
 class ToolResult:
     """Result from tool execution."""
 
-    success: bool
-    content: Any
+    content: Any = None
+    success: bool = True
     error: str | None = None
     metadata: dict = field(default_factory=dict)
 
@@ -30,6 +30,53 @@ class ToolResult:
             "error": self.error,
             "metadata": self.metadata,
         }
+
+    @classmethod
+    def ok(cls, content: Any, metadata: dict = None) -> "ToolResult":
+        """Create a successful result."""
+        return cls(success=True, content=content, metadata=metadata or {})
+
+    @classmethod
+    def err(cls, error: str, content: Any = None) -> "ToolResult":
+        """Create an error result."""
+        return cls(success=False, content=content, error=error)
+
+
+@dataclass
+class ToolCall:
+    """Represents a tool call from the LLM."""
+
+    name: str
+    arguments: dict
+    id: str = None
+
+    def __post_init__(self):
+        if self.id is None:
+            import uuid
+            self.id = f"call_{self.name}_{uuid.uuid4().hex[:8]}"
+
+    @property
+    def tool_name(self) -> str:
+        """Alias for name for backward compatibility."""
+        return self.name
+
+    @tool_name.setter
+    def tool_name(self, value: str):
+        """Alias setter for name."""
+        self.name = value
+
+    @property
+    def call_id(self) -> str:
+        """Alias for id for backward compatibility."""
+        return self.id
+
+    @call_id.setter
+    def call_id(self, value: str):
+        """Alias setter for id."""
+        self.id = value
+
+    def __repr__(self):
+        return f"ToolCall({self.name}, {self.arguments})"
 
 
 class Tool(ABC):

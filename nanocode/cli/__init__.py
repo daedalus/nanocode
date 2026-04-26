@@ -738,7 +738,35 @@ class InteractiveCLI:
 
         self.ui.print_message("assistant", response)
 
+        await self._print_summary()
+
         await self._check_and_compact_context()
+
+    async def _print_summary(self):
+        """Print a summary of what was accomplished."""
+        summary = getattr(self.nanocode.state, "last_summary", None)
+        if not summary:
+            return
+
+        additions = summary.get("additions", 0)
+        deletions = summary.get("deletions", 0)
+        files = summary.get("files", 0)
+        text = summary.get("text", "")
+
+        if files > 0:
+            print()
+            print(self.ui.color("cyan", "─" * 40))
+            print(self.ui.color("green", f"  ✓ {files} file(s) changed"))
+
+            if additions > 0:
+                print(self.ui.color("green", f"  +{additions}"))
+            if deletions > 0:
+                print(self.ui.color("red", f"  -{deletions}"))
+
+        if text:
+            print()
+            print(self.ui.color("cyan", text))
+            print(self.ui.color("cyan", "─" * 40))
 
     async def _execute_task(self, task: str):
         """Execute a task with planning."""

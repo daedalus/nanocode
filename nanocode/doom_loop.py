@@ -4,14 +4,7 @@ import json
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-
-@dataclass
-class ToolCall:
-    """Represents a tool call."""
-
-    tool_name: str
-    arguments: dict
-    call_id: str
+from nanocode.tools import ToolCall
 
 
 @dataclass
@@ -30,7 +23,7 @@ class DoomLoopDetection:
         Record a tool call and check if it triggers doom loop detection.
         Returns True if doom loop is detected.
         """
-        call = ToolCall(tool_name=tool_name, arguments=arguments, call_id=call_id or "")
+        call = ToolCall(name=tool_name, arguments=arguments, id=call_id or "")
 
         tool_calls = self._recent_calls[tool_name]
         tool_calls.append(call)
@@ -59,9 +52,9 @@ class DoomLoopDetection:
         if len(recent) < 3:
             return False
 
-        exploration_tools = {"ls", "glob", "bash"}
+        exploration_tools = {"glob", "bash"}
 
-        recent_tools = [c.tool_name for c in recent]
+        recent_tools = [c.name for c in recent]
 
         unique_tools = set(recent_tools)
         if not unique_tools.issubset(exploration_tools):
@@ -88,7 +81,7 @@ class DoomLoopDetection:
 
         recent = calls[-self.threshold :]
 
-        if not all(c.tool_name == recent[0].tool_name for c in recent):
+        if not all(c.name == recent[0].name for c in recent):
             return False
 
         first_args = recent[0].arguments
@@ -123,7 +116,7 @@ class DoomLoopDetection:
         if self._is_exploration_loop():
             return {
                 "tool": "exploration",
-                "arguments": {"pattern": "ls/glob repetition without progress"},
+                "arguments": {"pattern": "glob/bash repetition without progress"},
                 "count": len(self._all_recent_calls),
                 "type": "exploration",
                 "show_warning": not self._exploration_warning_shown,
