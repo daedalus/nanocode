@@ -2117,7 +2117,7 @@ Footer {
 
                 # Restore root logger to DEBUG but with all output going to file only
                 root_logger.setLevel(logging.DEBUG)
-                root_logger.addHandler(logging.FileHandler(_TUI_LOG_FILE))
+                root_logger.addHandler(logging.FileHandler(_log_file))
 
                 try:
                     # Streaming buffer for real-time display
