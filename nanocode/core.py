@@ -1294,7 +1294,7 @@ Conversation:
                 on_tool_complete=on_tool_complete,
             )
         except asyncio.CancelledError:
-            traceback.print_exc()
+            logger.error(f"LLM request cancelled (timeout)")
             raise
         except Exception as e:
             if "Expecting value" in str(e) or isinstance(e, json.JSONDecodeError):
