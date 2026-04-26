@@ -356,7 +356,7 @@ class TestBuiltinTools:
         from nanocode.tools.builtin import WriteFileTool
 
         unlocked = set()
-        tool = WriteFileTool(root_dir=temp_dir, file_tracker=unlocked)
+        tool = WriteFileTool(root_dir=temp_dir, read_tracker=unlocked, write_unlock_tracker=unlocked)
 
         result = await tool.execute(path="output.txt", content="Test content")
 
@@ -369,8 +369,8 @@ class TestBuiltinTools:
         from nanocode.tools.builtin import ReadFileTool, WriteFileTool
 
         unlocked = set()
-        read_tool = ReadFileTool(root_dir=temp_dir, file_tracker=unlocked)
-        write_tool = WriteFileTool(root_dir=temp_dir, file_tracker=unlocked)
+        read_tool = ReadFileTool(root_dir=temp_dir, read_tracker=unlocked, write_unlock_tracker=unlocked)
+        write_tool = WriteFileTool(root_dir=temp_dir, read_tracker=unlocked, write_unlock_tracker=unlocked)
 
         new_file = Path(temp_dir) / "new_file.txt"
 
@@ -385,8 +385,8 @@ class TestBuiltinTools:
         from nanocode.tools.builtin import ReadFileTool, WriteFileTool
 
         unlocked = set()
-        read_tool = ReadFileTool(root_dir=temp_dir, file_tracker=unlocked)
-        write_tool = WriteFileTool(root_dir=temp_dir, file_tracker=unlocked)
+        read_tool = ReadFileTool(root_dir=temp_dir, read_tracker=unlocked, write_unlock_tracker=unlocked)
+        write_tool = WriteFileTool(root_dir=temp_dir, read_tracker=unlocked, write_unlock_tracker=unlocked)
 
         await read_tool.execute(path="brand_new.txt")
         result = await write_tool.execute(path="brand_new.txt", content="new content")
@@ -400,8 +400,8 @@ class TestBuiltinTools:
         from nanocode.tools.builtin import ReadFileTool, WriteFileTool
 
         unlocked = set()
-        read_tool = ReadFileTool(root_dir=temp_dir, file_tracker=unlocked)
-        write_tool = WriteFileTool(root_dir=temp_dir, file_tracker=unlocked)
+        read_tool = ReadFileTool(root_dir=temp_dir, read_tracker=unlocked, write_unlock_tracker=unlocked)
+        write_tool = WriteFileTool(root_dir=temp_dir, read_tracker=unlocked, write_unlock_tracker=unlocked)
 
         await read_tool.execute(path="nested/new/file.txt")
         result = await write_tool.execute(path="nested/new/file.txt", content="nested")
@@ -415,7 +415,7 @@ class TestBuiltinTools:
         from nanocode.tools.builtin import ReadFileTool
 
         unlocked = set()
-        tool = ReadFileTool(root_dir=temp_dir, file_tracker=unlocked)
+        tool = ReadFileTool(root_dir=temp_dir, read_tracker=unlocked, write_unlock_tracker=unlocked)
 
         test_file = Path(temp_dir) / "input.txt"
         test_file.write_text("original content")
@@ -431,8 +431,8 @@ class TestBuiltinTools:
         from nanocode.tools.builtin import ReadFileTool, WriteFileTool
 
         unlocked = set()
-        read_tool = ReadFileTool(root_dir=temp_dir, file_tracker=unlocked)
-        write_tool = WriteFileTool(root_dir=temp_dir, file_tracker=unlocked)
+        read_tool = ReadFileTool(root_dir=temp_dir, read_tracker=unlocked, write_unlock_tracker=unlocked)
+        write_tool = WriteFileTool(root_dir=temp_dir, read_tracker=unlocked, write_unlock_tracker=unlocked)
 
         test_file = Path(temp_dir) / "input.txt"
         test_file.write_text("original")
@@ -449,8 +449,8 @@ class TestBuiltinTools:
         from nanocode.tools.builtin import ReadFileTool, WriteFileTool
 
         unlocked = set()
-        read_tool = ReadFileTool(root_dir=temp_dir, file_tracker=unlocked)
-        write_tool = WriteFileTool(root_dir=temp_dir, file_tracker=unlocked)
+        read_tool = ReadFileTool(root_dir=temp_dir, read_tracker=unlocked, write_unlock_tracker=unlocked)
+        write_tool = WriteFileTool(root_dir=temp_dir, read_tracker=unlocked, write_unlock_tracker=unlocked)
 
         test_file = Path(temp_dir) / "input.txt"
         test_file.write_text("original")
@@ -469,8 +469,8 @@ class TestBuiltinTools:
         from nanocode.tools.builtin import ReadFileTool, WriteFileTool
 
         unlocked = set()
-        tool = WriteFileTool(root_dir=temp_dir, file_tracker=unlocked)
-        read_tool = ReadFileTool(root_dir=temp_dir, file_tracker=unlocked)
+        tool = WriteFileTool(root_dir=temp_dir, read_tracker=unlocked, write_unlock_tracker=unlocked)
+        read_tool = ReadFileTool(root_dir=temp_dir, read_tracker=unlocked, write_unlock_tracker=unlocked)
 
         Path(temp_dir, "output.txt").write_text("placeholder")
 
