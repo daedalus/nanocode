@@ -8,10 +8,12 @@ from dataclasses import dataclass
 from enum import Enum
 
 # Set up TUI logger early for debug statements
+# Log file path - configurable via TUI_LOG_FILE env var
+_TUI_LOG_FILE = os.environ.get("TUI_LOG_FILE", "/tmp/nanocode.log")
 _tui_logger = logging.getLogger("nanocode.tui")
 _tui_logger.setLevel(logging.DEBUG)
 if not _tui_logger.handlers:
-    _tui_logger.addHandler(logging.FileHandler("/tmp/nanocode.log"))
+    _tui_logger.addHandler(logging.FileHandler(_TUI_LOG_FILE))
     _tui_logger.debug("=== TUI Logger initialized ===")
 
 
@@ -2022,10 +2024,6 @@ Footer {
         _tui_logger.debug(f"agent exists: {self.agent is not None}")
         _tui_logger.debug(f"processing: {getattr(self, '_processing', 'N/A')}")
 
-        # Write start marker directly to log file (bypass any capture)
-        with open("/tmp/nanocode.log", "a") as f:
-            f.write(f"=== Input START: {text[:30]}... ===\n")
-
         self._print_line(f"> {text}", Style.USER_MESSAGE)
         self._print_empty()
 
@@ -2107,7 +2105,7 @@ Footer {
 
                 # Restore root logger to DEBUG but with all output going to file only
                 root_logger.setLevel(logging.DEBUG)
-                root_logger.addHandler(logging.FileHandler("/tmp/nanocode.log"))
+                root_logger.addHandler(logging.FileHandler(_TUI_LOG_FILE))
 
                 try:
                     # Streaming buffer for real-time display
@@ -2195,12 +2193,9 @@ Footer {
                             on_tool_complete=on_tool_complete,
                         )
                         _tui_logger.debug(f"agent.process_input returned: {type(result)}")
-except asyncio.CancelledError as e:
-                        # Write directly to file before anything else
-                        with open("/tmp/nanocode.log", "a") as f:
-                            f.write(f"CANCELLED_ERROR: {e}\n")
-                            f.write(traceback.format_exc())
+                    except asyncio.CancelledError as e:
                         _tui_logger.error(f"CANCELLED_ERROR: {e}")
+                        import traceback
                         _tui_logger.error(f"Cancel traceback: {traceback.format_exc()}")
                         self._print_error(f"Cancelled: {e}")
                         result = None
@@ -2292,18 +2287,11 @@ except asyncio.CancelledError as e:
             else:
                 self._print_error("No agent configured")
         except asyncio.CancelledError as e:
-            # Write directly to file before anything else
-            with open("/tmp/nanocode.log", "a") as f:
-                f.write(f"OUTER_CANCELLED_ERROR: {e}\n")
-                f.write(traceback.format_exc())
             _tui_logger.error(f"OUTER_CANCELLED_ERROR: {e}")
+            import traceback
             _tui_logger.error(f"Outer Cancel traceback: {traceback.format_exc()}")
             self._print_error(f"Cancelled: {e}")
         except Exception as e:
-            # Write directly to file before anything else
-            with open("/tmp/nanocode.log", "a") as f:
-                f.write(f"OUTER_EXCEPTION: {e}\n")
-                f.write(traceback.format_exc())
             _tui_logger.debug(f"OUTER_EXCEPTION: {e}")
 
             self._print_error(f"Error: {e}")
