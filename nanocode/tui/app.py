@@ -2096,6 +2096,10 @@ Footer {
         _tui_logger.debug(f"agent exists: {self.agent is not None}")
         _tui_logger.debug(f"processing: {getattr(self, '_processing', 'N/A')}")
 
+        # Screen state debug
+        _tui_logger.debug(f"Current screen: {type(self.screen).__name__}")
+        _tui_logger.debug(f"Stack size: {len(self.screen.stack)}")
+
         self._print_line(f"> {text}", Style.USER_MESSAGE)
         self._print_empty()
 
@@ -2255,8 +2259,8 @@ Footer {
                             f"✓ {tool_name}: {preview}", Style.TOOL_MESSAGE
                         )
 
+                    _tui_logger.debug("Calling agent.process_input...")
                     try:
-                        _tui_logger.debug("Calling agent.process_input...")
                         result = await self.agent.process_input(
                             text,
                             show_thinking=True,
@@ -2264,7 +2268,7 @@ Footer {
                             on_tool_start=on_tool_start,
                             on_tool_complete=on_tool_complete,
                         )
-                        _tui_logger.debug(f"agent.process_input returned: {type(result)}")
+                        _tui_logger.debug(f"agent.process_input returned: type={type(result)}, len={len(str(result)) if result else 0}")
                     except asyncio.CancelledError as e:
                         import traceback
                         _tui_logger.error(f"CANCELLED_ERROR: {e}")
@@ -2356,8 +2360,15 @@ Footer {
 
                 # Display final response with role coloring and syntax highlighting
                 if result and len(result) > 10:
-                    output_area = self.query_one("#output-area")
-                    output_area.add_line(result, "assistant")
+                    _tui_logger.debug(f"Displaying result: len={len(result)}")
+                    try:
+                        output_area = self.query_one("#output-area")
+                        _tui_logger.debug(f"Output area found, adding line...")
+                        output_area.add_line(result, "assistant")
+                        _tui_logger.debug(f"Output line added successfully")
+                    except Exception as e:
+                        _tui_logger.debug(f"Output area error: {e}")
+                        self._print_line(result, Style.ASSISTANT_MESSAGE)
                 else:
                     self._print_line("(waiting for model response...)", Style.TEXT_DIM)
 
@@ -2379,13 +2390,17 @@ Footer {
             # Show traceback in modal
             self.push_screen(TracebackScreen("Error", traceback.format_exc()))
         finally:
+            _tui_logger.debug("In finally block, cleaning up...")
             # Stop spinner
             if hasattr(self, "_spinner_timer") and self._spinner_timer:
                 self._spinner_timer.stop()
                 self._spinner_timer = None
-            spinner = self.query_one("#spinner", Static)
-            spinner.update("")  # Clear spinner
-            spinner.classes = ""  # Remove active class
+            try:
+                spinner = self.query_one("#spinner", Static)
+                spinner.update("")  # Clear spinner
+                spinner.classes = ""  # Remove active class
+            except Exception as e:
+                _tui_logger.debug(f"Spinner cleanup error: {e}")
 
             # Clean up streaming
             if hasattr(self, "_stream_timer") and self._stream_timer:
@@ -2394,11 +2409,15 @@ Footer {
             # Flush any remaining stream buffer
             if hasattr(self, "_stream_buffer") and self._stream_buffer:
                 _tui_logger.debug("Flushing stream buffer")
-                output_area = self.query_one("#output-area", RichLog)
-                output_area.write(self._stream_buffer)
-                self._stream_buffer = ""
+                try:
+                    output_area = self.query_one("#output-area", RichLog)
+                    output_area.write(self._stream_buffer)
+                    self._stream_buffer = ""
+                except Exception as e:
+                    _tui_logger.debug(f"Stream buffer flush error: {e}")
 
             self._processing = False
+            _tui_logger.debug("Finally block complete")
             input_widget.disabled = False
             input_widget.focus()
             _tui_logger.debug("Input re-enabled, processing complete")
