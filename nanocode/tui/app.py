@@ -2192,8 +2192,9 @@ Footer {
                         )
                         _tui_logger.debug(f"agent.process_input returned: {type(result)}")
                     except asyncio.CancelledError as e:
-                        _tui_logger.debug(f"CANCELLED_ERROR in process_input: {e}")
-                        _tui_logger.debug(f"Cancel traceback: {traceback.format_exc()}")
+                        _tui_logger.error(f"CANCELLED_ERROR: {e}")
+                        import traceback
+                        _tui_logger.error(f"Cancel traceback: {traceback.format_exc()}")
                         self._print_error(f"Cancelled: {e}")
                         result = None
                     except Exception as e:
@@ -2284,8 +2285,9 @@ Footer {
             else:
                 self._print_error("No agent configured")
         except asyncio.CancelledError as e:
-            _tui_logger.debug(f"OUTER_CANCELLED_ERROR: {e}")
-            _tui_logger.debug(f"Outer Cancel traceback: {traceback.format_exc()}")
+            _tui_logger.error(f"OUTER_CANCELLED_ERROR: {e}")
+            import traceback
+            _tui_logger.error(f"Outer Cancel traceback: {traceback.format_exc()}")
             self._print_error(f"Cancelled: {e}")
         except Exception as e:
             _tui_logger.debug(f"OUTER_EXCEPTION: {e}")
