@@ -364,6 +364,52 @@ class TestBuiltinTools:
         assert "not read yet" in result.error
 
     @pytest.mark.asyncio
+    async def test_read_unlocks_new_file(self, temp_dir):
+        """Test read tool unlocks new file for writing."""
+        from nanocode.tools.builtin import ReadFileTool, WriteFileTool
+
+        unlocked = set()
+        read_tool = ReadFileTool(root_dir=temp_dir, file_tracker=unlocked)
+        write_tool = WriteFileTool(root_dir=temp_dir, file_tracker=unlocked)
+
+        new_file = Path(temp_dir) / "new_file.txt"
+
+        result = await read_tool.execute(path="new_file.txt")
+
+        assert result.success is True
+        assert str(new_file.resolve()) in unlocked
+
+    @pytest.mark.asyncio
+    async def test_write_new_file_after_read(self, temp_dir):
+        """Test write succeeds for new file after read."""
+        from nanocode.tools.builtin import ReadFileTool, WriteFileTool
+
+        unlocked = set()
+        read_tool = ReadFileTool(root_dir=temp_dir, file_tracker=unlocked)
+        write_tool = WriteFileTool(root_dir=temp_dir, file_tracker=unlocked)
+
+        await read_tool.execute(path="brand_new.txt")
+        result = await write_tool.execute(path="brand_new.txt", content="new content")
+
+        assert result.success is True
+        assert (Path(temp_dir) / "brand_new.txt").read_text() == "new content"
+
+    @pytest.mark.asyncio
+    async def test_write_creates_parent_dirs(self, temp_dir):
+        """Test read creates parent directories for new file."""
+        from nanocode.tools.builtin import ReadFileTool, WriteFileTool
+
+        unlocked = set()
+        read_tool = ReadFileTool(root_dir=temp_dir, file_tracker=unlocked)
+        write_tool = WriteFileTool(root_dir=temp_dir, file_tracker=unlocked)
+
+        await read_tool.execute(path="nested/new/file.txt")
+        result = await write_tool.execute(path="nested/new/file.txt", content="nested")
+
+        assert result.success is True
+        assert (Path(temp_dir) / "nested" / "new" / "file.txt").read_text() == "nested"
+
+    @pytest.mark.asyncio
     async def test_read_unlocks_file(self, temp_dir):
         """Test read tool unlocks file for writing."""
         from nanocode.tools.builtin import ReadFileTool
