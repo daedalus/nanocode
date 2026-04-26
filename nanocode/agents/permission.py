@@ -55,6 +55,7 @@ class PermissionRequest:
 class PermissionReplyType(Enum):
     """Permission reply types."""
 
+    ALLOW = "allow"
     ONCE = "once"
     ALWAYS = "always"
     REJECT = "reject"
