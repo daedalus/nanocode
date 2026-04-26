@@ -649,7 +649,7 @@ class ReadFileTool(Tool):
     def __init__(self, root_dir: str = None, file_tracker=None):
         super().__init__(
             name="read",
-            description="Read file content. Unlocks file for writing ON FIRST READ. Subsequent reads don't re-unlock. After write, must read again before writing.",
+            description="Read file content. Supports: read(path) to read full file, or read(path, offset, limit) to read chunk.",
             parameters={
                 "type": "object",
                 "properties": {
@@ -689,7 +689,7 @@ class ReadFileTool(Tool):
             file_path = self.root_dir / path
             resolved = str(file_path.resolve())
             
-            # Only unlock on FIRST read (avoid re-reading same file unnecessarily)
+            # Unlock on first read only
             if resolved not in self._unlocked:
                 self._unlocked.add(resolved)
             
@@ -838,7 +838,7 @@ class WriteFileTool(Tool):
             # Write content using atomic write
             atomic_write(file_path, content)
 
-            # Clear unlocked after write (require re-read)
+            # Lock after write (require re-read to unlock again)
             self._unlocked.discard(resolved)
             return ToolResult(
                 success=True,
