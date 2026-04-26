@@ -1779,90 +1779,132 @@ class MultiEditTool(Tool):
 
 
 class ApplyPatchTool(Tool):
-    """Apply a unified diff patch to files."""
+    """Apply a unified diff patch to files using opencode patch format."""
 
     def __init__(self):
         super().__init__(
             name="apply_patch",
-            description="Apply a unified diff patch to files. Parses patch text and creates/modifies/deletes files accordingly.",
+            description="Apply a patch to files. Supports: *** Add File:, *** Delete File:, *** Update File: with *** Begin/End Patch markers.",
         )
         self.parameters = {
             "type": "object",
             "properties": {
                 "patchText": {
                     "type": "string",
-                    "description": "The full patch text (unified diff format)",
+                    "description": "The full patch text with *** Begin Patch, *** Add File:/*** Delete File:/*** Update File:, *** End Patch markers",
                 },
             },
             "required": ["patchText"],
         }
 
     async def execute(self, patchText: str) -> ToolResult:
-        """Apply a patch."""
+        """Apply a patch using opencode format."""
         import re
 
+        patchText = patchText.strip()
         lines = patchText.split("\n")
         files_changed = []
         errors = []
 
-        i = 0
-        while i < len(lines):
-            line = lines[i]
+        begin_marker = "*** Begin Patch ***"
+        end_marker = "*** End Patch ***"
 
-            if line.startswith("--- "):
-                file_match = re.match(r"--- (?:a/)?(.+?)(?:\t|$)", line)
-                if file_match:
-                    old_file = file_match.group(1)
+        begin_idx = -1
+        end_idx = -1
+        for idx, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped == begin_marker:
+                begin_idx = idx
+            if stripped == end_marker:
+                end_idx = idx
+                break
 
-                    if i + 1 < len(lines) and lines[i + 1].startswith("+++ "):
-                        new_file_match = re.match(
-                            r"\+\+\+ (?:b/)?(.+?)(?:\t|$)", lines[i + 1]
-                        )
-                        new_file = (
-                            new_file_match.group(1) if new_file_match else old_file
-                        )
-                        i += 2
+        if begin_idx == -1 or end_idx == -1 or begin_idx >= end_idx:
+            return ToolResult(
+                success=False,
+                content=None,
+                error="Invalid patch format: missing *** Begin Patch / *** End Patch markers",
+            )
 
-                        hunk_lines = []
-                        while i < len(lines):
-                            if lines[i].startswith(("diff ", "index ", "--- ")):
-                                break
-                            if lines[i].startswith("@@"):
-                                if hunk_lines:
-                                    break
-                            hunk_lines.append(lines[i])
-                            i += 1
+        i = begin_idx + 1
+        while i < end_idx:
+            line = lines[i].strip()
 
-                        try:
-                            if os.path.exists(new_file):
-                                with open(new_file) as f:
-                                    old_content = f.read()
-                            else:
-                                old_content = ""
-
-                            patch_lines = []
-                            for hl in hunk_lines:
-                                if hl.startswith("@@"):
-                                    continue
-                                patch_lines.append(hl)
-
-                            new_content = self._apply_unified_diff(
-                                old_content, patch_lines
-                            )
-
-                            os.makedirs(os.path.dirname(new_file), exist_ok=True)
-                            with open(new_file, "w") as f:
-                                f.write(new_content)
-
-                            files_changed.append(new_file)
-                        except Exception as e:
-                            errors.append(
-                                f"Error applying patch to {new_file}: {str(e)}"
-                            )
-                    else:
-                        i += 1
-                else:
+            if line.startswith("*** Add File:"):
+                file_path = line[len("*** Add File:"):].strip()
+                if not file_path:
                     i += 1
+                    continue
+
+                content_lines = []
+                i += 1
+                while i < end_idx and not lines[i].strip().startswith("***"):
+                    content_lines.append(lines[i])
+                    i += 1
+
+                content = "\n".join(content_lines)
+                try:
+                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                    with open(file_path, "w") as f:
+                        f.write(content)
+                    files_changed.append(file_path)
+                except Exception as e:
+                    errors.append(f"Error adding {file_path}: {e}")
+
+            elif line.startswith("*** Delete File:"):
+                file_path = line[len("*** Delete File:"):].strip()
+                if file_path:
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                        files_changed.append(file_path)
+                    except Exception as e:
+                        errors.append(f"Error deleting {file_path}: {e}")
+                i += 1
+
+            elif line.startswith("*** Update File:"):
+                file_path = line[len("*** Update File:"):].strip()
+                if not file_path:
+                    i += 1
+                    continue
+
+                move_path = None
+                if i + 1 < end_idx and lines[i + 1].strip().startswith("*** Move to:"):
+                    move_path = lines[i + 1].strip()[len("*** Move to:"):].strip()
+                    i += 2
+
+                old_content = ""
+                if os.path.exists(file_path):
+                    with open(file_path) as f:
+                        old_content = f.read()
+
+                new_lines = []
+                i += 1
+                while i < end_idx:
+                    l = lines[i].strip()
+                    if l.startswith("***"):
+                        break
+                    if l == "*** End of File":
+                        i += 1
+                        break
+                    new_lines.append(lines[i])
+                    i += 1
+
+                new_content = self._apply_opencode_patch(old_content, new_lines)
+
+                target_path = move_path or file_path
+                try:
+                    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                    with open(target_path, "w") as f:
+                        f.write(new_content)
+
+                    if move_path and move_path != file_path:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                    files_changed.append(target_path)
+                except Exception as e:
+                    errors.append(f"Error updating {file_path}: {e}")
+
             else:
                 i += 1
 
@@ -1874,62 +1916,74 @@ class ApplyPatchTool(Tool):
                 metadata={"files_changed": files_changed},
             )
 
-        content_parts = [f"Applied patch to {len(files_changed)} file(s): {', '.join(files_changed)}"]
-        if files_changed:
-            content_parts.append("\nFiles changed: " + ", ".join(files_changed))
+        output_parts = [f"Applied patch to {len(files_changed)} file(s)"]
+        for f in files_changed:
+            lines_list = []
+            try:
+                with open(f) as file:
+                    for idx, line in enumerate(file):
+                        if idx >= 30:
+                            lines_list.append(f"... ({idx - 30} more lines)")
+                            break
+                        lines_list.append(line.rstrip())
+            except Exception:
+                lines_list = ["(could not read)"]
+            output_parts.append(f"\n--- {f} ---\n" + "\n".join(lines_list))
 
         return ToolResult(
             success=True,
-            content="\n".join(content_parts),
+            content="\n".join(output_parts),
             metadata={"files_changed": files_changed},
         )
 
-    def _apply_unified_diff(self, old_content: str, patch_lines: list) -> str:
-        """Apply unified diff lines to old content."""
-        old_lines = old_content.split("\n")
-        result = []
+    def _apply_opencode_patch(self, old_content: str, patch_lines: list) -> str:
+        """Apply opencode-style patch to content."""
         import re
 
+        old_lines = old_content.split("\n") if old_content else []
+        result_lines = []
         i = 0
+        old_idx = 0
 
         while i < len(patch_lines):
             line = patch_lines[i]
 
-            if line.startswith("@@"):
-                match = re.match(r"@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@", line)
-                if match:
-                    old_start = int(match.group(1)) - 1
-                    old_count = int(match.group(2)) if match.group(2) else 1
+            if not line:
+                i += 1
+                continue
 
-                    result.extend(old_lines[:old_start])
+            hunk_match = re.match(r"@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@", line)
+            if hunk_match:
+                old_start = int(hunk_match.group(1)) - 1
+                old_count = int(hunk_match.group(2)) if hunk_match.group(2) else 1
+                i += 1
 
+                result_lines.extend(old_lines[:old_start])
+                remaining_old = old_lines[old_start + old_count:]
+
+                while i < len(patch_lines):
+                    pl = patch_lines[i]
+                    if not pl or pl.startswith("@@") or pl.startswith("***"):
+                        break
+                    if pl.startswith(" "):
+                        result_lines.append(pl[1:])
+                        if remaining_old:
+                            remaining_old.pop(0)
+                    elif pl.startswith("-"):
+                        if remaining_old:
+                            remaining_old.pop(0)
+                    elif pl.startswith("+"):
+                        result_lines.append(pl[1:])
                     i += 1
-                    while i < len(patch_lines) and not patch_lines[i].startswith("@@"):
-                        pl = patch_lines[i]
-                        if pl.startswith("+"):
-                            result.append(pl[1:])
-                        elif pl.startswith("-"):
-                            pass
-                        elif pl.startswith(" ") or (
-                            pl and not pl.startswith(("+", "-", "@"))
-                        ):
-                            result.append(pl)
-                        i += 1
 
-                    remaining_old = old_lines[old_start + old_count :]
-                    result.extend(remaining_old)
-                    continue
+                old_lines = remaining_old
+                continue
+
+            result_lines.append(line)
             i += 1
 
-        if not any(line.startswith("@@") for line in patch_lines):
-            result = old_lines.copy()
-            for line in patch_lines:
-                if line.startswith("+"):
-                    result.append(line[1:])
-                elif line.startswith("-"):
-                    pass
-
-        return "\n".join(result)
+        result_lines.extend(old_lines)
+        return "\n".join(result_lines)
 
 
 class QuestionTool(Tool):
