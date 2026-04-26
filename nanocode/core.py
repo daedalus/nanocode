@@ -839,8 +839,6 @@ class AutonomousAgent:
         pending = [t.content for t in todos if t.status == "pending"]
         return pending
 
-        return 0
-
     async def _compact_context(self) -> str:
         """Compact context by summarizing old messages. Returns summary text."""
         if not self.llm:
