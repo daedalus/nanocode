@@ -618,11 +618,13 @@ class TestNewTools:
         test_file = os.path.join(temp_dir, "test.txt")
         Path(test_file).write_text("Hello World")
 
-        patch = f"""--- a/{test_file}
-+++ b/{test_file}
+        patch = f"""*** Begin Patch ***
+*** Update File: {test_file} ***
 @@ -1 +1 @@
 -Hello World
 +Hello Universe
+*** End of File ***
+*** End Patch ***
 """
 
         tool = ApplyPatchTool()

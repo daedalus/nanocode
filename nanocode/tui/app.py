@@ -2422,54 +2422,98 @@ Footer {
             _tui_logger.debug("In finally block, cleaning up...")
             # Stop spinner
             if hasattr(self, "_spinner_timer") and self._spinner_timer:
+                _tui_logger.debug("Stopping spinner timer")
                 self._spinner_timer.stop()
                 self._spinner_timer = None
+                _tui_logger.debug("Spinner timer stopped")
+            else:
+                _tui_logger.debug("No spinner timer to stop")
             try:
                 spinner = self.query_one("#spinner", Static)
                 spinner.update("")  # Clear spinner
                 spinner.classes = ""  # Remove active class
+                _tui_logger.debug("Spinner cleaned up")
             except Exception as e:
                 _tui_logger.debug(f"Spinner cleanup error: {e}")
 
             # Clean up streaming
             if hasattr(self, "_stream_timer") and self._stream_timer:
+                _tui_logger.debug("Stopping stream timer")
                 self._stream_timer.stop()
                 self._stream_timer = None
+                _tui_logger.debug("Stream timer stopped")
             # Flush any remaining stream buffer
             if hasattr(self, "_stream_buffer") and self._stream_buffer:
-                _tui_logger.debug("Flushing stream buffer")
+                _tui_logger.debug(f"Flushing stream buffer: {len(self._stream_buffer)} chars")
                 try:
                     output_area = self.query_one("#output-area", RichLog)
                     output_area.write(self._stream_buffer)
                     self._stream_buffer = ""
+                    _tui_logger.debug("Stream buffer flushed")
                 except Exception as e:
                     _tui_logger.debug(f"Stream buffer flush error: {e}")
 
+            _tui_logger.debug("Setting _processing = False")
             self._processing = False
-            _tui_logger.debug("Finally block complete")
+            _tui_logger.debug("Finally block part 1 complete")
 
-            # Force screen refresh to prevent black screen
-            try:
-                input_area = self.query_one("#input-area")
-                input_area.refresh()
-            except Exception:
-                pass
+            # Force screen refresh using call_later to ensure it happens after render cycle
+            has_app = hasattr(self, 'app') and self.app
+            _tui_logger.debug(f"Pre-refresh: has_app={has_app}, screen={type(self.screen).name if hasattr(self, 'screen') and self.screen else 'None'}, output_rows={getattr(self.query_one('#output-area', RichLog), 'rows', 'N/A')}")
 
-            try:
-                self.screen.refresh()
-            except Exception:
-                pass
+            def do_refresh():
+                _tui_logger.debug("do_refresh: starting")
+                try:
+                    _tui_logger.debug("do_refresh: querying output_area")
+                    output_area = self.query_one("#output-area", RichLog)
+                    _tui_logger.debug("do_refresh: refreshing output_area")
+                    output_area.refresh()
+                    _tui_logger.debug("do_refresh: refreshing self")
+                    self.refresh()
+                    _tui_logger.debug("do_refresh: refreshing screen")
+                    self.screen.refresh()
+                    # Also refresh the layout
+                    if hasattr(self, 'layout') and self.layout:
+                        _tui_logger.debug("do_refresh: refreshing layout")
+                        self.layout.refresh()
+                    _tui_logger.debug("call_later refresh done")
+                except Exception as e:
+                    _tui_logger.debug(f"call_later refresh error: {e}")
+
+            if has_app:
+                _tui_logger.debug("Using call_later for refresh")
+                _tui_logger.debug(f"Pre-call_later: _processing={self._processing}")
+                # First, try synchronous refresh immediately
+                try:
+                    _tui_logger.debug("SYNC refresh attempt")
+                    # Verify output_area exists first
+                    output_area = self.query_one("#output-area", RichLog)
+                    _tui_logger.debug(f"OutputArea: visible={output_area.display}, rows={output_area.rows}, height={output_area.size}")
+                    output_area.refresh()
+                    self.refresh()
+                    self.screen.refresh()
+                    if hasattr(self, 'layout') and self.layout:
+                        self.layout.refresh()
+                    _tui_logger.debug("SYNC refresh done")
+                except Exception as e:
+                    _tui_logger.debug(f"SYNC refresh error: {e}")
+                # Then schedule call_later as backup
+                self.app.call_later(do_refresh)
+                _tui_logger.debug("call_later scheduled")
+            else:
+                _tui_logger.debug("Using direct refresh (no app)")
+                try:
+                    self.refresh()
+                    self.screen.refresh()
+                    if hasattr(self, 'layout') and self.layout:
+                        self.layout.refresh()
+                except Exception as e:
+                    _tui_logger.debug(f"Screen refresh failed: {e}")
 
             input_widget.disabled = False
             input_widget.focus()
-            _tui_logger.debug("Input re-enabled, processing complete")
-
-            # Force screen refresh after cancellation/error to fix black screen issue
-            try:
-                self.refresh()
-                self.screen.refresh()
-            except Exception as e:
-                _tui_logger.debug(f"Screen refresh failed: {e}")
+            _tui_logger.debug("Input re-enabled after refresh")
+            _tui_logger.debug("Finally block part 2 complete - all cleanup done")
 
     async def _handle_command(self, command: str):
         """Handle slash-prefixed commands locally."""

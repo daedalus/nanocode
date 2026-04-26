@@ -1832,6 +1832,9 @@ class ApplyPatchTool(Tool):
 
             if line.startswith("*** Add File:"):
                 file_path = line[len("*** Add File:"):].strip()
+                # Handle trailing *** from test format
+                if file_path.endswith("***"):
+                    file_path = file_path[:-3].strip()
                 if not file_path:
                     i += 1
                     continue
@@ -1864,6 +1867,9 @@ class ApplyPatchTool(Tool):
 
             elif line.startswith("*** Update File:"):
                 file_path = line[len("*** Update File:"):].strip()
+                # Handle trailing *** from test format
+                if file_path.endswith("***"):
+                    file_path = file_path[:-3].strip()
                 if not file_path:
                     i += 1
                     continue
