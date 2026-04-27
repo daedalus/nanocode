@@ -682,11 +682,17 @@ async def main():
                 continue
 
             print(f"\n[{idx + 1}/{len(prompts)}] Processing...")
+            import asyncio
+
             print(f"Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
 
             try:
-                result = await agent.process_input(
-                    prompt, show_thinking=show_thinking, show_messages=show_messages
+                # Add timeout to prevent hanging
+                result = await asyncio.wait_for(
+                    agent.process_input(
+                        prompt, show_thinking=show_thinking, show_messages=show_messages
+                    ),
+                    timeout=120.0  # 2 minute max per prompt
                 )
                 print(f"[MAIN] process_input returned: {type(result)}, len={len(result) if result else 0}")
                 if result:
@@ -694,6 +700,12 @@ async def main():
                     print(f"Response: {result[:200]}{'...' if len(result) > 200 else ''}")
                 else:
                     print("Warning: agent returned empty result")
+            except asyncio.TimeoutError:
+                # Try to get partial result from agent state
+                partial = getattr(agent, "state", {}).last_summary if hasattr(agent, "state") else None
+                result = f"Timeout - partial results may be available. Last summary: {partial}"
+                results.append(result)
+                print(f"[MAIN] Timeout - partial: {result}")
             except Exception as err:
                 import traceback as tb
 
