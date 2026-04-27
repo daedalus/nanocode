@@ -168,6 +168,46 @@ class TestPermissionHandler:
 
         assert handler.has_pending() is False
 
+    def test_check_permission_uses_approved_rules(self, build_agent):
+        """Test check_permission uses approved rules from 'always'."""
+        handler = PermissionHandler(use_bus=False)
+        
+        # Add approved rule for "bash"
+        handler.add_approved_rule(
+            PermissionRule(
+                permission="bash",
+                pattern="*",
+                action=PermissionAction.ALLOW,
+            )
+        )
+        
+        # Should return ALLOW without asking
+        action = handler.check_permission(
+            build_agent, "bash", {"command": "ls"}
+        )
+        
+        assert action == PermissionAction.ALLOW
+
+    def test_check_permission_doom_loop_with_approved_tool(self, build_agent):
+        """Test doom_loop check uses approved rules for actual tool."""
+        handler = PermissionHandler(use_bus=False)
+        
+        # Add approved rule for the actual tool (not doom_loop)
+        handler.add_approved_rule(
+            PermissionRule(
+                permission="bash",
+                pattern="*",
+                action=PermissionAction.ALLOW,
+            )
+        )
+        
+        # doom_loop permission should check approved rules for actual tool
+        action = handler.check_permission(
+            build_agent, "doom_loop", {"tool": "bash", "args": {"command": "ls"}}
+        )
+        
+        assert action == PermissionAction.ALLOW
+
 
 class TestPermissionErrors:
     """Test permission error classes."""

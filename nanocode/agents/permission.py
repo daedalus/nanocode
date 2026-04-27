@@ -108,6 +108,16 @@ class PermissionHandler:
         arguments: dict[str, Any],
     ) -> PermissionAction:
         """Check if tool is allowed for this agent."""
+        actual_tool = arguments.get("tool", tool_name) if tool_name == "doom_loop" else tool_name
+        
+        # First check approved rules (from "always" option)
+        for rule in self._approved:
+            if rule.permission == actual_tool:
+                logger.debug(
+                    f"[{agent.name}] check_permission('{tool_name}') -> ALLOW (approved rule for {actual_tool})"
+                )
+                return PermissionAction.ALLOW
+
         disabled = get_disabled_tools([tool_name], agent.permission)
         if tool_name in disabled:
             logger.debug(
@@ -231,9 +241,11 @@ class PermissionHandler:
                 logger.info(
                     f"[{agent.name}] Permission ALWAYS ALLOWED for '{tool_name}' (pattern={pattern})"
                 )
+                # For doom_loop, store the actual tool name (not "doom_loop")
+                actual_permission = arguments.get("tool", permission) if permission == "doom_loop" else permission
                 self.add_approved_rule(
                     PermissionRule(
-                        permission=permission,
+                        permission=actual_permission,
                         pattern=pattern,
                         action=PermissionAction.ALLOW,
                     )

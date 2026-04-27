@@ -331,7 +331,7 @@ class AutonomousAgent:
         logger.info("Initializing agent system")
         self.nanocode_registry = get_agent_registry()
         self.current_agent = self.nanocode_registry.get_default()
-        self.permission_handler = PermissionHandler()
+        self.permission_handler = PermissionHandler(use_bus=False)
         logger.info(
             f"Agent system initialized: current_agent={self.current_agent.name if self.current_agent else None}"
         )

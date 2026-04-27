@@ -31,7 +31,7 @@ from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, ScrollableContainer, Vertical
+from textual.containers import Container, Horizontal, ScrollableContainer, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
@@ -206,8 +206,44 @@ class PermissionScreen(ModalScreen):
         self._result = None
         self._on_dismiss_callback = None
 
+    def compose(self):
+        tool_name = self.request.tool_name
+        args_str = str(self.request.arguments)[:200]
+        
+        yield Container(
+            Static("⚠️ Permission Required", id="dialog-title"),
+            Static(f"Tool: {tool_name}", id="dialog-info"),
+            Static(f"Args: {args_str}", id="dialog-args"),
+            Container(
+                Button("Y)es", variant="primary", id="btn-yes"),
+                Button("N)o", variant="error", id="btn-no"),
+                Button("A)lways", variant="default", id="btn-always"),
+                Button("Cancel", variant="default", id="btn-cancel"),
+                id="dialog-buttons",
+            ),
+            id="dialog",
+        )
+
     def on_mount(self):
         _tui_logger.debug(f"PermissionScreen mounted: tool={self.request.tool_name}")
+
+    def on_dismiss(self, result):
+        """Called when screen is dismissed."""
+        _tui_logger.debug(f"PermissionScreen on_dismiss: {result}")
+        if self._on_dismiss_callback:
+            self._on_dismiss_callback(result)
+            self._on_dismiss_callback = None
+
+    def on_button_pressed(self, event):
+        """Handle button presses."""
+        if event.button.id == "btn-yes":
+            self.action_allow_once()
+        elif event.button.id == "btn-no":
+            self.action_deny()
+        elif event.button.id == "btn-always":
+            self.action_allow_always()
+        elif event.button.id == "btn-cancel":
+            self.action_cancel()
 
     def on_dismiss(self, result):
         """Called when screen is dismissed."""
@@ -1787,30 +1823,33 @@ Footer {
         if not self.agent or not hasattr(self.agent, 'permission_handler'):
             return
 
-        # Track pending permission screens
         self._pending_permission_screen = None
 
         async def permission_callback(request):
-            """Permission callback - auto-allows but shows warning."""
+            """Permission callback - shows modal and waits for user response."""
             _tui_logger.debug(f"Permission callback called: tool={request.tool_name}")
-            
-            # Print permission warning to output (non-blocking)
-            self._print_line(f"⚠️ Permission: {request.tool_name}", Style.TEXT_WARNING)
-            self._print_line(f"  Tool: {request.arguments.get('tool', 'unknown')}", Style.TEXT_DIM)
-            self._print_line(f"  Note: Permissions are auto-allowed in TUI mode", Style.TEXT_DIM)
-            
-            # Refresh output to show the warning
-            try:
-                output_area = self.query_one("#output-area", RichLog)
-                output_area.refresh()
-            except Exception:
-                pass
-            
-            # Return True to allow immediately (non-blocking)
-            return True
+
+            from nanocode.agents.permission import PermissionReply
+            from nanocode.tui.app import PermissionScreen
+
+            # Show modal and wait for response
+            result = await self.push_screen_wait(
+                PermissionScreen(request)
+            )
+
+            # Result is PermissionReply or None (dismissed/cancelled)
+            if result and hasattr(result, 'reply'):
+                _tui_logger.debug(f"Permission callback got reply: {result.reply}")
+                return result
+            else:
+                # Default to allow if dismissed
+                return PermissionReply(
+                    request_id=request.id,
+                    reply=None,
+                )
 
         self.agent.permission_handler.set_callback(permission_callback)
-        _tui_logger.debug("Permission callback set up")
+        _tui_logger.debug("Permission callback set up with modal")
 
     def action_deny_permission(self) -> None:
         """Deny the first pending permission."""
