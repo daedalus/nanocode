@@ -432,6 +432,8 @@ class ToolExecutor:
         """Format tool result for LLM consumption."""
         if result.success:
             parts = []
+            if result.content:
+                parts.append(str(result.content))
             if result.metadata:
                 meta_parts = []
                 for key, value in result.metadata.items():
@@ -444,8 +446,6 @@ class ToolExecutor:
                         meta_parts.append(f"{key}={val_str}")
                 if meta_parts:
                     parts.append(f"[metadata: {', '.join(meta_parts)}]")
-            if result.content:
-                parts.append(str(result.content))
             return "\n\n".join(parts) if parts else "OK"
         else:
             return f"Error: {result.error}"
