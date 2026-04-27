@@ -649,7 +649,6 @@ class AgentPermissionsScreen(ModalScreen):
 
 class DoomPermissionsScreen(ModalScreen):
     """Screen for viewing doom loop approved permissions."""
-    from nanocode.agents import PermissionAction
     
     CSS = """
     DoomPermissionsScreen {
@@ -695,6 +694,8 @@ class DoomPermissionsScreen(ModalScreen):
         self.permission_handler = permission_handler
 
     def compose(self):
+        from nanocode.agents import PermissionAction
+        
         try:
             handler = self.permission_handler
             try:
