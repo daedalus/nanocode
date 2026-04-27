@@ -2586,9 +2586,13 @@ Footer {
                         self._print_empty()
 
                 # Display final response with role coloring and syntax highlighting
+                import logging
+
                 _tui_logger.debug(f"Result check: result={result is not None}, len={len(result) if result else 0}")
+                print(f"[TUI DEBUG] result={result is not None}, len={len(result) if result else 0}", file=sys.stderr)
                 if result and len(result) > 0:
                     _tui_logger.debug(f"Displaying result: len={len(result)}")
+                    print(f"[TUI DEBUG] Displaying: {result[:100]}...", file=sys.stderr)
                     try:
                         output_area = self.query_one("#output-area")
                         _tui_logger.debug(f"Output area found, adding line...")
@@ -2599,6 +2603,7 @@ Footer {
                         _tui_logger.debug(f"Output area error: {e}")
                         self._print_line(result, Style.ASSISTANT_MESSAGE)
                 else:
+                    print(f"[TUI DEBUG] No result to show", file=sys.stderr)
                     self._print_line("(waiting for model response...)", Style.TEXT_DIM)
 
                 # Completion marker like opencode's `▣`
