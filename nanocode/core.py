@@ -1427,8 +1427,8 @@ Conversation:
                 self._put_cache(messages, tools, response)
                 logger.info(f"[{agent_name}] LLM response received")
 
-            # Track thinking for output
-            if hasattr(self, "_last_thinking") and response.thinking:
+            # Track thinking for output (always store)
+            if response.thinking:
                 self._last_thinking = response.thinking
 
             if self.debug:
