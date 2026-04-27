@@ -2586,7 +2586,8 @@ Footer {
                         self._print_empty()
 
                 # Display final response with role coloring and syntax highlighting
-                if result and len(result) > 10:
+                _tui_logger.debug(f"Result check: result={result is not None}, len={len(result) if result else 0}")
+                if result and len(result) > 0:
                     _tui_logger.debug(f"Displaying result: len={len(result)}")
                     try:
                         output_area = self.query_one("#output-area")
