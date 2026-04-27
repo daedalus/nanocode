@@ -1,10 +1,13 @@
-"""Base classes for LLM providers."""
+"""Base classes for LLM providers.
+
+Matches opencode's architecture: LLM streams events, processor builds message parts.
+"""
 
 import json
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, AsyncGenerator, Optional, Dict, List
 
 import httpx
 from httpx import HTTPStatusError
@@ -16,6 +19,19 @@ from nanocode.retry import (
     retry_with_backoff,
 )
 from nanocode.tools import ToolCall
+from nanocode.llm.events import (
+    StreamEvent,
+    EventType,
+    ReasoningStartEvent,
+    ReasoningDeltaEvent,
+    ReasoningEndEvent,
+    ToolCallEvent,
+    TextStartEvent,
+    TextDeltaEvent,
+    TextEndEvent,
+    FinishStepEvent,
+    ErrorEvent,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -118,7 +134,10 @@ class LLMResponse:
 
 
 class LLMBase(ABC):
-    """Abstract base class for LLM providers."""
+    """Abstract base class for LLM providers.
+
+    Matches opencode: LLM streams events, not a single response.
+    """
 
     def __init__(
         self,
@@ -141,12 +160,48 @@ class LLMBase(ABC):
         self.debug = debug
         self.proxy = proxy
 
+        # Create persistent client with connection pooling
+        self._client = httpx.AsyncClient(
+            proxy=self.proxy,
+            limits=httpx.Limits(max_keepalive_connections=20, keepalive_expiry=30.0),
+            timeout=httpx.Timeout(120.0),
+        )
+
     @abstractmethod
+    async def chat_stream(
+        self, messages: list, tools: list[dict] = None, **kwargs
+    ) -> AsyncGenerator[StreamEvent, None]:
+        """Stream events (matches opencode's LLM.stream returning Stream<Event>)."""
+        pass
+
+    # Keep for backward compatibility
     async def chat(
         self, messages: list, tools: list[dict] = None, **kwargs
-    ) -> LLMResponse:
-        """Send a chat completion request."""
-        pass
+    ) -> "LLMResponse":
+        """Legacy: collect stream into single response."""
+        content = ""
+        tool_calls = []
+        thinking = None
+        finish_reason = None
+
+        async for event in self.chat_stream(messages, tools, **kwargs):
+            if isinstance(event, TextDeltaEvent):
+                content += event.text
+            elif isinstance(event, ToolCallEvent):
+                tool_calls.append(
+                    ToolCall(name=event.tool_name, arguments=event.input, id=event.tool_call_id)
+                )
+            elif isinstance(event, ReasoningDeltaEvent):
+                thinking = (thinking or "") + event.text
+            elif isinstance(event, FinishStepEvent):
+                finish_reason = event.finish_reason
+
+        return LLMResponse(
+            content=content,
+            tool_calls=tool_calls,
+            finish_reason=finish_reason,
+            thinking=thinking,
+        )
 
     @abstractmethod
     def get_tool_schema(self) -> list[dict]:
@@ -178,80 +233,78 @@ class LLMBase(ABC):
             headers["User-Agent"] = self.user_agent
 
         async def make_request():
-            async with httpx.AsyncClient(proxy=self.proxy) as client:
-                response = await client.request(
-                    method=method,
-                    url=url,
-                    headers=headers,
-                    json=json,
-                    timeout=120.0,
-                    **kwargs,
+            response = await self._client.request(
+                method=method,
+                url=url,
+                headers=headers,
+                json=json,
+                **kwargs,
+            )
+
+            if response.status_code == 429:
+                retry_after = response.headers.get("retry-after")
+                error = RateLimitError(
+                    f"Rate limited: {response.text[:200]}",
+                    retry_after=float(retry_after) if retry_after else None,
+                )
+                raise error
+
+            try:
+                data = response.json()
+                if data.get("error"):
+                    error_msg = data["error"].get("message", "")
+                    if (
+                        "rate limit" in error_msg.lower()
+                        or "free_usage" in error_msg.lower()
+                    ):
+                        error = RateLimitError(f"Rate limited: {error_msg}")
+                        raise error
+            except Exception:
+                logger.debug("Failed to extract error details from response")
+                pass
+
+            if (
+                response.status_code == 500
+                or response.status_code == 503
+                or "overloaded" in response.text.lower()
+            ):
+                raise ProviderOverloadedError(
+                    f"Provider overloaded ({response.status_code}): {response.text[:200]}"
                 )
 
-                if response.status_code == 429:
-                    retry_after = response.headers.get("retry-after")
-                    error = RateLimitError(
-                        f"Rate limited: {response.text[:200]}",
-                        retry_after=float(retry_after) if retry_after else None,
-                    )
-                    raise error
-
+            if response.status_code >= 400:
                 try:
-                    data = response.json()
-                    if data.get("error"):
-                        error_msg = data["error"].get("message", "")
-                        if (
-                            "rate limit" in error_msg.lower()
-                            or "free_usage" in error_msg.lower()
-                        ):
-                            error = RateLimitError(f"Rate limited: {error_msg}")
-                            raise error
-                except Exception:
-                    logger.debug("Failed to extract error details from response")
-                    pass
-
-                if (
-                    response.status_code == 500
-                    or response.status_code == 503
-                    or "overloaded" in response.text.lower()
-                ):
-                    raise ProviderOverloadedError(
-                        f"Provider overloaded ({response.status_code}): {response.text[:200]}"
+                    error_data = response.json()
+                    print(f"[DEBUG] Raw error JSON: {error_data}")
+                    raw_error = (
+                        error_data.get("error", {})
+                        .get("metadata", {})
+                        .get("raw", "")
                     )
-
-                if response.status_code >= 400:
-                    try:
-                        error_data = response.json()
-                        print(f"[DEBUG] Raw error JSON: {error_data}")
-                        raw_error = (
-                            error_data.get("error", {})
-                            .get("metadata", {})
-                            .get("raw", "")
-                        )
-                        if raw_error:
-                            try:
-                                raw_json = json.loads(raw_error)
-                                error_msg = raw_json.get("error", {}).get(
-                                    "message", raw_error
-                                )
-                            except Exception:
-                                error_msg = error_data.get("error", {}).get(
-                                    "message", response.text[:300]
-                                )
-                        else:
+                    if raw_error:
+                        try:
+                            raw_json = json.loads(raw_error)
+                            error_msg = raw_json.get("error", {}).get(
+                                "message", raw_error
+                            )
+                        except Exception:
                             error_msg = error_data.get("error", {}).get(
                                 "message", response.text[:300]
                             )
-                    except Exception:
-                        error_msg = response.text[:300]
-                    print(f"[DEBUG] Error msg extracted: {error_msg}")
-                    raise HTTPStatusError(
-                        f"{response.status_code} {response.reason_phrase}: {error_msg}",
-                        request=response.request,
-                        response=response,
-                    )
+                    else:
+                        error_msg = error_data.get("error", {}).get(
+                            "message", response.text[:300]
+                        )
+                except Exception:
+                    error_msg = response.text[:300]
+                print(f"[DEBUG] Error msg extracted: {error_msg}")
+                raise HTTPStatusError(
+                    f"{response.status_code} {response.reason_phrase}: {error_msg}",
+                    request=response.request,
+                    response=response,
+                )
 
-                return response
+            return response
 
         if self.retry_config.max_retries > 0:
             return await retry_with_backoff(

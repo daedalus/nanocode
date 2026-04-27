@@ -1,4 +1,8 @@
-"""Core agent implementation."""
+"""Core agent implementation.
+
+Architecture matching opencode:
+LLM.stream() → AsyncGenerator[StreamEvent] → SessionProcessor → Message with Parts
+"""
 
 import asyncio
 import hashlib
@@ -14,14 +18,17 @@ from rich.console import Console
 from rich.theme import Theme
 
 from nanocode.agents import AgentInfo, PermissionAction, get_agent_registry
-from nanocode.agents.permission import (
-    PermissionHandler,
-)
+from nanocode.agents.permission import PermissionHandler
 from nanocode.agents.permission_bus import (
     PermissionBus,
     PermissionEventType,
     get_permission_bus,
 )
+
+# Import new architecture matching opencode
+from nanocode.session.message import Message, PartType, ReasoningPart, TextPart
+from nanocode.session.processor import SessionProcessor, ProcessorHandle
+from nanocode.llm.events import StreamEvent, EventType
 
 
 class RichColor(Enum):

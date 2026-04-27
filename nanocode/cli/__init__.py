@@ -10,8 +10,13 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import httpx
+from rich.console import Console
 
 from nanocode.cli.commands import find_command, get_command_help
+
+# Force unbuffered output
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(line_buffering=True)
 
 try:
     import readline
@@ -49,7 +54,7 @@ class PromptHandler:
             if validate:
                 error = validate(response)
                 if error:
-                    print(f"Validation error: {error}")
+                    print(f"Validation error: {error}", flush=True)
                     return await self.password(message, validate)  # Recursive retry
             return response if response else None
         except (KeyboardInterrupt, EOFError):
@@ -58,10 +63,10 @@ class PromptHandler:
     async def autocomplete(self, options: dict[str, Any]) -> str | None:
         """Show autocomplete selection."""
         try:
-            print(options["message"])
+            print(options["message"], flush=True)
             opts = options["options"]
             for i, opt in enumerate(opts, 1):
-                print(f"  {i}. {opt['label']}")
+                print(f"  {i}. {opt['label']}", flush=True)
 
             choice = input(f"Select option (1-{len(opts)}): ").strip()
             try:
@@ -264,7 +269,7 @@ class ConsoleUI:
 
     def print_warning(self, message: str):
         """Print warning message."""
-        print(f"\n{self.color('yellow', '⚠ Warning:')} {message}")
+        print(f"\n{self.color('yellow', '⚠ Warning:')} {message}", flush=True)
 
     def color(self, color: str, text: str) -> str:
         """Apply color to text using Rich markup."""
@@ -319,36 +324,36 @@ class ConsoleUI:
             "tool": "magenta",
         }
         color = role_colors.get(role, "white")
-        print(f"\n{self.color(color, '[' + role.upper() + ']')}")
-        print(content)
+        print(f"\n{self.color(color, '[' + role.upper() + ']')}", flush=True)
+        print(content, flush=True)
 
     def print_tool_call(self, name: str, args: dict):
         """Print tool call."""
-        print(f"\n{self.color('magenta', '⚡ Calling tool:')} {name}")
+        print(f"\n{self.color('magenta', '⚡ Calling tool:')} {name}", flush=True)
         for k, v in args.items():
-            print(f"  {self.color('gray', k + ':')} {v}")
+            print(f"  {self.color('gray', k + ':')} {v}", flush=True)
 
     def print_tool_result(self, result: str, success: bool = True):
         """Print tool result."""
         color = "green" if success else "red"
         prefix = "✓" if success else "✗"
-        print(f"\n{self.color(color, prefix)} Result:")
-        print(self.color("gray", "─" * 40))
-        print(result)
+        print(f"\n{self.color(color, prefix)} Result:", flush=True)
+        print(self.color("gray", "─" * 40), flush=True)
+        print(result, flush=True)
         if len(result) > 2000:
-            print(self.color("yellow", f" ... ({len(result) - 2000} more chars)"))
+            print(self.color("yellow", f" ... ({len(result) - 2000} more chars)"), flush=True)
 
     def print_error(self, error: str):
         """Print error message."""
-        print(f"\n{self.color('red', '✗ Error:')} {error}")
+        print(f"\n{self.color('red', '✗ Error:')} {error}", flush=True)
 
     def print_info(self, info: str):
         """Print info message."""
-        print(f"\n{self.color('blue', 'ℹ')} {info}")
+        print(f"\n{self.color('blue', 'ℹ')} {info}", flush=True)
 
     def print_success(self, message: str):
         """Print success message."""
-        print(f"\n{self.color('green', '✓')} {message}")
+        print(f"\n{self.color('green', '✓')} {message}", flush=True)
 
     def print_permission_request(
         self,
@@ -357,15 +362,15 @@ class ConsoleUI:
         arguments: dict,
     ) -> bool:
         """Print a permission request and get user response."""
-        print(f"\n{self.color('yellow', '┌─[PERMISSION REQUEST]')}")
-        print(f"  {self.color('cyan', 'Agent:')} {agent_name}")
-        print(f"  {self.color('cyan', 'Tool:')} {tool_name}")
+        print(f"\n{self.color('yellow', '┌─[PERMISSION REQUEST]')}", flush=True)
+        print(f"  {self.color('cyan', 'Agent:')} {agent_name}", flush=True)
+        print(f"  {self.color('cyan', 'Tool:')} {tool_name}", flush=True)
         if arguments:
-            print(f"  {self.color('cyan', 'Arguments:')}")
+            print(f"  {self.color('cyan', 'Arguments:')}", flush=True)
             for k, v in arguments.items():
                 v_str = str(v)
-                print(f"    {k}: {v_str}")
-        print(f"  {self.color('magenta', '➜')} ", end="")
+                print(f"    {k}: {v_str}", flush=True)
+        print(f"  {self.color('magenta', '➜')} ", end="", flush=True)
 
         try:
             response = input().strip().lower()
@@ -380,14 +385,14 @@ class ConsoleUI:
     def print_permission_result(self, tool_name: str, allowed: bool):
         """Print permission result."""
         if allowed:
-            print(self.color("green", f"  ✓ Permission granted for '{tool_name}'"))
+            print(self.color("green", f"  ✓ Permission granted for '{tool_name}'"), flush=True)
         else:
-            print(self.color("red", f"  ✗ Permission denied for '{tool_name}'"))
+            print(self.color("red", f"  ✗ Permission denied for '{tool_name}'"), flush=True)
 
     def print_plan(self, plan: dict):
         """Print execution plan."""
-        print(f"\n{self.color('cyan', '📋 Execution Plan:')}")
-        print(self.color("gray", "─" * 40))
+        print(f"\n{self.color('cyan', '📋 Execution Plan:')}", flush=True)
+        print(self.color("gray", "─" * 40), flush=True)
         for i, step in enumerate(plan.get("steps", []), 1):
             status_icon = {
                 "pending": "○",
@@ -396,8 +401,8 @@ class ConsoleUI:
                 "failed": "✗",
             }.get(step.get("status", "pending"), "○")
             desc = step.get("description", "No description")
-            print(f"  {status_icon} {i}. {desc}")
-        print()
+            print(f"  {status_icon} {i}. {desc}", flush=True)
+        print(flush=True)
 
     def print_help(self):
         """Print help message."""
@@ -411,7 +416,7 @@ class ConsoleUI:
 NOTE: All commands MUST be prefixed with '/'. 
       Any text NOT starting with '/' is sent directly to the AI agent.
 """
-        print(self.color("cyan", help_text))
+        print(self.color("cyan", help_text), flush=True)
 
 
 class CommandHistory:
@@ -460,8 +465,8 @@ class InteractiveCLI:
         self,
         agent,
         show_thinking: bool = True,
-        show_messages: bool = False,
-        enable_spinner: bool = True,
+        show_messages: bool = True,
+        enable_spinner: bool = False,  # Disabled to fix output issues
     ):
         self.nanocode = agent
         self.ui = ConsoleUI()
@@ -501,7 +506,7 @@ class InteractiveCLI:
                     if command in ("/exit", "/quit", "/q"):
                         self.ui.save_history()
                         session_id = getattr(self.nanocode, "_session_id", "unknown")
-                        print()
+                        print(flush=True)
                         print(
                             self.ui.color(
                                 "cyan",
@@ -538,9 +543,9 @@ class InteractiveCLI:
                                 " ╚═════╝ ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝",
                             )
                         )
-                        print()
-                        print(f"Session: {session_id}")
-                        print(self.ui.color("green", "Goodbye!"))
+                        print(flush=True)
+                        print(f"Session: {session_id}", flush=True)
+                        print(self.ui.color("green", "Goodbye!"), flush=True)
                         break
 
                     if command == "/help":
@@ -685,7 +690,7 @@ class InteractiveCLI:
             except KeyboardInterrupt:
                 self.ui.save_history()
                 session_id = getattr(self.nanocode, "_session_id", "unknown")
-                print()
+                print(flush=True)
                 from rich.console import Console
 
                 c = Console()
@@ -707,8 +712,8 @@ class InteractiveCLI:
                 c.print(
                     "[cyan] ╚═════╝ ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝[/cyan]"
                 )
-                print()
-                print(f"Session: {session_id}")
+                print(flush=True)
+                print(f"Session: {session_id}", flush=True)
                 break
             except Exception as e:
                 self.last_error_trace = traceback.format_exc()
@@ -754,29 +759,29 @@ class InteractiveCLI:
         text = summary.get("text", "")
         elapsed = summary.get("elapsed", 0)
 
-        print()
-        print(self.ui.color("cyan", "─" * 40))
+        print(flush=True)
+        print(self.ui.color("cyan", "─" * 40), flush=True)
 
         if files > 0:
-            print(self.ui.color("green", f"  ✓ {files} file(s) changed"))
+            print(self.ui.color("green", f"  ✓ {files} file(s) changed"), flush=True)
             if additions > 0:
-                print(self.ui.color("green", f"  +{additions}"))
+                print(self.ui.color("green", f"  +{additions}"), flush=True)
             if deletions > 0:
-                print(self.ui.color("red", f"  -{deletions}"))
+                print(self.ui.color("red", f"  -{deletions}"), flush=True)
 
         if elapsed > 0:
             if elapsed < 60:
-                print(self.ui.color("yellow", f"  ⏱ {elapsed:.1f}s"))
+                print(self.ui.color("yellow", f"  ⏱ {elapsed:.1f}s"), flush=True)
             else:
                 mins = int(elapsed // 60)
                 secs = elapsed % 60
-                print(self.ui.color("yellow", f"  ⏱ {mins}m {secs:.0f}s"))
+                print(self.ui.color("yellow", f"  ⏱ {mins}m {secs:.0f}s"), flush=True)
 
         if text:
-            print()
-            print(self.ui.color("cyan", text))
+            print(flush=True)
+            print(self.ui.color("cyan", text), flush=True)
 
-        print(self.ui.color("cyan", "─" * 40))
+        print(self.ui.color("cyan", "─" * 40), flush=True)
 
     async def _execute_task(self, task: str):
         """Execute a task with planning."""
@@ -801,19 +806,19 @@ class InteractiveCLI:
 
     def _print_history(self):
         """Print command history."""
-        print(self.ui.color("cyan", "\nCommand History:"))
-        print(self.ui.color("gray", "─" * 40))
+        print(self.ui.color("cyan", "\nCommand History:"), flush=True)
+        print(self.ui.color("gray", "─" * 40), flush=True)
         for i, item in enumerate(self.history.get_all()[-20:], 1):
             ts = item["timestamp"].strftime("%H:%M:%S")
-            print(f"  {i}. [{ts}] {item['command']}")
+            print(f"  {i}. [{ts}] {item['command']}", flush=True)
 
     def _print_tools(self):
         """Print available tools."""
         tools = self.nanocode.tool_registry.list_tools()
-        print(self.ui.color("cyan", "\nAvailable Tools:"))
-        print(self.ui.color("gray", "─" * 40))
+        print(self.ui.color("cyan", "\nAvailable Tools:"), flush=True)
+        print(self.ui.color("gray", "─" * 40), flush=True)
         for tool in tools:
-            print(f"  • {self.ui.color('magenta', tool.name)}: {tool.description}")
+            print(f"  • {self.ui.color('magenta', tool.name)}: {tool.description}", flush=True)
 
     async def _provider_command(self):
         """Handle the provider command for selecting providers and models."""
@@ -1147,13 +1152,13 @@ class InteractiveCLI:
                 f for f in os.listdir(checkpoint_dir) if f.startswith("checkpoint_")
             ]
             if files:
-                print(self.ui.color("cyan", "\nSaved Checkpoints:"))
+                print(self.ui.color("cyan", "\nSaved Checkpoints:"), flush=True)
                 for f in files:
-                    print(f"  • {f}")
+                    print(f"  • {f}", flush=True)
             else:
-                print(self.ui.color("gray", "No checkpoints found"))
+                print(self.ui.color("gray", "No checkpoints found"), flush=True)
         else:
-            print(self.ui.color("gray", "No checkpoints found"))
+            print(self.ui.color("gray", "No checkpoints found"), flush=True)
 
     def _list_skills(self):
         """List available skills."""
@@ -1164,15 +1169,15 @@ class InteractiveCLI:
             skills = manager.list_skills()
 
             if not skills:
-                print(self.ui.color("yellow", "\nNo skills found."))
-                print("Create skills in .nanocode/skills/<skill-name>/skill.md")
+                print(self.ui.color("yellow", "\nNo skills found."), flush=True)
+                print("Create skills in .nanocode/skills/<skill-name>/skill.md", flush=True)
                 return
 
-            print(self.ui.color("cyan", "\nAvailable Skills:"))
+            print(self.ui.color("cyan", "\nAvailable Skills:"), flush=True)
             for skill in skills:
-                print(f"  • {skill['name']}: {skill['description']}")
+                print(f"  • {skill['name']}: {skill['description']}", flush=True)
         except ImportError:
-            print(self.ui.color("yellow", "\nNo skills found."))
+            print(self.ui.color("yellow", "\nNo skills found."), flush=True)
 
     async def _revert_messages(self, steps: int):
         """Revert N messages."""
@@ -1192,9 +1197,9 @@ class InteractiveCLI:
         forks = manager.list_forks()
 
         if forks:
-            print(self.ui.color("cyan", "\nSaved Forks:"))
+            print(self.ui.color("cyan", "\nSaved Forks:"), flush=True)
             for f in forks:
-                print(f"  • {f}")
+                print(f"  • {f}", flush=True)
         else:
             print(
                 self.ui.color(
@@ -1249,7 +1254,7 @@ class InteractiveCLI:
             content = msg.get("content", "")
             if len(content) > 200:
                 content = content[:200] + "..."
-            print(content)
+            print(content, flush=True)
         else:
             self.ui.print_error(f"Message at index {index} not found")
 
@@ -1300,8 +1305,8 @@ class InteractiveCLI:
             self.nanocode.current_agent.name if self.nanocode.current_agent else None
         )
 
-        print(self.ui.color("cyan", "\nAvailable Agents:"))
-        print(self.ui.color("gray", "─" * 40))
+        print(self.ui.color("cyan", "\nAvailable Agents:"), flush=True)
+        print(self.ui.color("gray", "─" * 40), flush=True)
         for agent in agents:
             marker = " *" if agent.name == current else ""
             color = (
@@ -1309,12 +1314,12 @@ class InteractiveCLI:
                 if agent.name == current
                 else self.ui.color("white", agent.name)
             )
-            print(f"  • {color}{marker}")
+            print(f"  • {color}{marker}", flush=True)
             if agent.description:
-                print(f"    {self.ui.color('gray', agent.description)}")
-        print()
-        print(f"{self.ui.color('cyan', 'Current:')} {current}")
-        print(f"{self.ui.color('gray', 'Use /agent <name> to switch')}")
+                print(f"    {self.ui.color('gray', agent.description)}", flush=True)
+        print(flush=True)
+        print(f"{self.ui.color('cyan', 'Current:')} {current}", flush=True)
+        print(f"{self.ui.color('gray', 'Use /agent <name> to switch')}", flush=True)
 
     async def _switch_agent(self, agent_name: str):
         """Switch to a different agent."""
@@ -1390,24 +1395,24 @@ class InteractiveCLI:
             snapshots = await manager.list_snapshots()
 
             if not snapshots:
-                print(self.ui.color("yellow", "\nNo snapshots available."))
-                print("Use /snapshot to create one.")
+                print(self.ui.color("yellow", "\nNo snapshots available."), flush=True)
+                print("Use /snapshot to create one.", flush=True)
                 return
 
-            print(self.ui.color("cyan", "\nAvailable Snapshots:"))
-            print(self.ui.color("gray", "─" * 40))
+            print(self.ui.color("cyan", "\nAvailable Snapshots:"), flush=True)
+            print(self.ui.color("gray", "─" * 40), flush=True)
             for s in snapshots:
-                print(f"  • {self.ui.color('magenta', s['hash'])} ({s['timestamp']})")
+                print(f"  • {self.ui.color('magenta', s['hash'])} ({s['timestamp']})", flush=True)
         except Exception as e:
             self.ui.print_error(f"Error: {e}")
 
     def _print_trace(self):
         """Print the last error trace."""
         if self.last_error_trace:
-            print(self.ui.color("red", "\n═══ Error Trace ═══"))
-            print(self.last_error_trace)
+            print(self.ui.color("red", "\n═══ Error Trace ═══"), flush=True)
+            print(self.last_error_trace, flush=True)
         else:
-            print(self.ui.color("gray", "\nNo error trace available."))
+            print(self.ui.color("gray", "\nNo error trace available."), flush=True)
 
     async def _handle_debug_command(self):
         """Handle the /debug command to toggle HTTP and tool debug logging."""

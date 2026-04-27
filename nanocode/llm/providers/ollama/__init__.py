@@ -35,12 +35,10 @@ class OllamaLLM(LLMBase):
         if tools:
             payload["tools"] = tools
 
-        async with httpx.AsyncClient(proxy=self.proxy) as client:
-            response = await client.post(
+        async with self._client.post(
                 f"{self.base_url}/api/chat",
                 json=payload,
-                timeout=120.0,
-            )
+            ) as response:
             response.raise_for_status()
             data = response.json()
 

@@ -1,37 +1,29 @@
-"""OpenAI-compatible LLM provider."""
+"""OpenAI-compatible LLM provider with event streaming.
+
+Fully matches opencode architecture: LLM.stream() returns async generator of events.
+"""
 
 import json
 import logging
 import os
-
-# Configure logging for this module (file only, defer to main.py for proper config)
-logger = logging.getLogger("nanocode.openai")
-
-from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from typing import AsyncGenerator, Optional, Dict, Any, List
 
 import httpx
 
-from nanocode.llm.base import LLMBase, LLMResponse, Message, ToolCall
+from nanocode.llm.base import LLMBase, Message, ToolCall
 from nanocode.llm.router import OUTPUT_TOKEN_MAX
-from nanocode.llm.stream_parser import parse_stream_events
+from nanocode.llm.events import (
+    StreamEvent, EventType,
+    TextDeltaEvent, ToolCallEvent, FinishStepEvent,
+    ReasoningDeltaEvent, ReasoningStartEvent, ReasoningEndEvent,
+    StreamEvent,
+)
 
-
-@dataclass
-class StreamEvent:
-    """Event from streaming response."""
-
-    type: str
-    content: str | None = None
-    tool_id: str | None = None
-    tool_name: str | None = None
-    tool_args: dict | None = None
-    finish_reason: str | None = None
-    usage: dict | None = None
+logger = logging.getLogger("nanocode.openai")
 
 
 class OpenAILLM(LLMBase):
-    """OpenAI-compatible LLM provider."""
+    """OpenAI-compatible LLM provider with event streaming."""
 
     def __init__(
         self,
@@ -48,22 +40,15 @@ class OpenAILLM(LLMBase):
         )
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "dummy")
         self.context_limit = context_limit
-        if (
-            self.api_key
-            and self.api_key.startswith("${")
-            and self.api_key.endswith("}")
-        ):
+
+        if self.api_key and self.api_key.startswith("${") and self.api_key.endswith("}"):
             env_var = self.api_key[2:-1]
             self.api_key = os.getenv(env_var, self.api_key)
 
-    async def chat(
-        self,
-        messages: list,
-        tools: list[dict] = None,
-        on_token: callable = None,
-        **kwargs,
-    ) -> LLMResponse:
-        """Send a chat completion request."""
+    async def chat_stream(
+        self, messages: list, tools: list[dict] = None, **kwargs
+    ) -> AsyncGenerator[StreamEvent, None]:
+        """Stream events (matches opencode's LLM.stream())."""
         messages = self._normalize_messages(messages)
 
         headers = {
@@ -74,27 +59,9 @@ class OpenAILLM(LLMBase):
         payload = {
             "model": self.model,
             "messages": [m.to_dict() for m in messages],
+            "stream": True,
             **kwargs,
         }
-
-# DEBUG: Print request details only in debug mode
-        if self.debug:
-            print("\n[DEBUG] OpenAI Request:")
-            print(f"  URL: {self.base_url}/chat/completions")
-            print(f"  Model: {payload['model']}")
-            print(f"  Messages: {len(payload['messages'])}")
-            for i, m in enumerate(payload["messages"]):
-                msg_role = m.get("role", "?")
-                msg_content = str(m.get("content", ""))
-                print(f"    [{i}] {msg_role}: {msg_content[:100]}...")
-                if m.get("tool_calls"):
-                    print(f"        tool_calls: {json.dumps(m['tool_calls'])[:500]}")
-                if msg_role == "tool":
-                    print(f"        tool_call_id: {m.get('tool_call_id')}")
-            if payload.get("tools"):
-                print(f"  Tools: {len(payload['tools'])} provided")
-            if "max_tokens" in payload:
-                print(f"  max_tokens: {payload['max_tokens']}")
 
         max_tokens = kwargs.get("max_tokens", self.max_tokens)
         if not max_tokens:
@@ -104,174 +71,71 @@ class OpenAILLM(LLMBase):
         if tools:
             payload["tools"] = tools
 
-        def on_retry(error: Exception, attempt: int):
-            print(f"\nRate limited, retrying (attempt {attempt})...")
+        # Yield start event
+        yield StreamEvent(type=EventType.START)
 
-        # DEBUG: Log full request payload only in debug mode
-        if self.debug:
-            logger.debug(f"[OpenAI] Request payload: {json.dumps(payload)}")
-            print("\n[DEBUG] OpenAI Request payload:")
-            print(f"  URL: {self.base_url}/chat/completions")
-            print(f"  Model: {payload['model']}")
-            print("  Message order:")
-            for i, m in enumerate(payload["messages"]):
-                role = m.get("role", "?")
-                content = str(m.get("content", ""))
-                tc = m.get("tool_calls")
-                tid = m.get("tool_call_id")
-                print(
-                    f"    [{i}] {role}: {content} tool_calls={bool(tc)} tool_call_id={tid}"
-                )
-            print(f"  Full messages JSON: {json.dumps(payload['messages'], indent=2)}")
-            if payload.get("tools"):
-                print(
-                    f"  Tools: {len(payload['tools'])} (first: {payload['tools'][0].get('name', 'unknown')})"
-                )
-            print(f"  max_tokens: {payload.get('max_tokens')}")
+        async with self._client.stream(
+            "POST",
+            f"{self.base_url}/chat/completions",
+            json=payload,
+            headers=headers,
+        ) as response:
+            async for line in response.aiter_lines():
+                line = line.strip()
+                if not line or not line.startswith("data: "):
+                    continue
 
-        # Handle streaming vs non-streaming
-        if on_token:
-            # Streaming: parse SSE events and call on_token
-            payload["stream"] = True
-            return await self._stream_chat(payload, headers, on_token)
-        else:
-            # Non-streaming: normal request
-            response = await self._request_with_retry(
-                "POST",
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                on_retry=on_retry,
-            )
+                data = line[6:]
+                if data == "[DONE]":
+                    break
 
-            # Debug: Log status code
-            status_code = response.status_code
-            content_type = response.headers.get("content-type", "")
-            logger.debug(f"HTTP Response status: {status_code}, content-type: {content_type}")
+                try:
+                    event = json.loads(data)
+                    choice = event.get("choices", [{}])[0]
+                    delta = choice.get("delta", {})
 
-            # Handle non-JSON responses (like plain text "Hi there!")
-            if "application/json" not in content_type:
-                text_content = response.text
-                logger.debug(f"Non-JSON response: {text_content[:200]}")
-                # Return as simple text response
-                return LLMResponse(
-                    content=text_content,
-                    tool_calls=[],
-                    finish_reason="stop",
-                    thinking=None,
-                )
-
-            try:
-                data = response.json()
-            except Exception as e:
-                logger.debug(f"Failed to parse JSON response: {e}")
-                logger.debug(f"Response text: {response.text[:500] if response.text else '(empty)'}")
-                raise
-
-            # DEBUG: Log raw response on error
-            if response.status_code != 200:
-                logger.debug(f"OpenAI status={response.status_code}")
-                logger.debug(f"OpenAI Response text: {response.text}")
-                logger.error(f"[OpenAI] API Error: status={response.status_code}")
-                logger.error(f"[OpenAI] Response text: {response.text}")
-            # DEBUG: Print response
-            if "error" in data:
-                error_msg = data.get("error", {}).get("message", str(data))
-                print(f"[DEBUG] OpenAI Error: {error_msg}")
-                logger.error(f"[OpenAI] API Error: {error_msg}")
-                # Handle specific error types - include provider wrapped errors
-                raw_error = data.get("error", {}).get("metadata", {}).get("raw", "")
-                if (
-                    "tool id" in error_msg.lower()
-                    or "tool_call_id" in error_msg.lower()
-                    or (
-                        "tool" in raw_error.lower() and "not found" in raw_error.lower()
-                    )
-                ):
-                    raise RuntimeError(
-                        f"Tool call error: {error_msg}. Try starting a new session."
-                    )
-                if response.status_code == 400:
-                    raise RuntimeError(f"Bad request: {error_msg}")
-            if "choices" not in data:
-                error_msg = data.get("error", {}).get("message", str(data))
-                raise RuntimeError(f"LLM API error: {error_msg}")
-
-            choice = data["choices"][0]
-            msg_data = choice["message"]
-
-            tool_calls = []
-            if tc_data := msg_data.get("tool_calls"):
-                for tc in tc_data:
-                    func = tc.get("function", {})
-                    args_str = func.get("arguments", "{}")
-                    try:
-                        arguments = json.loads(args_str) if args_str else {}
-                    except json.JSONDecodeError:
-                        arguments = {}
-                    tool_calls.append(
-                        ToolCall(
-                            name=func.get("name", ""),
-                            arguments=arguments,
-                            id=tc.get("id"),
+                    # Handle reasoning (for models that support it)
+                    if "reasoning" in delta and delta["reasoning"]:
+                        yield ReasoningDeltaEvent(
+                            id="reasoning_0",
+                            text=delta["reasoning"],
                         )
-                    )
 
-            return LLMResponse(
-                content=msg_data.get("content", ""),
-                tool_calls=tool_calls,
-                finish_reason=choice.get("finish_reason"),
-                thinking=msg_data.get("reasoning"),
-            )
+                    # Handle text content
+                    if "content" in delta and delta["content"]:
+                        yield TextDeltaEvent(text=delta["content"])
 
-    async def _stream_chat(
-        self, payload: dict, headers: dict, on_token: callable
-    ) -> LLMResponse:
-        """Handle streaming chat request with SSE parsing."""
-        # Use streaming client
-        async with httpx.AsyncClient(proxy=self.proxy) as client:
-            async with client.stream(
-                "POST",
-                f"{self.base_url}/chat/completions",
-                json=payload,
-                headers=headers,
-                timeout=120.0,
-            ) as response:
-                # Parse SSE stream
-                full_content = ""
-                tool_calls = []
-                finish_reason = None
-                thinking = None
+                    # Handle tool calls
+                    if "tool_calls" in delta:
+                        for tc in delta["tool_calls"]:
+                            if "function" in tc:
+                                func = tc["function"]
+                                args_str = func.get("arguments", "{}")
+                                try:
+                                    arguments = json.loads(args_str) if args_str else {}
+                                except json.JSONDecodeError:
+                                    arguments = {}
 
-                async for event in parse_stream_events(response):
-                    if event["type"] == "text":
-                        content = event["content"]
-                        full_content += content
-                        if on_token:
-                            try:
-                                on_token(content)
-                            except Exception as e:
-                                logger.warning(
-                                    f"[OpenAI] on_token callback failed: {e}"
+                                yield ToolCallEvent(
+                                    tool_call_id=tc.get("id", ""),
+                                    tool_name=func.get("name", ""),
+                                    input=arguments,
                                 )
-                    elif event["type"] == "tool_call":
-                        tool_calls.append(
-                            ToolCall(
-                                name=event["name"],
-                                arguments=event["arguments"],
-                                id=event["id"],
-                            )
+
+                    # Handle finish
+                    if choice.get("finish_reason"):
+                        yield FinishStepEvent(
+                            finish_reason=choice["finish_reason"],
+                            usage=event.get("usage", {}),
                         )
-                    elif event["type"] == "finish":
-                        finish_reason = event.get("reason")
 
-                return LLMResponse(
-                    content=full_content,
-                    tool_calls=tool_calls,
-                    finish_reason=finish_reason,
-                    thinking=thinking,
-                )
+                except (json.JSONDecodeError, IndexError, KeyError) as e:
+                    logger.debug(f"Failed to parse SSE line: {e}")
+                    continue
 
-    def get_tool_schema(self) -> list[dict]:
+    def get_tool_schema(self) -> List[dict]:
         """Get OpenAI function calling format."""
         return []
+
+    def supports_functions(self) -> bool:
+        return True

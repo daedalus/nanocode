@@ -52,13 +52,11 @@ class AnthropicLLM(LLMBase):
         if tools:
             payload["tools"] = tools
 
-        async with httpx.AsyncClient(proxy=self.proxy) as client:
-            response = await client.post(
+        async with self._client.post(
                 "https://api.anthropic.com/v1/messages",
                 json=payload,
                 headers=headers,
-                timeout=120.0,
-            )
+            ) as response:
             response.raise_for_status()
             data = response.json()
 
