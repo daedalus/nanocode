@@ -2586,10 +2586,17 @@ Footer {
                         self._print_empty()
 
                 # Display final response with role coloring and syntax highlighting
-                import logging
-
                 _tui_logger.debug(f"Result check: result={result is not None}, len={len(result) if result else 0}")
                 print(f"[TUI DEBUG] result={result is not None}, len={len(result) if result else 0}", file=sys.stderr)
+
+                # Show thinking first
+                thinking = getattr(self.agent, "_last_thinking", None)
+                print(f"[TUI DEBUG] thinking={thinking is not None}, len={len(thinking) if thinking else 0}", file=sys.stderr)
+                if thinking:
+                    print(f"[TUI DEBUG] Thinking: {thinking[:200]}...", file=sys.stderr)
+                    self._print_line(f"| Thinking: {thinking}", Style.THINKING)
+                    self._print_empty()
+
                 if result and len(result) > 0:
                     _tui_logger.debug(f"Displaying result: len={len(result)}")
                     print(f"[TUI DEBUG] Displaying: {result[:100]}...", file=sys.stderr)
