@@ -1426,6 +1426,7 @@ Conversation:
                 )
                 self._put_cache(messages, tools, response)
                 logger.info(f"[{agent_name}] LLM response received")
+                logger.info(f"[{agent_name}] Thinking: {response.thinking[:100] if response.thinking else 'None'}...")
 
             # Track thinking for output (always store)
             if response.thinking:
