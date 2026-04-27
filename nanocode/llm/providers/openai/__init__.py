@@ -77,7 +77,7 @@ class OpenAILLM(LLMBase):
             **kwargs,
         }
 
-        # DEBUG: Print request details only in verbose mode
+# DEBUG: Print request details only in debug mode
         if self.debug:
             print("\n[DEBUG] OpenAI Request:")
             print(f"  URL: {self.base_url}/chat/completions")
@@ -107,7 +107,7 @@ class OpenAILLM(LLMBase):
         def on_retry(error: Exception, attempt: int):
             print(f"\nRate limited, retrying (attempt {attempt})...")
 
-        # DEBUG: Log full request payload only in verbose mode
+        # DEBUG: Log full request payload only in debug mode
         if self.debug:
             logger.debug(f"[OpenAI] Request payload: {json.dumps(payload)}")
             print("\n[DEBUG] OpenAI Request payload:")
@@ -123,17 +123,11 @@ class OpenAILLM(LLMBase):
                     f"    [{i}] {role}: {content} tool_calls={bool(tc)} tool_call_id={tid}"
                 )
             print(f"  Full messages JSON: {json.dumps(payload['messages'], indent=2)}")
-        if payload.get("tools"):
-            print(
-                f"  Tools: {len(payload['tools'])} (first: {payload['tools'][0].get('name', 'unknown')})"
-            )
-        print(f"  max_tokens: {payload.get('max_tokens')}")
-
-        if payload.get("tools"):
-            print(
-                f"  Tools: {len(payload['tools'])} (first: {payload['tools'][0].get('name', 'unknown')})"
-            )
-        print(f"  max_tokens: {payload.get('max_tokens')}")
+            if payload.get("tools"):
+                print(
+                    f"  Tools: {len(payload['tools'])} (first: {payload['tools'][0].get('name', 'unknown')})"
+                )
+            print(f"  max_tokens: {payload.get('max_tokens')}")
 
         # Handle streaming vs non-streaming
         if on_token:
@@ -150,17 +144,15 @@ class OpenAILLM(LLMBase):
                 on_retry=on_retry,
             )
 
-            # Debug: Print status code
+            # Debug: Log status code
             status_code = response.status_code
             content_type = response.headers.get("content-type", "")
-            print(
-                f"[DEBUG] HTTP Response status: {status_code}, content-type: {content_type}"
-            )
+            logger.debug(f"HTTP Response status: {status_code}, content-type: {content_type}")
 
             # Handle non-JSON responses (like plain text "Hi there!")
             if "application/json" not in content_type:
                 text_content = response.text
-                print(f"[DEBUG] Non-JSON response: {text_content[:200]}")
+                logger.debug(f"Non-JSON response: {text_content[:200]}")
                 # Return as simple text response
                 return LLMResponse(
                     content=text_content,
@@ -172,16 +164,14 @@ class OpenAILLM(LLMBase):
             try:
                 data = response.json()
             except Exception as e:
-                print(f"[DEBUG] Failed to parse JSON response: {e}")
-                print(
-                    f"[DEBUG] Response text: {response.text[:500] if response.text else '(empty)'}"
-                )
+                logger.debug(f"Failed to parse JSON response: {e}")
+                logger.debug(f"Response text: {response.text[:500] if response.text else '(empty)'}")
                 raise
 
-            # DEBUG: Print raw response on error
+            # DEBUG: Log raw response on error
             if response.status_code != 200:
-                print(f"\n[DEBUG] OpenAI status={response.status_code}")
-                print(f"[DEBUG] OpenAI Response text: {response.text}")
+                logger.debug(f"OpenAI status={response.status_code}")
+                logger.debug(f"OpenAI Response text: {response.text}")
                 logger.error(f"[OpenAI] API Error: status={response.status_code}")
                 logger.error(f"[OpenAI] Response text: {response.text}")
             # DEBUG: Print response

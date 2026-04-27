@@ -688,14 +688,17 @@ async def main():
                 result = await agent.process_input(
                     prompt, show_thinking=show_thinking, show_messages=show_messages
                 )
+                if result:
+                    results.append(result)
+                    print(f"Response: {result[:200]}{'...' if len(result) > 200 else ''}")
+                else:
+                    print("Warning: agent returned empty result")
             except Exception as err:
                 import traceback as tb
 
                 tb.print_exc()
                 result = f"Error: {str(err)}"
-
-            results.append(result)
-            print(f"Response: {result[:200]}{'...' if len(result) > 200 else ''}")
+                results.append(result)
 
         final_result = "\n\n---\n\n".join(results)
 
