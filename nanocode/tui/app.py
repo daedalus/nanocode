@@ -2568,6 +2568,9 @@ Footer {
                             tool_call.description = suffix
 
                         status = "✓" if success else "✗"
+                        # Skip status line if result already shows arrow format (e.g., skill tool)
+                        if result and result.startswith("→"):
+                            continue
                         self._print_line(
                             f"~ {tool_call.icon} {tool_call.title} {tool_call.description} {status}",
                             Style.TOOL_MESSAGE,
