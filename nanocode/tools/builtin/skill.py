@@ -84,12 +84,7 @@ class SkillTool(Tool):
             result = await self.skills_manager.execute_skill(name, {"input": input}, context)
 
             skill_content = result.get("content", "")
-            wrapped = (
-                f"<skill_content name=\"{name}\">\n"
-                f"# Skill: {name}\n\n"
-                f"{skill_content}\n\n"
-                f"</skill_content>"
-            )
+            wrapped = f"→ Skill \"{name}\"\n\n{skill_content}"
 
             return ToolResult(success=True, content=wrapped, metadata={"skill_name": name})
         except Exception as e:
