@@ -2589,6 +2589,7 @@ Footer {
                 _tui_logger.debug(f"Result check: result={result is not None}, len={len(result) if result else 0}")
                 if result and len(result) > 0:
                     _tui_logger.debug(f"Displaying result: len={len(result)}")
+                    logger.info(f"[TUI] Showing content: {result[:100]}...")
                     try:
                         output_area = self.query_one("#output-area")
                         _tui_logger.debug(f"Output area found, adding line...")
@@ -2599,6 +2600,11 @@ Footer {
                     except Exception as e:
                         _tui_logger.debug(f"Output area error: {e}")
                         self._print_line(result, Style.ASSISTANT_MESSAGE)
+                else:
+                    # Show what we got
+                    info = f"No text result. result={result is not None}, len={len(result) if result else 0}"
+                    _tui_logger.debug(info)
+                    logger.warning(f"[TUI] {info}")
                 else:
                     self._print_line("(waiting for model response...)", Style.TEXT_DIM)
 
