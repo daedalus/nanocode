@@ -1817,6 +1817,12 @@ Conversation:
 
         except asyncio.CancelledError:
             self.state.state = AgentState.ERROR
+            # If we have tool results but got cancelled, return them as partial output
+            if tool_results_history:
+                partial = "\n\nTool results (partial - request cancelled):\n"
+                for tr in tool_results_history:
+                    partial += f"- {tr['tool_name']}: {tr['result'][:200]}...\n"
+                return partial
             raise
         except Exception as e:
             self.state.state = AgentState.ERROR
