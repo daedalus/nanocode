@@ -695,22 +695,33 @@ class DoomPermissionsScreen(ModalScreen):
         self.permission_handler = permission_handler
 
     def compose(self):
-        handler = self.permission_handler
-        approved = handler._approved if handler else []
-        
-        # Filter for tools that matter for doom_loop
-        tools = [r.permission for r in approved if r.action == PermissionAction.ALLOW]
-        
-        yield Container(
-            Static("⟳ Doom Loop Permissions", id="doom-title"),
-            id="doom-dialog",
-        )
-        
-        if tools:
-            for tool in tools:
-                yield Static(f"✓ {tool} - Always allowed", id="doom-list")
-        else:
-            yield Static("No permissions granted yet.\n\nWhen doom_loop triggers, select 'Always' to auto-approve.", id="empty-message")
+        try:
+            handler = self.permission_handler
+            try:
+                approved = handler._approved if handler and hasattr(handler, '_approved') else []
+            except Exception:
+                approved = []
+            
+            # Filter for tools that matter for doom_loop
+            tools = [r.permission for r in approved if r.action == PermissionAction.ALLOW]
+            
+            yield Container(
+                Static("⟳ Doom Loop Permissions", id="doom-title"),
+                id="doom-dialog",
+            )
+            
+            if tools:
+                for tool in tools:
+                    yield Static(f"✓ {tool} - Always allowed", id="doom-list")
+            else:
+                yield Static("No permissions granted yet.\n\nWhen doom_loop triggers, select 'Always' to auto-approve.", id="empty-message")
+        except Exception as e:
+            import logging
+            logging.getLogger("nanocode.tui").error(f"DoomPermissionsScreen compose error: {e}")
+            yield Container(
+                Static("Error loading permissions", id="doom-title"),
+                Static(str(e), id="empty-message"),
+            )
 
     def action_clear_all(self):
         """Clear all doom loop permissions."""
@@ -718,6 +729,9 @@ class DoomPermissionsScreen(ModalScreen):
             self.permission_handler._approved.clear()
             self.notify("Doom permissions cleared", severity="info")
         self.dismiss(True)
+
+    def action_cancel(self):
+        self.dismiss(None)
 
 
 class AgentRulesScreen(ModalScreen):
