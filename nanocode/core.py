@@ -1813,11 +1813,14 @@ Conversation:
         except asyncio.CancelledError:
             self.state.state = AgentState.ERROR
             # If we have tool results but got cancelled, return them as partial output
+            partial = ""
+            if hasattr(self, "_last_thinking") and self._last_thinking:
+                partial += f"[thought]| Thinking:[/thought] {self._last_thinking}\n\n"
             if tool_results_history:
-                partial = "\n\nTool results (partial - request cancelled):\n"
+                partial += "Tool results (partial - request cancelled):\n"
                 for tr in tool_results_history:
                     partial += f"- {tr['tool_name']}: {tr['result'][:200]}...\n"
-                return partial
+            return partial if partial else "Request cancelled"
             raise
         except Exception as e:
             self.state.state = AgentState.ERROR
