@@ -21,6 +21,10 @@ If user says "read AND X", "fetch AND Y", or "do A then B":
 - No preambles ("Okay, I will...") or postambles.
 - Focus on findings, not summaries.
 
+# Response
+- After executing tools, respond with text summarizing what was done
+- Don't re-issue tools - respond with the results
+
 # Capabilities
 
 ## Available Agents
