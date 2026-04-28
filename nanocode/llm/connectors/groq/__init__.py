@@ -1,5 +1,5 @@
 """Groq provider - OpenAI-compatible API."""
 
-from nanocode.llm.providers.openai import OpenAILLM
+from nanocode.llm.connectors.openai import OpenAILLM
 
 __all__ = ["OpenAILLM"]

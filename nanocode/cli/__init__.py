@@ -1055,7 +1055,7 @@ class InteractiveCLI:
         # Get API key and store in config so LLM can find it
         api_key = await self._get_stored_api_key(provider_id)
         if api_key:
-            self.nanocode.config.set(f"llm.providers.{provider_id}.api_key", api_key)
+            self.nanocode.config.set(f"llm.connectors.{provider_id}.api_key", api_key)
 
         # Reinitialize LLM with new configuration
         self.nanocode._init_llm()

@@ -1,6 +1,7 @@
 """Tests for long horizon task handling in nanocode."""
 
 import pytest
+from unittest.mock import Mock, patch
 
 
 class TestLongHorizonConstants:
@@ -243,23 +244,49 @@ class TestAgentRegistryLongTasks:
 
 
 class TestAutoExecuteFlag:
-    """Test auto-execute flag for long tasks."""
+    """Test auto_execute flag in AutonomousAgent."""
 
-    def test_auto_execute_default_false(self):
+    def test_auto_execute_default_false(self, tmp_path):
         """Test auto_execute defaults to False."""
-        from nanocode.config import Config
         from nanocode.core import AutonomousAgent
 
-        config = Config("config.yaml")
+        # Create a temporary config file
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("""
+llm:
+  default_model: gpt-4
+  default_connector: openai
+  connectors:
+    openai:
+      api_key: test-key
+      model: gpt-4
+""")
+
+        from nanocode.config import Config
+        config = Config(str(config_file))
+
         agent = AutonomousAgent(config)
         assert agent.auto_execute is False
 
-    def test_auto_execute_can_be_enabled(self):
+    def test_auto_execute_can_be_enabled(self, tmp_path):
         """Test auto_execute can be set to True."""
-        from nanocode.config import Config
         from nanocode.core import AutonomousAgent
 
-        config = Config("config.yaml")
+        # Create a temporary config file
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("""
+llm:
+  default_model: gpt-4
+  default_connector: openai
+  connectors:
+    openai:
+      api_key: test-key
+      model: gpt-4
+""")
+
+        from nanocode.config import Config
+        config = Config(str(config_file))
+
         agent = AutonomousAgent(config, auto_execute=True)
         assert agent.auto_execute is True
 

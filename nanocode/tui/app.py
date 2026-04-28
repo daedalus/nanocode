@@ -2182,7 +2182,7 @@ Footer {
                 # Set default provider (extracted from full_id)
                 if "llm" not in config:
                     config["llm"] = {}
-                config["llm"]["default_provider"] = provider
+                config["llm"]["default_connector"] = provider
                 
                 # Extract model name from full_id (e.g., "openai/gpt-4o" -> "gpt-4o")
                 model_name = full_id.split("/")[-1]

@@ -512,10 +512,10 @@ async def main():
         config.set("context.strategy", args.use_context_strategy)
 
     if args.provider:
-        config.set("llm.default_provider", args.provider)
+        config.set("llm.default_connector", args.provider)
     if args.model:
         config.set(
-            f"llm.providers.{args.provider or config.default_provider}.model",
+            f"llm.connectors.{args.provider or config.default_connector}.model",
             args.model,
         )
 

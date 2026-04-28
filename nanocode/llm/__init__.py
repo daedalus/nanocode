@@ -1,9 +1,9 @@
 """LLM abstraction layer for multi-provider support."""
 
 from nanocode.llm.base import LLMBase, Message
-from nanocode.llm.providers.anthropic import AnthropicLLM
-from nanocode.llm.providers.ollama import OllamaLLM
-from nanocode.llm.providers.openai import OpenAILLM
+from nanocode.llm.connectors.anthropic import AnthropicLLM
+from nanocode.llm.connectors.ollama import OllamaLLM
+from nanocode.llm.connectors.openai import OpenAILLM
 from nanocode.llm.router import ProviderConfig, get_router
 
 

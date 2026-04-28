@@ -48,13 +48,13 @@ class TestAdminConsole:
         config = Mock()
         config._config = {
             "llm": {
-                "providers": {
+                "connectors": {
                     "openai": {"api_key": "sk-test123"},
                 }
             }
         }
         config._config_path = "config.yaml"
-        config.providers = {
+        config.connectors = {
             "openai": {"api_key": "sk-test123"},
         }
         return config
@@ -171,13 +171,13 @@ class TestAdminConsole:
         config = Mock()
         config._config = {
             "llm": {
-                "providers": {
+                "connectors": {
                     "openai": {"api_key": "${OPENAI_API_KEY}"},
                 }
             }
         }
         config._config_path = "config.yaml"
-        config.providers = {
+        config.connectors = {
             "openai": {"api_key": "${OPENAI_API_KEY}"},
         }
 
@@ -227,7 +227,7 @@ class TestAdminConsoleRoutes:
         config = Mock()
         config._config = {}
         config._config_path = "config.yaml"
-        config.providers = {}
+        config.connectors = {}
         return config
 
     def test_session_detail_route(self, mock_config):

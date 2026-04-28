@@ -574,7 +574,7 @@ class AgentServer:
 
             if hasattr(self.nanocode, "config") and self.nanocode.config:
                 config = self.nanocode.config
-                stats["provider"] = config.get("default_provider", "unknown")
+                stats["provider"] = config.get("default_connector", "unknown")
                 if "llm" in config:
                     stats["model"] = config.get("default_model", stats["model"])
 

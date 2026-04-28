@@ -32,33 +32,24 @@ file_watcher:
 github: null
 llm:
   default_model: opencode/hy3-preview-free
-  default_provider: opencode
-  providers:
-    anthropic:
-      api_key: ${ANTHROPIC_API_KEY}
-      model: claude-3-5-sonnet-20241022
-    lm-studio:
-      base_url: http://localhost:1234/v1
-      model: local-model
-    ollama:
-      base_url: http://localhost:11434
-      model: llama3
+  default_connector: openai
+  connectors:
     openai:
-      api_key: ${OPENAI_API_KEY}
-      base_url: https://api.openai.com/v1
-      model: gpt-4o
-    opencode:
-      api_key: public
-      base_url: https://opencode.ai/zen/v1
-      model: big-pickle
-    openrouter:
-      api_key: ${OPENROUTER_API_KEY}
-      base_url: https://openrouter.ai/api/v1
-      model: openrouter/free
-    nano-gpt:
-      model: Gemma-3-27B-Big-Tiger-v3
-    qiniu-ai:
-      model: kling-v2-6
+      - name: lm-studio
+        base_url: http://localhost:1234/v1
+        model: local-model
+      - name: ollama
+        base_url: http://localhost:11434
+        model: llama3
+      - name: opencode
+        api_key: public
+        base_url: https://opencode.ai/zen/v1
+        model: opencode/big-pickle
+      - name: openrouter
+        api_key: ${OPENROUTER_API_KEY}
+        base_url: https://openrouter.ai/api/v1
+        model: openrouter/free
+
   use_model_registry: false
   user_agent: opencode/1.4.8
 mcp:

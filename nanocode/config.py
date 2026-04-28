@@ -79,14 +79,14 @@ class Config:
             yaml.dump(self._config, f, default_flow_style=False, sort_keys=False)
 
     @property
-    def providers(self) -> dict:
-        """Get LLM providers configuration."""
-        return self.get("llm.providers", {})
+    def connectors(self) -> dict:
+        """Get LLM connectors configuration."""
+        return self.get("llm.connectors", {})
 
     @property
-    def default_provider(self) -> str:
-        """Get default LLM provider."""
-        return self.get("llm.default_provider", "openai")
+    def default_connector(self) -> str:
+        """Get default LLM connector."""
+        return self.get("llm.default_connector", "openai")
 
     @property
     def mcp_servers(self) -> dict:

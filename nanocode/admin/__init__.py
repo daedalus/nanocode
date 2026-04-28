@@ -265,7 +265,7 @@ class AdminConsole:
             key = data.get("key", "")
 
             if key:
-                self.config.set(f"llm.providers.{name}.api_key", key)
+                self.config.set(f"llm.connectors.{name}.api_key", key)
 
             return web.HTTPFound("/keys")
         except Exception as e:
@@ -278,7 +278,7 @@ class AdminConsole:
             name = data.get("name", "")
 
             if name:
-                self.config.set(f"llm.providers.{name}.api_key", "")
+                self.config.set(f"llm.connectors.{name}.api_key", "")
 
             return web.HTTPFound("/keys")
         except Exception as e:
@@ -391,9 +391,9 @@ class AdminConsole:
     def _get_api_keys(self) -> list[dict]:
         """Get stored API keys (masked)."""
         keys = []
-        providers = self.config.providers
+        connectors = self.config.connectors
 
-        for name, provider_config in providers.items():
+        for name, provider_config in connectors.items():
             if isinstance(provider_config, dict):
                 api_key = provider_config.get("api_key", "")
                 if api_key and not api_key.startswith("${"):

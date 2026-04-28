@@ -439,7 +439,7 @@ class AutonomousAgent:
         """Initialize LLM provider."""
         import asyncio
         default_model = self.config.get("llm.default_model")
-        default_provider = self.config.default_provider
+        default_connector = self.config.default_connector
         user_agent = self.config.get("llm.user_agent", "nanocode/1.0")
         proxy = self.config.proxy
 
@@ -453,27 +453,27 @@ class AutonomousAgent:
                 asyncio.create_task(registry.load())
 
         # Validate required config
-        if not default_provider:
-            raise ValueError("No default_provider configured. Set llm.default_provider in config.yaml")
+        if not default_connector:
+            raise ValueError("No default_connector configured. Set llm.default_connector in config.yaml")
         if not default_model:
             raise ValueError("No default_model configured. Set llm.default_model in config.yaml")
 
-        # FIRST: Use default_provider from config when set (before registry logic)
-        if default_provider:
-            providers = self.config.providers
-            if default_provider in providers:
-                provider_config = providers[default_provider].copy()
+        # FIRST: Use default_connector from config when set (before registry logic)
+        if default_connector:
+            connectors = self.config.connectors
+            if default_connector in connectors:
+                provider_config = connectors[default_connector].copy()
                 model = provider_config.pop("model", default_model)
                 explicit_max_tokens = provider_config.pop("max_tokens", None)
                 logger.info(
-                    f"Using default_provider: {default_provider}, model: {model}"
+                    f"Using default_connector: {default_connector}, model: {model}"
                 )
                 logger.info(f"URL: {provider_config.get('base_url')}")
 
                 # Try to get max_tokens from registry if not explicitly set
                 if not explicit_max_tokens:
                     from nanocode.llm.router import OUTPUT_TOKEN_MAX
-                    model_id = model if "/" in model else f"{default_provider}/{model}"
+                    model_id = model if "/" in model else f"{default_connector}/{model}"
                     registry_model_info = registry.get_model_by_full_id(model_id)
                     if registry_model_info and registry_model_info.max_output_tokens > 0:
                         explicit_max_tokens = max(registry_model_info.max_output_tokens, OUTPUT_TOKEN_MAX)
@@ -481,7 +481,7 @@ class AutonomousAgent:
                 from nanocode.llm import create_llm
 
                 llm = create_llm(
-                    default_provider,
+                    default_connector,
                     model=model,
                     user_agent=user_agent,
                     proxy=proxy,
@@ -493,16 +493,16 @@ class AutonomousAgent:
                 return
             else:
                 logger.warning(
-                    f"Provider {default_provider} not in providers: {list(providers.keys())}"
+                    f"Connector {default_connector} not in connectors: {list(connectors.keys())}"
                 )
 
-            # Only use registry if no default_provider
+            # Only use registry if no default_connector
             from nanocode.llm.router import get_router
 
-            providers = self.config.get("llm.providers", {})
+            connectors = self.config.get("llm.connectors", {})
             router = get_router()
 
-            for provider, config in providers.items():
+            for provider, config in connectors.items():
                 router.add_explicit_provider(provider, config)
 
             provider_config = router.get_provider_config(default_model)
@@ -511,8 +511,8 @@ class AutonomousAgent:
             )
 
             from nanocode.llm import OpenAILLM
-            from nanocode.llm.providers.anthropic import AnthropicLLM
-            from nanocode.llm.providers.ollama import OllamaLLM
+            from nanocode.llm.connectors.anthropic import AnthropicLLM
+            from nanocode.llm.connectors.ollama import OllamaLLM
 
             if provider_config.provider == "anthropic":
                 self.llm = AnthropicLLM(
@@ -537,11 +537,11 @@ class AutonomousAgent:
                     proxy=proxy,
                 )
         else:
-            providers = self.config.providers
-            default = self.config.default_provider
+            connectors = self.config.connectors
+            default = self.config.default_connector
 
-            if default in providers:
-                provider_config = providers[default]
+            if default in connectors:
+                provider_config = connectors[default]
                 self.llm = create_llm(
                     default,
                     **provider_config,

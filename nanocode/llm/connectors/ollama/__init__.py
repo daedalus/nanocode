@@ -35,12 +35,12 @@ class OllamaLLM(LLMBase):
         if tools:
             payload["tools"] = tools
 
-        async with self._client.post(
-                f"{self.base_url}/api/chat",
-                json=payload,
-            ) as response:
-            response.raise_for_status()
-            data = response.json()
+        response = await self._client.post(
+            f"{self.base_url}/api/chat",
+            json=payload,
+        )
+        response.raise_for_status()
+        data = await response.json()
 
         tool_calls = []
         if tc_data := data.get("tool_calls"):

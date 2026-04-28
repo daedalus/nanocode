@@ -52,13 +52,13 @@ class AnthropicLLM(LLMBase):
         if tools:
             payload["tools"] = tools
 
-        async with self._client.post(
-                "https://api.anthropic.com/v1/messages",
-                json=payload,
-                headers=headers,
-            ) as response:
-            response.raise_for_status()
-            data = response.json()
+        response = await self._client.post(
+            "https://api.anthropic.com/v1/messages",
+            json=payload,
+            headers=headers,
+        )
+        response.raise_for_status()
+        data = response.json()
 
         tool_calls = []
         if tc_data := data.get("tool_calls", []):

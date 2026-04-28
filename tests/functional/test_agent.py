@@ -75,6 +75,7 @@ class MockLLM:
 
     def __init__(self, response_content: str = "Mock response"):
         self.response_content = response_content
+        self.model = "mock-model"
 
     async def chat(self, messages, tools=None, **kwargs):
         return LLMResponse(content=self.response_content, tool_calls=[])
@@ -159,12 +160,12 @@ class TestAutonomousAgentAsync:
     def agent_with_mock_llm(self):
         """Create agent with mock LLM."""
 
-        with patch("nanocode.llm.OpenAILLM") as MockOpenAI:
+        with patch("nanocode.core.OpenAILLM") as MockOpenAI:
             mock_instance = MockLLM("Test response")
             MockOpenAI.return_value = mock_instance
-            with patch("nanocode.llm.AnthropicLLM") as MockAnthropic:
+            with patch("nanocode.core.AnthropicLLM") as MockAnthropic:
                 MockAnthropic.return_value = mock_instance
-                with patch("nanocode.llm.OllamaLLM") as MockOllama:
+                with patch("nanocode.core.OllamaLLM") as MockOllama:
                     MockOllama.return_value = mock_instance
                     agent = AutonomousAgent()
                     yield agent
