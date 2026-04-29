@@ -248,11 +248,35 @@ class SessionProcessor:
 
     async def _handle_tool_call(self, ctx: ProcessorContext, event: ToolCallEvent):
         """Handle tool call (matches opencode's tool-call)."""
+        # Create ToolPart if it doesn't exist
         if event.tool_call_id not in ctx.tool_calls:
-            return
-        # Update tool part with input
-        # (Implementation depends on session service)
-        pass
+            tool_part = ToolPart(
+                id=f"part_{int(time.time() * 1000)}",
+                session_id=ctx.session_id,
+                message_id=ctx.assistant_message.id,
+                tool=event.tool_name,
+                call_id=event.tool_call_id,
+                state={"status": "pending", "input": event.input or {}, "raw": ""},
+            )
+            ctx.assistant_message.parts.append(tool_part)
+            ctx.tool_calls[event.tool_call_id] = ToolCallState(
+                part_id=tool_part.id,
+                message_id=tool_part.message_id,
+                session_id=tool_part.session_id,
+            )
+            if not self.headless and self.session:
+                await self.session.update_part(tool_part)
+        else:
+            # Update existing ToolPart with input
+            state = ctx.tool_calls[event.tool_call_id]
+            # Find the ToolPart and update it
+            for part in ctx.assistant_message.parts:
+                if isinstance(part, ToolPart) and part.call_id == event.tool_call_id:
+                    part.tool = event.tool_name
+                    part.state["input"] = event.input or {}
+                    if not self.headless and self.session:
+                        await self.session.update_part(part)
+                    break
 
     async def _handle_text_start(self, ctx: ProcessorContext, event: TextStartEvent):
         """Handle text start."""

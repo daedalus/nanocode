@@ -1376,7 +1376,7 @@ Conversation:
         self,
         user_input: str,
         show_thinking: bool = True,
-        show_messages: bool = True,
+        show_messages: bool = False,
         on_token: callable = None,
         on_tool_start: callable = None,
         on_tool_complete: callable = None,
@@ -1407,7 +1407,7 @@ Conversation:
         self,
         user_input: str,
         show_thinking: bool = True,
-        show_messages: bool = True,
+        show_messages: bool = False,
         on_token: callable = None,
         on_tool_start: callable = None,
         on_tool_complete: callable = None,
@@ -1458,13 +1458,16 @@ Conversation:
                     f"\n[debug][DEBUG] Sending {len(messages)} messages to LLM...[/debug]"
                 )
                 for i, msg in enumerate(messages):
+                    role = msg.role if hasattr(msg, "role") else msg.get("role", "?")
+                    if role == "system":
+                        continue
                     content = (
                         msg.content
                         if hasattr(msg, "content")
                         else str(msg.get("content", ""))
                     )
-                    role = msg.role if hasattr(msg, "role") else msg.get("role", "?")
-                    console.print(f"  [dim]{i}: {role}: {content}[/dim]")
+                    display = content[:200] + "..." if len(content) > 200 else content
+                    console.print(f"  [dim]{i}: {role}: {display}[/dim]")
 
             if show_messages:
                 console.print("\n[debug]=== LLM REQUEST ===[/debug]")

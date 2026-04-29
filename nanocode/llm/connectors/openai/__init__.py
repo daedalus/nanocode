@@ -74,6 +74,9 @@ class OpenAILLM(LLMBase):
         # Yield start event
         yield StreamEvent(type=EventType.START)
 
+        # Accumulate tool calls by index
+        accumulated_tool_calls = {}
+
         async with self._client.stream(
             "POST",
             f"{self.base_url}/chat/completions",
@@ -110,25 +113,38 @@ class OpenAILLM(LLMBase):
                             logger.debug(f"Yielding TextDelta: {content[:50]}...")
                             yield TextDeltaEvent(text=content)
 
-                    # Handle tool calls
+                    # Handle tool calls - accumulate by index
                     if "tool_calls" in delta:
                         for tc in delta["tool_calls"]:
+                            idx = tc.get("index", 0)
+                            if idx not in accumulated_tool_calls:
+                                accumulated_tool_calls[idx] = {
+                                    "id": "",
+                                    "name": "",
+                                    "arguments": "",
+                                }
+                            if "id" in tc:
+                                accumulated_tool_calls[idx]["id"] = tc["id"]
                             if "function" in tc:
                                 func = tc["function"]
-                                args_str = func.get("arguments", "{}")
-                                try:
-                                    arguments = json.loads(args_str) if args_str else {}
-                                except json.JSONDecodeError:
-                                    arguments = {}
+                                if "name" in func:
+                                    accumulated_tool_calls[idx]["name"] = func["name"]
+                                if "arguments" in func:
+                                    accumulated_tool_calls[idx]["arguments"] += func["arguments"]
 
-                                yield ToolCallEvent(
-                                    tool_call_id=tc.get("id", ""),
-                                    tool_name=func.get("name", ""),
-                                    input=arguments,
-                                )
-
-                    # Handle finish
+                    # Handle finish - yield accumulated tool calls
                     if choice.get("finish_reason"):
+                        for idx, tc_data in accumulated_tool_calls.items():
+                            args_str = tc_data["arguments"]
+                            try:
+                                arguments = json.loads(args_str) if args_str else {}
+                            except json.JSONDecodeError:
+                                arguments = {}
+                            yield ToolCallEvent(
+                                tool_call_id=tc_data["id"],
+                                tool_name=tc_data["name"],
+                                input=arguments,
+                            )
                         yield FinishStepEvent(
                             finish_reason=choice["finish_reason"],
                             usage=event.get("usage", {}),

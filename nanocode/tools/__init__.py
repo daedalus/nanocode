@@ -436,6 +436,11 @@ class ToolExecutor:
                     except Exception:
                         pass
             
+            # Remove internal arguments that most tools don't expect
+            # Tools that need agent_name/session_id should accept **kwargs
+            arguments.pop("_agent_name", None)
+            arguments.pop("_session_id", None)
+            
             result_obj = await tool.execute(**arguments)
             elapsed = time.monotonic() - start
             logger.debug(f"Tool '{tool_name}' executed in {elapsed:.2f}s")

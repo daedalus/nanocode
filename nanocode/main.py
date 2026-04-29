@@ -376,9 +376,6 @@ async def main():
 
     if args.get_system_prompt:
         # Build the actual system prompt with dynamic content
-        from nanocode.config import Config
-        from nanocode.core import AutonomousAgent
-
         # Create config and agent - full initialization needed for registries
         config = Config(args.config) if hasattr(args, 'config') and args.config else Config()
         agent = AutonomousAgent(config, verbose=args.verbose if hasattr(args, 'verbose') else False)
