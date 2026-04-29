@@ -715,10 +715,15 @@ class AutonomousAgent:
                 lsp_info.append(f"- {server_id}")
 
         # Get skills
+        # NOTE: Only include skill NAME and DESCRIPTION in system prompt
+        # NEVER include the full skill content (body) in the system prompt
         skill_info = []
         if hasattr(self, "skills_manager") and self.skills_manager:
             for name, skill in self.skills_manager.skills.items():
                 desc = getattr(skill, "description", "") or ""
+                # Safety: truncate description to 500 chars to prevent accidental body leak
+                if len(desc) > 500:
+                    desc = desc[:500] + "..."
                 skill_info.append(f"- {name}: {desc}")
 
         # Check for additional .system_prompts/*.md files (except template.md)

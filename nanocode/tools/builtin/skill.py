@@ -41,7 +41,11 @@ class SkillTool(Tool):
             skill_lines.append("")
             skill_lines.append("Available skills:")
             for s in skills:
-                skill_lines.append(f"  - {s['name']}: {s['description']}")
+                desc = s['description'] or ""
+                # Safety: truncate to 500 chars to prevent full body leak
+                if len(desc) > 500:
+                    desc = desc[:500] + "..."
+                skill_lines.append(f"  - {s['name']}: {desc}")
         else:
             skill_lines.append("(No skills available)")
 
