@@ -1885,17 +1885,51 @@ Conversation:
                 for thinking in self._all_thinking:
                     augmented += f"\n\n[thought]| Thinking:[/thought] {thinking}"
 
-            # Include tool use info (always show)
+            # Include tool use info (like opencode's format)
             if tool_results_history:
                 tool_info = ""
                 for tr in tool_results_history:
-                    result_str = str(tr["result"])
+                    tool_name = tr["tool_name"]
                     args = tr.get("arguments", {})
-                    if args:
-                        args_display = ", ".join(f"{k}={v}" for k, v in args.items())
-                        tool_info += f"\n> {tr['tool_name']} {args_display}\n  {result_str}"
+                    result_str = str(tr["result"])
+                    
+                    # Format like opencode: icon + natural format
+                    if tool_name == "bash":
+                        cmd = args.get("command", "")
+                        tool_info += f"\n$ {cmd}\n  {result_str}"
+                    elif tool_name == "glob":
+                        pattern = args.get("pattern", "")
+                        root = args.get("path", "")
+                        suffix = f" in {root}" if root else ""
+                        tool_info += f"\n✱ Glob \"{pattern}\"{suffix}\n  {result_str}"
+                    elif tool_name == "grep":
+                        pattern = args.get("pattern", "")
+                        root = args.get("path", "")
+                        suffix = f" in {root}" if root else ""
+                        tool_info += f"\n✱ Grep \"{pattern}\"{suffix}\n  {result_str}"
+                    elif tool_name == "read":
+                        filepath = args.get("path", "")
+                        extra = ""
+                        if "offset" in args or "limit" in args:
+                            opts = ", ".join(f"{k}={v}" for k, v in args.items() if k in ("offset", "limit"))
+                            extra = f" [{opts}]"
+                        tool_info += f"\n→ Read {filepath}{extra}\n  {result_str}"
+                    elif tool_name == "write":
+                        filepath = args.get("path", "")
+                        tool_info += f"\n← Write {filepath}\n  {result_str}"
+                    elif tool_name == "edit":
+                        filepath = args.get("path", "")
+                        tool_info += f"\n← Edit {filepath}\n  {result_str}"
+                    elif tool_name == "webfetch":
+                        url = args.get("url", "")
+                        tool_info += f"\n% WebFetch {url}\n  {result_str}"
+                    elif tool_name == "skill":
+                        name = args.get("name", "")
+                        tool_info += f"\n→ Skill \"{name}\"\n  {result_str}"
                     else:
-                        tool_info += f"\n> {tr['tool_name']}\n  {result_str}"
+                        # Generic format
+                        tool_info += f"\n⚙ {tool_name}\n  {result_str}"
+                
                 augmented += tool_info
 
                 if show_messages:

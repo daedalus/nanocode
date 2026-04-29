@@ -2426,14 +2426,13 @@ Footer {
 
                     def on_tool_start(tool_name, args):
                         """Called when a tool starts execution."""
-                        if args and isinstance(args, dict):
-                            args_display = ", ".join(f"{k}={v}" for k, v in args.items())
-                            args_str = args_display[:100] + "..." if len(args_display) > 100 else args_display
-                        else:
-                            args_str = str(args)[:100] if args else ""
-                        self._print_line(
-                            f"> {tool_name} {args_str}", Style.TOOL_MESSAGE
-                        )
+                        # Use the same format as _format_tool_call (matches opencode)
+                        tool_call = self._format_tool_call(tool_name, args)
+                        # Display as: icon + title + description (like opencode's inline())
+                        line = f"{tool_call.icon} {tool_call.title}"
+                        if tool_call.description:
+                            line += f" {tool_call.description}"
+                        self._print_line(line, Style.TOOL_MESSAGE)
 
                     def on_tool_complete(tool_name, result):
                         """Called when a tool completes."""
