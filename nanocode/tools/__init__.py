@@ -388,6 +388,23 @@ class ToolExecutor:
             logger.debug(f"Executing tool '{tool_name}'")
             import time
             start = time.monotonic()
+            
+            # Add agent and session info to arguments for tools that might need it
+            if agent_name is not None:
+                arguments["_agent_name"] = agent_name
+            if session_id is not None:
+                arguments["_session_id"] = session_id
+            
+            # Get agent info for tools that support it (like skill tool)
+            agent_info = None
+            if agent_name is not None:
+                try:
+                    from nanocode.agents import get_agent_registry
+                    registry = get_agent_registry()
+                    agent_info = registry.get(agent_name)
+                except Exception:
+                    pass  # Agent info is optional
+            
             # Validate arguments before executing
             if isinstance(arguments, str):
                 try:
@@ -407,6 +424,18 @@ class ToolExecutor:
                     logger.warning(f"Tool '{tool_name}' missing required arguments: {error_msg}")
                     result_obj = ToolResult(success=False, error=error_msg)
                     return result_obj
+            # For tools that accept agent_info in get_schema (like skill tool), pass it
+            if hasattr(tool, 'get_schema') and agent_info is not None:
+                try:
+                    # Try calling get_schema with agent_info
+                    tool.get_schema(agent_info)
+                except TypeError:
+                    # Tool's get_schema doesn't accept agent_info, call without args
+                    try:
+                        tool.get_schema()
+                    except Exception:
+                        pass
+            
             result_obj = await tool.execute(**arguments)
             elapsed = time.monotonic() - start
             logger.debug(f"Tool '{tool_name}' executed in {elapsed:.2f}s")

@@ -95,6 +95,7 @@ class AgentPipeline:
         final_result = "continue"
         try:
             async for event in self.llm.chat_stream(messages, tools):
+                logger.debug(f"Pipeline received event: {type(event).__name__} - {event}")
                 await self.processor._handle_event(ctx, event)
 
                 # Stream text tokens to callback (like opencode's onToken)

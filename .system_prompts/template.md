@@ -38,13 +38,13 @@ If user says "read AND X", "fetch AND Y", or "do A then B":
 ## Available Tools
 {tools}
 
-## Skills
+## Available Skills
 {skills}
 
-## MCP Servers
+## Available MCP Servers
 {mcp_servers}
 
-## LSP Servers
+## Available LSP Servers
 {lsp_servers}
 
 # Workflow

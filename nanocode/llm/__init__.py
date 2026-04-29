@@ -57,32 +57,32 @@ async def create_llm_from_model_id(
 
     provider_config = router.get_provider_config(model_id, default_provider)
 
-    if provider_config.provider == "anthropic":
+    if provider_config.get("name") == "anthropic":
         llm = AnthropicLLM(
-            api_key=provider_config.api_key,
-            model=provider_config.model,
-            max_tokens=provider_config.max_tokens,
+            api_key=provider_config.get("api_key"),
+            model=provider_config.get("model"),
+            max_tokens=provider_config.get("max_tokens"),
         )
-    elif provider_config.provider == "ollama":
+    elif provider_config.get("name") == "ollama":
         llm = OllamaLLM(
-            base_url=provider_config.base_url,
-            model=provider_config.model,
-            max_tokens=provider_config.max_tokens,
+            base_url=provider_config.get("base_url"),
+            model=provider_config.get("model"),
+            max_tokens=provider_config.get("max_tokens"),
         )
-    elif provider_config.provider == "lm-studio":
+    elif provider_config.get("name") == "lm-studio":
         llm = OpenAILLM(
-            base_url=provider_config.base_url,
-            api_key=provider_config.api_key or "dummy",
-            model=provider_config.model,
-            max_tokens=provider_config.max_tokens,
+            base_url=provider_config.get("base_url"),
+            api_key=provider_config.get("api_key") or "dummy",
+            model=provider_config.get("model"),
+            max_tokens=provider_config.get("max_tokens"),
         )
     else:
         llm = OpenAILLM(
-            base_url=provider_config.base_url,
-            api_key=provider_config.api_key or "dummy",
-            model=provider_config.model,
-            max_tokens=provider_config.max_tokens,
-            context_limit=getattr(provider_config, 'context_limit', None),
+            base_url=provider_config.get("base_url"),
+            api_key=provider_config.get("api_key") or "dummy",
+            model=provider_config.get("model"),
+            max_tokens=provider_config.get("max_tokens"),
+            context_limit=provider_config.get("context_limit"),
         )
 
     return llm, provider_config

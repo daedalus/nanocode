@@ -1,7 +1,12 @@
 """Skill tool for executing custom commands."""
 
+from typing import Optional, TYPE_CHECKING
 from nanocode.skills import SkillsManager
 from nanocode.tools import Tool, ToolResult
+
+# TYPE_CHECKING imports to avoid circular dependencies
+if TYPE_CHECKING:
+    from nanocode.agents import AgentInfo
 
 
 class SkillTool(Tool):
@@ -28,9 +33,9 @@ class SkillTool(Tool):
         )
         self.skills_manager = skills_manager
 
-    def get_schema(self) -> dict:
+    def get_schema(self, agent_info: Optional["AgentInfo"] = None) -> dict:
         """Get schema with dynamically generated skill list."""
-        skills = self.skills_manager.list_skills()
+        skills = self.skills_manager.list_skills(agent_info)
         skill_lines = []
         if skills:
             skill_lines.append("")
@@ -69,6 +74,26 @@ class SkillTool(Tool):
         try:
             skill_info = self.skills_manager.get_skill(name)
             if not skill_info:
+                # Check if it's a permission issue
+                agent_name = kwargs.get("_agent_name")
+                if agent_name:
+                    from nanocode.agents import get_agent_registry, PermissionAction, evaluate_permission
+                    registry = get_agent_registry()
+                    agent_info = registry.get(agent_name)
+                    if agent_info:
+                        # Check if skill exists but is denied by permissions
+                        all_skills = self.skills_manager.list_skills()
+                        skill_exists = any(s["name"] == name for s in all_skills)
+                        if skill_exists:
+                            # Skill exists, check permissions
+                            action = evaluate_permission("skill", name, agent_info.permission)
+                            if action == PermissionAction.DENY:
+                                return ToolResult(
+                                    success=False,
+                                    content=None,
+                                    error=f"Permission denied: skill '{name}' is not available for agent '{agent_name}'",
+                                )
+                
                 available = [s["name"] for s in self.skills_manager.list_skills()]
                 return ToolResult(
                     success=False,
@@ -76,9 +101,32 @@ class SkillTool(Tool):
                     error=f"Skill '{name}' not found. Available: {', '.join(available) if available else 'none'}",
                 )
 
+            # Extract agent and session info from kwargs if present
+            agent_name = kwargs.get("_agent_name")
+            session_id = kwargs.get("_session_id")
+            
+            # Create agent info if we have agent name
+            agent_info = None
+            if agent_name:
+                from nanocode.agents import get_agent_registry
+                registry = get_agent_registry()
+                agent_info = registry.get(agent_name)
+                # If agent not found, create a basic one
+                if agent_info is None:
+                    from nanocode.agents import AgentInfo, AgentMode
+                    agent_info = AgentInfo(
+                        name=agent_name,
+                        description=f"Agent {agent_name}",
+                        mode=AgentMode.PRIMARY,
+                        permission=[],  # Empty permissions
+                    )
+
             context = {
                 "input": input or "",
                 "kwargs": kwargs,
+                "agent_name": agent_name,
+                "session_id": session_id,
+                "agent_info": agent_info,
             }
 
             result = await self.skills_manager.execute_skill(name, {"input": input}, context)

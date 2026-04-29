@@ -166,11 +166,12 @@ def parse_args():
         help="Working directory for ACP/server",
     )
     parser.add_argument(
-        "--install-skills",
+        "--working-directory",
         type=str,
-        metavar="SKILL",
-        help="Install a skill by name (e.g., 'redteaming') or 'all' for all skills",
+        default=None,
+        help="Working directory for agent operations (defaults to current directory)",
     )
+
     parser.add_argument(
         "--proxy",
         type=str,
@@ -267,6 +268,11 @@ def parse_args():
         type=str,
         default="\n",
         help="Input separator: blank (default), '---' or custom string",
+    )
+    parser.add_argument(
+        "--get-system-prompt",
+        action="store_true",
+        help="Print the current formatted system prompt and exit",
     )
     return parser.parse_args()
 
@@ -368,16 +374,23 @@ async def main():
             )
         return
 
+    if args.get_system_prompt:
+        # Build the actual system prompt with dynamic content
+        from nanocode.config import Config
+        from nanocode.core import AutonomousAgent
+
+        # Create config and agent - full initialization needed for registries
+        config = Config(args.config) if hasattr(args, 'config') and args.config else Config()
+        agent = AutonomousAgent(config, verbose=args.verbose if hasattr(args, 'verbose') else False)
+
+        # Build and print the system prompt (uses already-initialized registries)
+        prompt = agent._build_system_prompt()
+        print(prompt)
+        return
+
     gui_mode = getattr(args, "gui", "cli")
 
-    if args.install_skills:
-        from nanocode.skills import install_skills
 
-        if args.install_skills == "all":
-            install_skills()
-        else:
-            install_skills(args.install_skills)
-        return
 
     if args.serve:
         os.chdir(args.cwd)
@@ -496,6 +509,10 @@ async def main():
             await runner.cleanup()
         return
 
+    # Change working directory if specified
+    if args.working_directory:
+        os.chdir(args.working_directory)
+    
     config = Config(args.config)
 
     print(f"nanocode v{__version__}")

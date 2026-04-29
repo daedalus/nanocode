@@ -273,6 +273,7 @@ class SessionProcessor:
         """Handle text delta."""
         # Auto-create TextPart if not exists (for LLMs that don't send TextStartEvent)
         if not ctx.current_text:
+            logger.debug("Auto-creating TextPart for TextDeltaEvent")
             ctx.current_text = TextPart(
                 id=f"part_{int(time.time() * 1000)}",
                 session_id=ctx.session_id,
@@ -281,6 +282,7 @@ class SessionProcessor:
                 time_start=time.time(),
             )
             ctx.assistant_message.parts.append(ctx.current_text)
+            logger.debug(f"TextPart created: {ctx.current_text.id}")
 
         ctx.current_text.text += event.text
         if self.headless or not self.session:

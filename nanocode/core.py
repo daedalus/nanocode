@@ -1753,8 +1753,10 @@ Conversation:
                         return content
 
                 content = final_response.content
+                logger.warning(f"[DEBUG] final_response.content = [{content}]")
             else:
                 content = response.content
+                logger.warning(f"[DEBUG] response.content = [{content}]")
 
             # After tool execution loop, always continue if we have tool results
             # The model should execute pending tasks, not just describe them
@@ -1904,6 +1906,7 @@ Conversation:
 
             self.state.state = AgentState.COMPLETE
 
+            logger.debug(f"[{agent_name}] Returning augmented content: {augmented}")
             return augmented
 
         except asyncio.CancelledError:
