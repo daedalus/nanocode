@@ -197,8 +197,23 @@ class SessionProcessor:
 
     async def _handle_reasoning_delta(self, ctx: ProcessorContext, event: ReasoningDeltaEvent):
         """Handle reasoning delta (matches opencode's reasoning-delta)."""
+        # Auto-create ReasoningPart if it doesn't exist (for LLMs that don't send ReasoningStartEvent)
         if event.id not in ctx.reasoning_map:
-            return
+            reasoning_part = ReasoningPart(
+                id=f"part_{int(time.time() * 1000)}",
+                session_id=ctx.session_id,
+                message_id=ctx.assistant_message.id,
+                text="",
+                time_start=time.time(),
+                metadata=event.provider_metadata,
+            )
+            ctx.reasoning_map[event.id] = reasoning_part
+            ctx.all_thinking.append("")  # Placeholder for this reasoning block
+            # Add to message parts (always do this, even in headless mode)
+            ctx.assistant_message.parts.append(reasoning_part)
+            if not self.headless and self.session:
+                await self.session.update_part(reasoning_part)
+        
         ctx.reasoning_map[event.id].text += event.text
         # Update the accumulated thinking
         ctx.all_thinking[-1] = ctx.reasoning_map[event.id].text
@@ -214,8 +229,22 @@ class SessionProcessor:
 
     async def _handle_reasoning_end(self, ctx: ProcessorContext, event: ReasoningEndEvent):
         """Handle reasoning end (matches opencode's reasoning-end)."""
+        # Auto-create ReasoningPart if it doesn't exist
         if event.id not in ctx.reasoning_map:
-            return
+            reasoning_part = ReasoningPart(
+                id=f"part_{int(time.time() * 1000)}",
+                session_id=ctx.session_id,
+                message_id=ctx.assistant_message.id,
+                text="",
+                time_start=time.time(),
+                metadata=event.provider_metadata,
+            )
+            ctx.reasoning_map[event.id] = reasoning_part
+            ctx.all_thinking.append("")  # Placeholder
+            ctx.assistant_message.parts.append(reasoning_part)
+            if not self.headless and self.session:
+                await self.session.update_part(reasoning_part)
+        
         part = ctx.reasoning_map[event.id]
         part.time_end = time.time()
         if event.provider_metadata:
