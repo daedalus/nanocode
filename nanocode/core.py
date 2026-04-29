@@ -1533,9 +1533,10 @@ Conversation:
                 logger.info(f"[{agent_name}] LLM response received")
                 logger.info(f"[{agent_name}] Thinking: {response.thinking[:100] if response.thinking else 'None'}...")
 
-            # Track thinking (like opencode's reasoning parts)
+            # Track thinking from first response
             if response.thinking:
-                self._all_thinking.append(response.thinking)
+                # Already tracked in self._all_thinking via processor
+                pass
 
             if self.debug:
                 console.print("\n[debug][DEBUG] LLM Response:[/debug]")
@@ -1835,8 +1836,7 @@ Conversation:
             else:
                 # No tool calls - store thinking
                 if response.thinking:
-                    self._all_thinking.append(response.thinking)
-                content = response.content
+                    content = response.content
 
             # Text-to-Tool Detection: Handle model outputs text that looks like commands
             detected = detect_commands_in_text(content)
@@ -1880,10 +1880,9 @@ Conversation:
             # Build augmented content with thinking and tool use info
             augmented = content
 
-            # Always include all thinking if available (like opencode's reasoning parts)
-            if hasattr(self, "_all_thinking") and self._all_thinking:
-                for thinking in self._all_thinking:
-                    augmented += f"\n\n[thought]| Thinking:[/thought] {thinking}"
+            # Include thinking (like opencode's reasoning parts)
+            if response.thinking:
+                augmented += f"\n\n[thought]| Thinking:[/thought] {response.thinking}"
 
             # Include tool use info (like opencode's format)
             if tool_results_history:

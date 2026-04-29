@@ -2413,10 +2413,12 @@ Footer {
                     # Streaming buffer for real-time display
                     self._stream_buffer = ""
                     self._stream_timer = None
+                    self._was_streamed = False  # Track if on_token was called
 
                     # Define callbacks for real-time updates
                     def on_token(token: str):
                         """Called for each token from LLM."""
+                        self._was_streamed = True  # Mark that streaming happened
                         self._stream_buffer += token
                         # Update display every 100ms (if not already scheduled)
                         if self._stream_timer is None:
@@ -2589,17 +2591,9 @@ Footer {
                             self._print_line(f"| Thinking: {thinking}", Style.THINKING)
                             self._print_empty()
 
-                # Display final response with role coloring and syntax highlighting
-                _tui_logger.debug(f"Result check: result={result is not None}, len={len(result) if result else 0}")
-                print(f"[TUI DEBUG] result={result is not None}, len={len(result) if result else 0}", file=sys.stderr)
-
-                # Show thinking first (all parts like opencode)
-                all_thinking = getattr(self.agent, "_all_thinking", [])
-                for thinking in all_thinking:
-                    self._print_line(f"| Thinking: {thinking}", Style.THINKING)
-                    self._print_empty()
-
-                if result and len(result) > 0:
+                # Display final response - only if NOT already streamed via on_token
+                # (streaming already wrote to output_area via _update_stream_display)
+                if not getattr(self, '_was_streamed', False) and result and len(result) > 0:
                     _tui_logger.debug(f"Displaying result: len={len(result)}")
                     print(f"[TUI DEBUG] Displaying: {result[:100]}...", file=sys.stderr)
                     try:
@@ -2612,8 +2606,7 @@ Footer {
                         _tui_logger.debug(f"Output area error: {e}")
                         self._print_line(result, Style.ASSISTANT_MESSAGE)
                 else:
-                    print(f"[TUI DEBUG] No result to show", file=sys.stderr)
-                    self._print_line("(waiting for model response...)", Style.TEXT_DIM)
+                    print(f"[TUI DEBUG] Skipping result display (already streamed)", file=sys.stderr)
 
                 # Completion marker like opencode's `▣`
                 self._print_line("▣", Style.TEXT_SUCCESS_BOLD)

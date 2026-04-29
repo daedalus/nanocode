@@ -711,7 +711,6 @@ async def main():
                 print(f"[MAIN] process_input returned: {type(result)}, len={len(result) if result else 0}")
                 if result:
                     results.append(result)
-                    print(f"Response: {result[:200]}{'...' if len(result) > 200 else ''}")
                 else:
                     print("Warning: agent returned empty result")
             except asyncio.TimeoutError:
