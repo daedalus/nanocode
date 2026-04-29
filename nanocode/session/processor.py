@@ -271,8 +271,17 @@ class SessionProcessor:
 
     async def _handle_text_delta(self, ctx: ProcessorContext, event: TextDeltaEvent):
         """Handle text delta."""
+        # Auto-create TextPart if not exists (for LLMs that don't send TextStartEvent)
         if not ctx.current_text:
-            return
+            ctx.current_text = TextPart(
+                id=f"part_{int(time.time() * 1000)}",
+                session_id=ctx.session_id,
+                message_id=ctx.assistant_message.id,
+                text="",
+                time_start=time.time(),
+            )
+            ctx.assistant_message.parts.append(ctx.current_text)
+
         ctx.current_text.text += event.text
         if self.headless or not self.session:
             return

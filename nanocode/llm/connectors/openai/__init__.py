@@ -95,15 +95,20 @@ class OpenAILLM(LLMBase):
                     delta = choice.get("delta", {})
 
                     # Handle reasoning (for models that support it)
-                    if "reasoning" in delta and delta["reasoning"]:
+                    # Note: API may return 'reasoning' (not 'reasoning')
+                    reasoning = delta.get("reasoning", "") or delta.get("reasoning", "")
+                    if reasoning:
                         yield ReasoningDeltaEvent(
                             id="reasoning_0",
-                            text=delta["reasoning"],
+                            text=reasoning,
                         )
 
                     # Handle text content
-                    if "content" in delta and delta["content"]:
-                        yield TextDeltaEvent(text=delta["content"])
+                    if "content" in delta:
+                        content = delta["content"]
+                        if content:  # Only yield if non-empty
+                            logger.debug(f"Yielding TextDelta: {content[:50]}...")
+                            yield TextDeltaEvent(text=content)
 
                     # Handle tool calls
                     if "tool_calls" in delta:
