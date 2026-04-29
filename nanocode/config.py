@@ -18,19 +18,23 @@ class Config:
 
     def __init__(self, config_path: str | None = None):
         self._config: dict = {}
-        # Search order: global config first, then local
+        # Search order: env var first, then explicit path, then search paths
         if config_path is None:
-            search_paths = [
-                Path.home() / ".config" / "nanocode" / "config.yaml",
-                Path.home() / "nanocode" / "config.yaml",
-                Path("config.yaml"),
-            ]
-            for p in search_paths:
-                if p.exists():
-                    config_path = str(p)
-                    break
+            if env_config := os.getenv("NANOCODE_CONFIG"):
+                config_path = env_config
             else:
-                config_path = str(search_paths[0])
+                search_paths = [
+                    Path.home() / ".config" / "nanocode" / "config.yaml",
+                    Path.home() / "nanocode" / "config.yaml",
+                    Path("config.yaml"),
+                    Path(__file__).parent.parent / "config.yaml",  # Package dir
+                ]
+                for p in search_paths:
+                    if p.exists():
+                        config_path = str(p)
+                        break
+                else:
+                    config_path = str(search_paths[0])
         self._config_path = config_path
         self.load()
 
@@ -44,11 +48,11 @@ class Config:
     def _apply_env_overrides(self):
         """Apply environment variable overrides."""
         if api_key := os.getenv("OPENAI_API_KEY"):
-            self.setdefault("llm", {}).setdefault("providers", {}).setdefault(
+            self.setdefault("llm", {}).setdefault("connectors", {}).setdefault(
                 "openai", {}
             )["api_key"] = api_key
         if base_url := os.getenv("OPENAI_BASE_URL"):
-            self.setdefault("llm", {}).setdefault("providers", {}).setdefault(
+            self.setdefault("llm", {}).setdefault("connectors", {}).setdefault(
                 "openai", {}
             )["base_url"] = base_url
 
