@@ -2432,7 +2432,7 @@ Footer {
                         else:
                             args_str = str(args)[:100] if args else ""
                         self._print_line(
-                            f"▶ {tool_name}({args_str})...", Style.TOOL_MESSAGE
+                            f"> {tool_name} {args_str}", Style.TOOL_MESSAGE
                         )
 
                     def on_tool_complete(tool_name, result):
