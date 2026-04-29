@@ -1890,9 +1890,13 @@ Conversation:
                 tool_info = "\n\n[thought]| Tool Use:[/thought]"
                 for tr in tool_results_history:
                     result_str = str(tr["result"])
-                    args_str = tr.get("arguments", {})
-                    args_display = f"({args_str})" if args_str else ""
-                    tool_info += f"\n- {tr['tool_name']}{args_display}:\n{result_str}"
+                    args = tr.get("arguments", {})
+                    if args:
+                        args_display = ", ".join(f"{k}={v}" for k, v in args.items())
+                        tool_info += f"\n- {tr['tool_name']}({args_display}):"
+                    else:
+                        tool_info += f"\n- {tr['tool_name']}:"
+                    tool_info += f"\n{result_str}"
                 augmented += tool_info
 
                 if show_messages:
