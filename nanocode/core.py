@@ -1076,7 +1076,12 @@ Conversation:
                 except Exception as e:
                     logger.warning(f"[{agent_name}] on_tool_start callback failed: {e}")
 
-            is_doom_loop = self.doom_loop_handler.check_tool_call(tool_name, args)
+            # Skip doom loop detection in yolo mode
+            if self.yolo:
+                is_doom_loop = False
+            else:
+                is_doom_loop = self.doom_loop_handler.check_tool_call(tool_name, args)
+            
             if is_doom_loop:
                 loop_info = self.doom_loop_handler.detection.get_loop_info()
                 should_show_warning = (
