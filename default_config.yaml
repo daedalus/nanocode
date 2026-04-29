@@ -31,7 +31,7 @@ file_watcher:
   - venv
 github: null
 llm:
-  default_model: big-pickle
+  default_model: opencode/big-pickle
   default_connector: openai
   connectors:
     openai:
