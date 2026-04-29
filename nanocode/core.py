@@ -1236,6 +1236,7 @@ Conversation:
                 {
                     "tool_call_id": tc.id,
                     "tool_name": tool_name,
+                    "arguments": args,
                     "result": self.tool_executor.format_result(result),
                     "success": result.success,
                 }
@@ -1889,7 +1890,9 @@ Conversation:
                 tool_info = "\n\n[thought]| Tool Use:[/thought]"
                 for tr in tool_results_history:
                     result_str = str(tr["result"])
-                    tool_info += f"\n- {tr['tool_name']}:\n{result_str}"
+                    args_str = tr.get("arguments", {})
+                    args_display = f"({args_str})" if args_str else ""
+                    tool_info += f"\n- {tr['tool_name']}{args_display}:\n{result_str}"
                 augmented += tool_info
 
                 if show_messages:
