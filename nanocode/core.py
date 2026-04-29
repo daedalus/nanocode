@@ -1887,16 +1887,15 @@ Conversation:
 
             # Include tool use info (always show)
             if tool_results_history:
-                tool_info = "\n\n[thought]| Tool Use:[/thought]"
+                tool_info = ""
                 for tr in tool_results_history:
                     result_str = str(tr["result"])
                     args = tr.get("arguments", {})
                     if args:
                         args_display = ", ".join(f"{k}={v}" for k, v in args.items())
-                        tool_info += f"\n- {tr['tool_name']}({args_display}):"
+                        tool_info += f"\n> {tr['tool_name']} {args_display}\n  {result_str}"
                     else:
-                        tool_info += f"\n- {tr['tool_name']}:"
-                    tool_info += f"\n{result_str}"
+                        tool_info += f"\n> {tr['tool_name']}\n  {result_str}"
                 augmented += tool_info
 
                 if show_messages:
