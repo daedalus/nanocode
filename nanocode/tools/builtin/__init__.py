@@ -631,6 +631,106 @@ class SedTool(Tool):
             return ToolResult(success=False, content=None, error=str(e))
 
 
+class EditTool(Tool):
+    """Edit file with exact text replacement."""
+
+    def __init__(self):
+        parameters = {
+            "type": "object",
+            "properties": {
+                "filePath": {
+                    "type": "string",
+                    "description": "Absolute path to the file to edit"
+                },
+                "oldString": {
+                    "type": "string",
+                    "description": "Exact text to replace"
+                },
+                "newString": {
+                    "type": "string",
+                    "description": "Replacement text"
+                },
+                "replaceAll": {
+                    "type": "boolean",
+                    "description": "Replace all occurrences of oldString (default: false)",
+                    "default": False
+                }
+            },
+            "required": ["filePath", "oldString", "newString"]
+        }
+        super().__init__(
+            name="edit",
+            description="Edit file with exact text replacement",
+            parameters=parameters
+        )
+
+    async def execute(self, **kwargs) -> ToolResult:
+        """Execute the edit tool with given arguments."""
+        filePath = kwargs.get("filePath")
+        oldString = kwargs.get("oldString")
+        newString = kwargs.get("newString")
+        replaceAll = kwargs.get("replaceAll", False)
+
+        if not filePath:
+            return ToolResult.err("Missing required argument: filePath")
+        if not oldString:
+            return ToolResult.err("Missing required argument: oldString")
+        if not newString:
+            return ToolResult.err("Missing required argument: newString")
+
+        if not os.path.isabs(filePath):
+            return ToolResult.err(f"filePath must be an absolute path: {filePath}")
+
+        if not os.path.isfile(filePath):
+            return ToolResult.err(f"File not found: {filePath}")
+
+        try:
+            loop = asyncio.get_event_loop()
+
+            def read_file():
+                with open(filePath, "r", encoding="utf-8") as f:
+                    return f.read()
+
+            content = await loop.run_in_executor(None, read_file)
+
+            occurrence_count = content.count(oldString)
+            if occurrence_count == 0:
+                return ToolResult.err(f"oldString not found in file: {oldString}")
+
+            if not replaceAll and occurrence_count > 1:
+                return ToolResult.err(
+                    f"Found {occurrence_count} matches for oldString. "
+                    "Set replaceAll=True to replace all occurrences."
+                )
+
+            if replaceAll:
+                new_content = content.replace(oldString, newString)
+                replacements = occurrence_count
+            else:
+                new_content = content.replace(oldString, newString, 1)
+                replacements = 1
+
+            def write_file():
+                with open(filePath, "w", encoding="utf-8") as f:
+                    f.write(new_content)
+
+            await loop.run_in_executor(None, write_file)
+
+            return ToolResult.ok(
+                content=f"Successfully edited {filePath}. Replaced {replacements} occurrence(s).",
+                metadata={
+                    "filePath": filePath,
+                    "replacements": replacements,
+                    "replaceAll": replaceAll
+                }
+            )
+
+        except UnicodeDecodeError:
+            return ToolResult.err("File encoding not supported. Only UTF-8 is supported.")
+        except Exception as e:
+            return ToolResult.err(f"Failed to edit file: {str(e)}")
+
+
 class DiffTool(Tool):
     """Show differences between two files."""
 

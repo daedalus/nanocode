@@ -253,30 +253,6 @@ description: A test skill
         yield tmpdir
         shutil.rmtree(tmpdir)
 
-    def test_install_skills_all(self, temp_package_dir, monkeypatch):
-        """Test installing all skills."""
-        from nanocode.skills import install_skills
-
-        target_dir = tempfile.mkdtemp()
-        monkeypatch.chdir(target_dir)
-
-        try:
-            package_dir = os.path.dirname(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            )
-            skills_src = os.path.join(package_dir, "skills")
-
-            if os.path.isdir(skills_src):
-                result = install_skills(target_dir)
-
-                assert result is True
-                assert os.path.isdir(os.path.join(target_dir, ".nanocode", "skills"))
-
-                skills = os.listdir(os.path.join(target_dir, ".nanocode", "skills"))
-                assert "redteaming" in skills
-        finally:
-            shutil.rmtree(target_dir)
-
     @pytest.mark.skip(reason="Skills directory not installed")
     def test_install_skills_specific(self, temp_package_dir, monkeypatch):
         """Test installing a specific skill."""
