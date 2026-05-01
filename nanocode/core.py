@@ -12,24 +12,48 @@ import os
 import time
 import traceback
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from rich.console import Console
 from rich.theme import Theme
 
+from nanocode.agent_pipeline import AgentPipeline
 from nanocode.agents import AgentInfo, PermissionAction, get_agent_registry
 from nanocode.agents.permission import PermissionHandler
-from nanocode.agents.permission_bus import (
-    PermissionBus,
-    PermissionEventType,
-    get_permission_bus,
+from nanocode.config import get_config
+from nanocode.context import ContextManager, ContextStrategy, MessagePartType
+from nanocode.context_chips import get_chip_manager
+from nanocode.hooks import HookManager
+from nanocode.lsp import LSPServerManager
+from nanocode.mcp import MCPManager
+from nanocode.multimodal import MultimodalManager
+from nanocode.planning import PlanExecutor, PlanMonitor, PlanningContext, TaskPlanner
+from nanocode.prompts import render_system_prompt
+
+# Import new architecture matching opencode
+from nanocode.session.processor import SessionProcessor
+from nanocode.session_manager import get_session_manager
+from nanocode.session_summary import SessionSummaryGenerator
+from nanocode.snapshot import create_snapshot_manager
+from nanocode.state import AgentState, AgentStateData
+from nanocode.storage.cache import CachedResponse, PromptCache, get_prompt_cache
+from nanocode.todo_service import get_todo_service
+from nanocode.tools import ToolExecutor, ToolRegistry
+from nanocode.tools.builtin import register_builtin_tools
+from nanocode.tools.file_tracker import FileTracker
+from nanocode.tools.text_detector import (
+    create_reprompt_message,
+    detect_commands_in_text,
+    format_detected_commands_message,
+    should_reprompt_for_tools,
 )
 
 # Import new architecture matching opencode
-from nanocode.session.message import Message, PartType, ReasoningPart, TextPart
-from nanocode.session.processor import SessionProcessor, ProcessorHandle
-from nanocode.llm.events import StreamEvent, EventType
-from nanocode.agent_pipeline import AgentPipeline
+
+
+# Import new architecture matching opencode
+
 
 
 class RichColor(Enum):
@@ -57,35 +81,10 @@ custom_theme = Theme(
 )
 
 console = Console(theme=custom_theme, _environ=dict(os.environ), force_terminal=True)
-from nanocode.config import get_config
-from nanocode.context import ContextManager, ContextStrategy, MessagePartType
-from nanocode.hooks import HookManager
-from nanocode.llm.base import LLMResponse
-from nanocode.lsp import LSPServerManager
-from nanocode.mcp import MCPManager
-from nanocode.multimodal import MultimodalManager
-from nanocode.planning import PlanExecutor, PlanMonitor, PlanningContext, TaskPlanner
-from nanocode.session_manager import get_session_manager
-from nanocode.session_summary import SessionSummaryGenerator
-from nanocode.snapshot import create_snapshot_manager
-from nanocode.state import AgentState, AgentStateData
-from nanocode.storage.cache import CachedResponse, PromptCache, get_prompt_cache
-from nanocode.todo_service import get_todo_service
-from nanocode.tools import ToolExecutor, ToolRegistry
-from nanocode.tools.builtin import register_builtin_tools
-from nanocode.tools.file_tracker import FileTracker
-from nanocode.tools.text_detector import (
-    create_reprompt_message,
-    detect_commands_in_text,
-    format_detected_commands_message,
-    should_reprompt_for_tools,
-)
 
 
 def _load_system_prompt_template() -> str:
     """Load system prompt template from .system_prompts/template.md if exists."""
-    import os
-    from pathlib import Path
 
     # Try to get cwd, fallback to package dir if that fails
     try:
@@ -95,15 +94,15 @@ def _load_system_prompt_template() -> str:
 
     # Try multiple locations for system prompts
     search_paths = []
-    
+
     # 1. Current working directory (for editable installs)
     if cwd:
         search_paths.append(Path(cwd) / ".system_prompts")
-    
+
     # 2. Package directory (for pip installs)
     package_dir = Path(__file__).parent.parent
     search_paths.append(package_dir / ".system_prompts")
-    
+
     # 3. User config directory
     search_paths.append(Path.home() / ".config" / "nanocode" / "system_prompts")
 
@@ -280,6 +279,7 @@ class AutonomousAgent:
         self._init_skills()
         self._init_mcp()
         self._init_modified_files()
+        self._init_context_chips()  # Initialize before context (uses chips in prompt)
         self._init_context()
         self._init_pipeline()  # After context_manager is initialized
         self._init_planning()
@@ -662,29 +662,25 @@ class AutonomousAgent:
 
         self.context_manager.set_system_prompt(final_prompt)
 
+    def _init_context_chips(self):
+        """Initialize context chips system."""
+        from nanocode.context_chips import ContextChipManager
+
+        self.chip_manager = ContextChipManager(cwd=self.config.get("base_dir"))
+        logger.info("Context chips system initialized")
+
     async def init_async(self):
         """Async initialization - load model registry from API."""
         await self.context_manager.init_async()
 
     def _build_system_prompt(self) -> str:
-        """Build system prompt from template file with dynamic capabilities."""
-        import os
-        from pathlib import Path
-
+        """Build system prompt using Jinja2 templates and context chips."""
         cwd = os.getcwd()
         config_file = (
             str(self.config.config_path)
             if hasattr(self.config, "config_path")
             else "config.yaml"
         )
-        system_prompts_dir = Path(cwd) / ".system_prompts"
-
-        # Priority: template.md > default
-        prompt = SYSTEM_PROMPT_TEMPLATE
-        if system_prompts_dir.exists():
-            if (system_prompts_dir / "template.md").exists():
-                prompt = (system_prompts_dir / "template.md").read_text()
-                logger.info("Using .system_prompts/template.md")
 
         # Get agents
         agents_info = []
@@ -726,48 +722,51 @@ class AutonomousAgent:
                     desc = desc[:500] + "..."
                 skill_info.append(f"- {name}: {desc}")
 
+        # Use Jinja2 template rendering
+        prompt = render_system_prompt(
+            agents="\n".join(agents_info) if agents_info else "",
+            tools="\n".join(tools_info) if tools_info else "",
+            skills="\n".join(skill_info) if skill_info else "",
+            mcp_servers="\n".join(mcp_info) if mcp_info else "",
+            lsp_servers="\n".join(lsp_info) if lsp_info else "",
+            cwd=cwd,
+            config_file=config_file,
+        )
+
+        # Use context chips for additional context
+        try:
+            chip_manager = get_chip_manager()
+            extra_context = chip_manager.build_context_section()
+            prompt += extra_context
+        except Exception as e:
+            logger.debug(f"Context chips not available: {e}")
+
         # Check for additional .system_prompts/*.md files (except template.md)
-        extra_prompts = ""
+        system_prompts_dir = Path(cwd) / ".system_prompts"
         if system_prompts_dir.exists():
             for f in sorted(system_prompts_dir.glob("*.md")):
                 if f.name not in ("template.md",):
-                    extra_prompts += f"\n\n# From {f.name}\n"
-                    extra_prompts += f.read_text()
+                    prompt += f"\n\n# From {f.name}\n"
+                    prompt += f.read_text()
             for f in sorted(system_prompts_dir.glob("*.txt")):
-                extra_prompts += f"\n\n# From {f.name}\n"
-                extra_prompts += f.read_text()
+                prompt += f"\n\n# From {f.name}\n"
+                prompt += f.read_text()
 
         # Check for AGENTS.md in cwd or parent
         for agents_file in [Path(cwd) / "AGENTS.md", Path(cwd).parent / "AGENTS.md"]:
             if agents_file.exists():
-                extra_prompts += f"\n\n# From {agents_file.name}\n"
-                extra_prompts += agents_file.read_text()
+                prompt += f"\n\n# From {agents_file.name}\n"
+                prompt += agents_file.read_text()
                 break
 
         # Check for GEMINI.md
         for gemini_file in [Path(cwd) / "GEMINI.md", Path(cwd).parent / "GEMINI.md"]:
             if gemini_file.exists():
-                extra_prompts += f"\n\n# From {gemini_file.name}\n"
-                extra_prompts += gemini_file.read_text()
+                prompt += f"\n\n# From {gemini_file.name}\n"
+                prompt += gemini_file.read_text()
                 break
 
-        # Format template with placeholders using str.format
-        # (safe_substitute used Template but template uses {} syntax)
-        formatted_vars = {
-            "agents": "\n".join(agents_info) if agents_info else "- (no custom agents)",
-            "tools": "\n".join(tools_info) if tools_info else "- (built-in only)",
-            "skills": "\n".join(skill_info) if skill_info else "- (none installed)",
-            "mcp_servers": "\n".join(mcp_info) if mcp_info else "- (none configured)",
-            "lsp_servers": "\n".join(lsp_info) if lsp_info else "- (none configured)",
-            "cwd": cwd,
-            "config_file": config_file,
-        }
-        try:
-            prompt = prompt.format_map(formatted_vars)
-        except (KeyError, ValueError):
-            pass  # template.md might not have all placeholders
-
-        return prompt + extra_prompts
+        return prompt
 
     def _init_mcp(self):
         """Initialize MCP connections."""
@@ -1400,7 +1399,7 @@ Conversation:
                 on_tool_complete=on_tool_complete,
             )
         except asyncio.CancelledError:
-            logger.error(f"LLM request cancelled (timeout)")
+            logger.error("LLM request cancelled (timeout)")
             raise
         except Exception as e:
             if "Expecting value" in str(e) or isinstance(e, json.JSONDecodeError):

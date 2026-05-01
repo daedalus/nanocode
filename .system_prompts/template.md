@@ -33,19 +33,19 @@ If user says "read AND X", "fetch AND Y", or "do A then B":
 # Capabilities
 
 ## Available Agents
-{agents}
+{{ agents }}
 
 ## Available Tools
-{tools}
+{{ tools }}
 
 ## Available Skills
-{skills}
+{{ skills }}
 
 ## Available MCP Servers
-{mcp_servers}
+{{ mcp_servers }}
 
 ## Available LSP Servers
-{lsp_servers}
+{{ lsp_servers }}
 
 # Workflow
 
@@ -106,5 +106,5 @@ When referencing code include the pattern `file_path:line_number`.
 - NEVER stage or commit unless explicitly instructed
 
 # Environment
-- Working directory: {cwd}
-- Config file: {config_file}
+- Working directory: {{ cwd }}
+- Config file: {{ config_file }}
