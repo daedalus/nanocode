@@ -858,9 +858,10 @@ class AutonomousAgent:
     def _init_snapshot(self):
         """Initialize snapshot manager for git-based snapshots at step boundaries."""
         base_dir = str(self.config.get("base_dir", "."))
-        self.snapshot_manager = create_snapshot_manager(base_dir)
+        session_id = getattr(self, "_session_id", None) or "default"
+        self.snapshot_manager = create_snapshot_manager(base_dir, session_id)
         logger.debug(
-            f"Snapshot manager initialized: {self.snapshot_manager.snapshot_dir}"
+            f"Snapshot manager initialized: {self.snapshot_manager._repo_dir}"
         )
 
     def _handle_mcp_tool(self, **kwargs):
