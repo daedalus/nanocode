@@ -1053,12 +1053,94 @@ Conversation:
             commands.append(cmd.strip())
         return commands
 
+    async def _save_checkpoint(self, step_number: int, tool_calls: list = None):
+        """Save agent state for durable execution.
+
+        This implements the durable execution pattern from the blog post.
+        Each tool-call turn is checkpointed so the loop can resume after restarts.
+        """
+        from nanocode.storage.models import AgentCheckpoint
+        from nanocode import storage
+
+        if not self.context_manager or not hasattr(self.context_manager, "session_id"):
+            return
+
+        session_id = self.context_manager.session_id
+        if not session_id:
+            return
+
+        try:
+            db = await storage.get_db()
+            async with db.session() as session:
+                import uuid
+                from datetime import datetime
+
+                state_data = {
+                    "tool_calls": [{"name": tc.name, "arguments": tc.arguments} for tc in (tool_calls or [])],
+                    "agent_name": self.current_agent.name if self.current_agent else None,
+                    "state": self.state.state if hasattr(self.state, "state") else str(self.state),
+                    "task": getattr(self.state, "task", None),
+                }
+
+                messages = self.context_manager.prepare_messages() if hasattr(self.context_manager, "prepare_messages") else []
+                messages_snapshot = messages[:50]  # Truncate to avoid huge blobs
+
+                checkpoint = AgentCheckpoint(
+                    id=str(uuid.uuid4()),
+                    session_id=session_id,
+                    step_number=step_number,
+                    state_data=state_data,
+                    messages_snapshot=messages_snapshot,
+                    created_at=datetime.now(),
+                )
+                session.add(checkpoint)
+                logger.debug(f"Checkpoint saved: step {step_number} for session {session_id}")
+
+        except Exception as e:
+            logger.warning(f"Failed to save checkpoint: {e}")
+
+    async def _load_latest_checkpoint(self, session_id: str) -> dict | None:
+        """Load the latest checkpoint for a session."""
+        from nanocode.storage.models import AgentCheckpoint
+        from nanocode import storage
+        from sqlalchemy import select, desc
+
+        try:
+            db = await storage.get_db()
+            async with db.session() as session:
+                stmt = (
+                    select(AgentCheckpoint)
+                    .where(AgentCheckpoint.session_id == session_id)
+                    .order_by(desc(AgentCheckpoint.step_number))
+                    .limit(1)
+                )
+                result = await session.execute(stmt)
+                cp = result.scalar_one_or_none()
+                if cp:
+                    return {
+                        "step_number": cp.step_number,
+                        "state_data": cp.state_data,
+                        "messages_snapshot": cp.messages_snapshot,
+                        "created_at": cp.created_at,
+                    }
+        except Exception as e:
+            logger.warning(f"Failed to load checkpoint: {e}")
+        return None
+
     async def _handle_tool_calls(self, tool_calls: list) -> list[dict]:
         """Handle tool calls from LLM with permission checking and doom loop detection."""
         agent_name = self.current_agent.name if self.current_agent else "unknown"
         import time
         start = time.monotonic()
         logger.info(f"[{agent_name}] Handling {len(tool_calls)} tool call(s)")
+
+        # Save checkpoint BEFORE handling tool calls (durable execution)
+        try:
+            step_number = getattr(self, "_current_step", 0) + 1
+            self._current_step = step_number
+            await self._save_checkpoint(step_number, tool_calls)
+        except Exception:
+            pass
 
         results = []
         for i, tc in enumerate(tool_calls):
