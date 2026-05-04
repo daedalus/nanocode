@@ -4,6 +4,14 @@
 
 Nanocode is an autonomous AI agent for console with advanced tool use. It supports multiple LLM providers (OpenAI, Anthropic, Ollama, and many others), planning capabilities, efficient context management, and integrates with IDEs via ACP (Agent Client Protocol). The project enables users to interact with AI agents through a CLI, HTTP server, or directly as a Python library.
 
+### Agent Harness Improvements (from Mendral blog post)
+- **Virtualized Filesystem** — One `read`/`write`/`edit` interface, two backends (local FS for `/workspace/*`, DB for `/skills/*` and `/memory/*`)
+- **DB-Backed Skills & Memories** — Skill/Memory tables in SQLite, shared across sessions with scope support (user/org/project)
+- **Credential Isolation** — API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) never reach bash subprocesses
+- **Bash Path Guards** — Blocks bash access to `/skills/` and `/memory/` paths (use tools instead)
+- **Durable Execution** — Agent loop checkpointing before each tool-call turn, survives restarts
+- **Sandbox Lifecycle** — Pluggable sandbox providers (Local, Docker, Blaxel) with suspend/resume
+
 ## Scope
 
 ### What IS in scope
@@ -22,6 +30,12 @@ Nanocode is an autonomous AI agent for console with advanced tool use. It suppor
 - Skills system for custom commands
 - Git-based snapshot/revert functionality
 - **Hook system for lifecycle events (PreToolUse, PostToolUse, SessionStart, etc.)**
+- **Virtualized Filesystem** — `read`/`write`/`edit` route to LocalFS or DB backend based on path
+- **DB-backed Skills & Memories** — Skill/Memory tables in SQLite, scoped by user/org/project
+- **Credential Isolation** — API keys never forwarded to bash subprocesses
+- **Bash Path Guards** — Blocks `/skills/` and `/memory/` access in bash tool
+- **Durable Execution** — Agent checkpointing before each tool-call turn
+- **Sandbox Lifecycle** — Pluggable providers: LocalSandbox, DockerSandbox, BlaxelSandbox
 
 ### What is NOT in scope
 - GUI application (CLI-only)

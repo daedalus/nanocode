@@ -6,6 +6,17 @@ Experimental. It might be buggy.
 
 ## Features
 
+### Agent Harness Improvements (from Mendral blog post)
+- **Virtualized Filesystem** — One `read`/`write`/`edit` interface, two backends (local FS for `/workspace/*`, DB for `/skills/*` and `/memory/*`)
+- **DB-Backed Skills & Memories** — Skills and memories stored in SQLite, shared across sessions with scope support (user/org/project)
+- **Credential Isolation** — API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) never reach bash subprocesses
+- **Bash Path Guards** — Blocks bash access to `/skills/` and `/memory/` paths (use tools instead)
+- **Durable Execution** — Agent loop checkpointing before each tool-call turn, survives restarts
+- **Sandbox Lifecycle** — Pluggable sandbox providers:
+  - `LocalSandbox` (default, no isolation)
+  - `DockerSandbox` (Docker containers, optional)
+  - `BlaxelSandbox` (25ms resume, persistent sandboxes)
+
 ### Multi-Provider LLM Support
 - **OpenAI** - GPT-4, GPT-4o, GPT-3.5 Turbo
 - **Anthropic** - Claude 3.5 Sonnet, Claude 3
