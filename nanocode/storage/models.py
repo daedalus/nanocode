@@ -174,6 +174,21 @@ class Memory(Base):
     )
 
 
+class AgentCheckpoint(Base):
+    """AgentCheckpoint model - for durable execution across restarts."""
+
+    __tablename__ = "agent_checkpoints"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    step_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    state_data: Mapped[dict] = mapped_column(JSON, nullable=False)
+    messages_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+
+
 __all__ = [
     "Base",
     "Project",
@@ -184,4 +199,5 @@ __all__ = [
     "SessionShare",
     "Skill",
     "Memory",
+    "AgentCheckpoint",
 ]
