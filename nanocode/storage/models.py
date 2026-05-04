@@ -140,6 +140,40 @@ class SessionShare(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
 
+class Skill(Base):
+    """Skill model - custom skills stored in database (virtualized filesystem)."""
+
+    __tablename__ = "skills"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(String(512), default="")
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    scope: Mapped[str] = mapped_column(String(20), default="user")
+    scope_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=func.now(), onupdate=func.now()
+    )
+
+
+class Memory(Base):
+    """Memory model - agent memories stored in database (virtualized filesystem)."""
+
+    __tablename__ = "memories"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    key: Mapped[str] = mapped_column(String(255), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    scope: Mapped[str] = mapped_column(String(20), default="user")
+    scope_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=func.now(), onupdate=func.now()
+    )
+
+
 __all__ = [
     "Base",
     "Project",
@@ -148,4 +182,6 @@ __all__ = [
     "MessagePart",
     "Todo",
     "SessionShare",
+    "Skill",
+    "Memory",
 ]

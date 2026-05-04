@@ -634,7 +634,7 @@ class SedTool(Tool):
 class EditTool(Tool):
     """Edit file with exact text replacement."""
 
-    def __init__(self):
+    def __init__(self, fs_router=None):
         parameters = {
             "type": "object",
             "properties": {
@@ -663,6 +663,7 @@ class EditTool(Tool):
             description="Edit file with exact text replacement",
             parameters=parameters
         )
+        self.fs_router = fs_router
 
     async def execute(self, **kwargs) -> ToolResult:
         """Execute the edit tool with given arguments."""
@@ -677,6 +678,15 @@ class EditTool(Tool):
             return ToolResult.err("Missing required argument: oldString")
         if not newString:
             return ToolResult.err("Missing required argument: newString")
+
+        if self.fs_router:
+            result = await self.fs_router.edit(filePath, oldString, newString, replace_all=replaceAll)
+            if result.get("success"):
+                return ToolResult.ok(
+                    content=result.get("content", "Edit successful"),
+                    metadata=result.get("metadata", {}),
+                )
+            return ToolResult.err(result.get("error", "Edit failed"))
 
         if not os.path.isabs(filePath):
             return ToolResult.err(f"filePath must be an absolute path: {filePath}")
@@ -694,7 +704,7 @@ class EditTool(Tool):
             content = await loop.run_in_executor(None, read_file)
 
             occurrence_count = content.count(oldString)
-            if occurrence_count == 0:
+            if occurrence_count ==0:
                 return ToolResult.err(f"oldString not found in file: {oldString}")
 
             if not replaceAll and occurrence_count > 1:
@@ -816,7 +826,7 @@ class DiffTool(Tool):
 class ReadFileTool(Tool):
     """Read file contents."""
 
-    def __init__(self, root_dir: str = None, read_tracker=None, write_unlock_tracker=None):
+    def __init__(self, root_dir: str = None, read_tracker=None, write_unlock_tracker=None, fs_router=None):
         super().__init__(
             name="read",
             description="Read file content. On first read, file is cached. Subsequent reads return cached content unless file changed. Cached files are UNLOCKED for writing. Do NOT re-read the same file multiple times - use the cached content.",
@@ -842,6 +852,7 @@ class ReadFileTool(Tool):
         self.root_dir = Path(root_dir) if root_dir else Path.cwd()
         self._read_tracker: set = read_tracker if isinstance(read_tracker, set) else set()
         self._write_unlock: set = write_unlock_tracker if isinstance(write_unlock_tracker, set) else set()
+        self.fs_router = fs_router
 
     async def execute(
         self,
@@ -851,6 +862,18 @@ class ReadFileTool(Tool):
     ) -> ToolResult:
         """Read a file. ALWAYS reads fresh content."""
         try:
+            if self.fs_router:
+                result = await self.fs_router.read(path, offset=offset, limit=limit)
+                if result.get("success"):
+                    self._read_tracker.add(path)
+                    self._write_unlock.add(path)
+                    return ToolResult(
+                        success=True,
+                        content=result["content"],
+                        metadata=result.get("metadata", {}),
+                    )
+                return ToolResult(success=False, content=None, error=result.get("error", "Read failed"))
+
             file_path = self.root_dir / path
             resolved = str(file_path.resolve())
 
@@ -876,7 +899,7 @@ class ReadFileTool(Tool):
                         "tokens_estimate": 0,
                         "new_file": True,
                     },
-)
+                )
 
             content = file_path.read_text(errors="ignore")
 
@@ -960,7 +983,7 @@ class FstatTool(Tool):
 class WriteFileTool(Tool):
     """Write content to a file."""
 
-    def __init__(self, root_dir: str = None, read_tracker=None, write_unlock_tracker=None):
+    def __init__(self, root_dir: str = None, read_tracker=None, write_unlock_tracker=None, fs_router=None):
         super().__init__(
             name="write",
             description="Write content to a file. REQUIRED parameters: path (file name), content (what to write). For new files: just use write with path and content. For existing files: must read first.",
@@ -982,6 +1005,7 @@ class WriteFileTool(Tool):
         self.root_dir = Path(root_dir) if root_dir else Path.cwd()
         self._read_tracker: set = read_tracker if isinstance(read_tracker, set) else set()
         self._write_unlock: set = write_unlock_tracker if isinstance(write_unlock_tracker, set) else set()
+        self.fs_router = fs_router
 
     async def execute(
         self, path: str = None, content: str = "", filePath: str = None, mode: str = "w"
@@ -989,6 +1013,18 @@ class WriteFileTool(Tool):
         """Write to a file atomically."""
         path = path or filePath
         try:
+            if self.fs_router:
+                result = await self.fs_router.write(path, content)
+                if result.get("success"):
+                    self._read_tracker.add(path)
+                    self._write_unlock.add(path)
+                    return ToolResult(
+                        success=True,
+                        content=result.get("content", f"Written to {path}"),
+                        metadata=result.get("metadata", {}),
+                    )
+                return ToolResult(success=False, content=None, error=result.get("error", "Write failed"))
+
             file_path = self.root_dir / path
             resolved = str(file_path.resolve())
 
@@ -1037,17 +1073,28 @@ class WriteFileTool(Tool):
 class EditFileTool(Tool):
     """Edit file contents."""
 
-    def __init__(self, root_dir: str = None):
+    def __init__(self, root_dir: str = None, fs_router=None):
         super().__init__(
             name="edit",
             description="Edit a file by replacing old string with new string",
         )
         self.root_dir = Path(root_dir) if root_dir else Path.cwd()
         self.file_tracker = None
+        self.fs_router = fs_router
 
     async def execute(self, path: str, old: str, new: str) -> ToolResult:
         """Edit a file atomically."""
         try:
+            if self.fs_router:
+                result = await self.fs_router.edit(path, old, new, replace_all=False)
+                if result.get("success"):
+                    return ToolResult(
+                        success=True,
+                        content=result.get("content", "Edit successful"),
+                        metadata=result.get("metadata", {}),
+                    )
+                return ToolResult(success=False, content=None, error=result.get("error", "Edit failed"))
+
             file_path = self.root_dir / path
             if not file_path.exists():
                 return ToolResult(success=False, content=None, error="File not found")
@@ -1076,7 +1123,7 @@ class EditFileTool(Tool):
 
             preview = "\n".join(new_content.split("\n")[:20])
             if len(new_content.split("\n")) > 20:
-                preview += f"\n... ({len(new_content.split('\\n')) - 20} more lines)"
+                preview += f"\n... ({len(new_content.split('\n')) - 20} more lines)"
 
             return ToolResult(
                 success=True,
@@ -1833,7 +1880,7 @@ class BatchTool(Tool):
 class MultiEditTool(Tool):
     """Edit multiple locations in a file."""
 
-    def __init__(self):
+    def __init__(self, fs_router=None):
         super().__init__(
             name="multiedit",
             description="Make multiple edits to a file in sequence",
@@ -1870,10 +1917,11 @@ class MultiEditTool(Tool):
             },
             "required": ["filePath", "edits"],
         }
+        self.fs_router = fs_router
 
     async def execute(self, filePath: str, edits: list) -> ToolResult:
         """Execute multiple edits on a file."""
-        edit_tool = EditFileTool()
+        edit_tool = EditFileTool(fs_router=self.fs_router)
         results = []
 
         for edit in edits:
@@ -2168,7 +2216,7 @@ class QuestionTool(Tool):
 
 
 def create_builtin_tools(
-    config: dict = None, file_tracker=None, lsp_manager=None
+    config: dict = None, file_tracker=None, lsp_manager=None, fs_router=None
 ) -> list[Tool]:
     from nanocode.tools.builtin.exa_search import ExaFetchTool, ExaSearchTool
     from nanocode.tools.builtin.free_search import FreeExaSearchTool, OpenWebSearchTool
@@ -2183,9 +2231,10 @@ def create_builtin_tools(
         BashSessionTool(),
         GlobTool(),
         GrepTool(),
-        ReadFileTool(read_tracker=unlocked_files, write_unlock_tracker=unlocked_files),
-        WriteFileTool(read_tracker=unlocked_files, write_unlock_tracker=unlocked_files),
-        EditFileTool(),
+        ReadFileTool(read_tracker=unlocked_files, write_unlock_tracker=unlocked_files, fs_router=fs_router),
+        WriteFileTool(read_tracker=unlocked_files, write_unlock_tracker=unlocked_files, fs_router=fs_router),
+        EditFileTool(fs_router=fs_router),
+        EditTool(fs_router=fs_router),
         FstatTool(),
         WebFetchTool(),
         WebSearchTool(),
@@ -2221,13 +2270,13 @@ def create_builtin_tools(
 
 
 def register_builtin_tools(
-    registry: ToolRegistry, config: dict = None, file_tracker=None, lsp_manager=None
+    registry: ToolRegistry, config: dict = None, file_tracker=None, lsp_manager=None, fs_router=None
 ):
     """Register all built-in tools."""
     from nanocode.tools import ToolExecutor
 
     executor = ToolExecutor(registry)
-    for tool in create_builtin_tools(config, file_tracker, lsp_manager):
+    for tool in create_builtin_tools(config, file_tracker, lsp_manager, fs_router=fs_router):
         if isinstance(tool, BatchTool):
             tool.tool_executor = executor
         registry.register(tool)

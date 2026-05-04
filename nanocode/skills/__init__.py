@@ -114,12 +114,13 @@ class SkillsManager:
     ]
     SKILL_FILE_NAME = "SKILL.md"
 
-    def __init__(self, base_dir: str = None, config: dict = None):
+    def __init__(self, base_dir: str = None, config: dict = None, db_session=None):
         self.base_dir = base_dir or os.getcwd()
         self.config = config or {}
         self.skills: dict[str, Skill] = {}
         self._handlers: dict[str, Callable] = {}
         self._url_cache: dict[str, str] = {}
+        self._db_session = db_session
 
     def discover_skills(self) -> list[Skill]:
         """Discover skills in the configured directories (opencode-inspired)."""
@@ -381,6 +382,14 @@ class SkillsManager:
             self.skills[skill.name] = skill
             logger.info(f"Skill available: {skill.name} ({skill.location})")
 
+        # Sync to database if session available
+        if self._db_session:
+            try:
+                import asyncio
+                asyncio.ensure_future(self._sync_to_db(discovered))
+            except Exception:
+                pass
+
         return len(self.skills)
 
     async def load_skills_async(self) -> int:
@@ -405,7 +414,50 @@ class SkillsManager:
         except Exception as e:
             logger.warning(f"Failed to load remote skills: {e}")
 
+        # Sync to database if session available
+        if self._db_session:
+            await self._sync_to_db(list(self.skills.values()))
+
         return len(self.skills)
+
+    async def _sync_to_db(self, skills: list[Skill]):
+        """Sync discovered skills to the database."""
+        if not self._db_session:
+            return
+        try:
+            from nanocode.storage.models import Skill as DBSkill
+            from sqlalchemy import select
+
+            for skill in skills:
+                stmt = select(DBSkill).where(
+                    DBSkill.name == skill.name,
+                    DBSkill.scope == "user",
+                )
+                result = await self._db_session.execute(stmt)
+                db_skill = result.scalar_one_or_none()
+
+                if not db_skill:
+                    from datetime import datetime
+                    import uuid
+                    db_skill = DBSkill(
+                        id=str(uuid.uuid4()),
+                        name=skill.name,
+                        description=skill.description,
+                        content=skill.content,
+                        scope="user",
+                        created_at=datetime.now(),
+                        updated_at=datetime.now(),
+                    )
+                    self._db_session.add(db_skill)
+                else:
+                    db_skill.content = skill.content
+                    db_skill.description = skill.description
+                    from datetime import datetime
+                    db_skill.updated_at = datetime.now()
+
+            await self._db_session.flush()
+        except Exception as e:
+            logger.warning(f"Failed to sync skills to DB: {e}")
 
     def get_skill(self, name: str) -> Skill:
         """Get a skill by name."""
