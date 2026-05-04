@@ -117,6 +117,12 @@ async def flock_read_write(
 class BashTool(Tool):
     """Execute shell commands."""
 
+    # Environment variables that are safe to pass to bash subprocess
+    SAFE_ENV_VARS = {
+        "PATH", "HOME", "USER", "SHELL", "TERM", "LANG", "LC_ALL",
+        "LANGUAGE", "HISTFILE", "TZ", "TMPDIR", "TEMP", "TMP",
+    }
+
     def __init__(self, allowed_commands: list[str] = None):
         super().__init__(
             name="bash",
@@ -147,6 +153,17 @@ class BashTool(Tool):
             "required": ["command"],
         }
 
+    def _get_sanitized_env(self) -> dict:
+        """Create a sanitized environment without credentials."""
+        import os
+        env = {}
+        for key in self.SAFE_ENV_VARS:
+            val = os.environ.get(key)
+            if val is not None:
+                env[key] = val
+        # Explicitly NOT passing: OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.
+        return env
+
     async def execute(
         self, command: str, workdir: str = None, timeout: int = 60, pty: bool = False
     ) -> ToolResult:
@@ -164,6 +181,26 @@ class BashTool(Tool):
                     error=f"Blocked command pattern: {pattern}",
                 )
 
+        # Guard: prevent bash from accessing virtualized namespace paths
+        import re
+        virtualized_patterns = [
+            r"\/skills?\/",
+            r"\/memory\/",
+            r"\.nanocode\/skills?",
+            r"\.opencode\/skills?",
+            r"\.claude\/skills?",
+        ]
+        for vpattern in virtualized_patterns:
+            if re.search(vpattern, command):
+                return ToolResult(
+                    success=False,
+                    content=None,
+                    error=(
+                        "Bash cannot access virtualized paths (/skills/, /memory/). "
+                        "Use the read/write tools instead."
+                    ),
+                )
+
         logger.debug(f"BashTool: running subprocess for '{command[:50]}...'")
         if pty:
             return await self._execute_pty(command, workdir)
@@ -177,6 +214,7 @@ class BashTool(Tool):
                 text=True,
                 timeout=timeout,
                 cwd=str(work_path),
+                env=self._get_sanitized_env(),
             )
 
             output = result.stdout
