@@ -1,9 +1,9 @@
 """Local filesystem backend - implements FileSystemBackend using the OS filesystem."""
 
-from pathlib import Path
-from typing import Optional
 import asyncio
-import os
+from pathlib import Path
+
+from nanocode.tools.backends.base import FileSystemBackend
 
 
 class LocalFSBackend(FileSystemBackend):
@@ -33,9 +33,11 @@ class LocalFSBackend(FileSystemBackend):
                 lines = lines[offset - 1 :]
             if limit:
                 lines = lines[:limit]
+
             text = "\n".join(lines)
             bytes_val = len(text.encode("utf-8"))
             tokens_est = max(1, bytes_val // 4)
+
             return {
                 "success": True,
                 "content": text,
@@ -73,9 +75,11 @@ class LocalFSBackend(FileSystemBackend):
         file_path = self._resolve(path)
         try:
             file_path.parent.mkdir(parents=True, exist_ok=True)
+
             def _write():
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(content)
+
             await asyncio.get_event_loop().run_in_executor(None, _write)
             return {
                 "success": True,
@@ -90,22 +94,25 @@ class LocalFSBackend(FileSystemBackend):
         try:
             if not file_path.exists():
                 return {"success": False, "content": None, "error": f"File not found: {file_path}"}
+
             loop = asyncio.get_event_loop()
 
             def _read():
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     return f.read()
 
             content = await loop.run_in_executor(None, _read)
             occurrence_count = content.count(old_string)
             if occurrence_count == 0:
                 return {"success": False, "content": None, "error": f"old_string not found in file: {old_string}"}
+
             if not replace_all and occurrence_count > 1:
                 return {
                     "success": False,
                     "content": None,
                     "error": f"Found {occurrence_count} matches. Set replace_all=True to replace all.",
                 }
+
             if replace_all:
                 new_content = content.replace(old_string, new_string)
                 replacements = occurrence_count

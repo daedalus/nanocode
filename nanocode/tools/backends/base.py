@@ -1,7 +1,6 @@
 """Base classes for filesystem backends."""
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 
 class FileSystemBackend(ABC):

@@ -633,12 +633,12 @@ class AutonomousAgent:
         if self._fs_router is not None:
             return self._fs_router
 
+        from nanocode import storage
         from nanocode.tools.backends import (
             DatabaseBackend,
             FileSystemRouter,
             LocalFSBackend,
         )
-        from nanocode import storage
 
         workspace_backend = LocalFSBackend(self.config.get("base_dir", os.getcwd()))
         skills_backend = None
@@ -780,6 +780,19 @@ class AutonomousAgent:
             prompt += extra_context
         except Exception as e:
             logger.debug(f"Context chips not available: {e}")
+
+        # Add guidance about virtualized filesystem (Phase 4)
+        prompt += """
+
+# Filesystem & Tool Usage Guidelines
+- Use `read`, `write`, and `edit` tools (NOT bash) to access:
+  - `/skills/*` paths (skills are stored in database, not filesystem)
+  - `/memory/*` paths (memories are stored in database, not filesystem)
+- Bash tool is for workspace operations only (`/workspace/*` paths)
+- Do NOT use bash commands (cat, ls, grep, etc.) to access skill or memory directories
+- If you need to read a skill, use: `read("/skills/<name>/SKILL.md")`
+- If you need to read memory, use: `read("/memory/MEMORY.md")`
+"""
 
         # Check for additional .system_prompts/*.md files (except template.md)
         system_prompts_dir = Path(cwd) / ".system_prompts"
@@ -1099,8 +1112,8 @@ Conversation:
         This implements the durable execution pattern from the blog post.
         Each tool-call turn is checkpointed so the loop can resume after restarts.
         """
-        from nanocode.storage.models import AgentCheckpoint
         from nanocode import storage
+        from nanocode.storage.models import AgentCheckpoint
 
         if not self.context_manager or not hasattr(self.context_manager, "session_id"):
             return
@@ -1134,6 +1147,7 @@ Conversation:
                     created_at=datetime.now(),
                 )
                 session.add(checkpoint)
+                await session.commit()
                 logger.debug(f"Checkpoint saved: step {step_number} for session {session_id}")
 
         except Exception as e:
@@ -1141,9 +1155,10 @@ Conversation:
 
     async def _load_latest_checkpoint(self, session_id: str) -> dict | None:
         """Load the latest checkpoint for a session."""
-        from nanocode.storage.models import AgentCheckpoint
+        from sqlalchemy import desc, select
+
         from nanocode import storage
-        from sqlalchemy import select, desc
+        from nanocode.storage.models import AgentCheckpoint
 
         try:
             db = await storage.get_db()

@@ -8,7 +8,6 @@ Implements the "one interface, two backends" pattern from the blog post:
 The agent sees one read/write/edit interface. The routing is invisible.
 """
 
-from typing import Optional
 
 
 class FileSystemRouter:
@@ -41,26 +40,39 @@ class FileSystemRouter:
         Returns:
             (backend, relative_path) or (None, path) if no match
         """
-        normalized = path.replace("\\", "/")
+        normalized = path.replace("\\", "/").rstrip("/")  # Remove trailing slash
 
-        if normalized.startswith("/skills/") or normalized.startswith("skills/"):
-            if self.skills_backend:
-                rel = normalized.lstrip("/")
-                return self.skills_backend, rel
-            return None, path
-
-        if normalized.startswith("/memory/") or normalized.startswith("memory/"):
-            if self.memory_backend:
-                rel = normalized.lstrip("/")
-                return self.memory_backend, rel
-            return None, path
-
-        if normalized.startswith("/workspace/"):
+        # Handle /workspace (with or without trailing slash)
+        if normalized == "/workspace" or normalized.startswith("/workspace/"):
             if self.workspace_backend:
-                rel = normalized[len("/workspace/"):]
+                if normalized == "/workspace":
+                    rel = ""
+                else:
+                    rel = normalized[len("/workspace/"):]
                 return self.workspace_backend, rel
             return None, path
 
+        # Handle /skills (with or without trailing slash)
+        if normalized == "/skills" or normalized.startswith("/skills/"):
+            if self.skills_backend:
+                if normalized == "/skills":
+                    rel = "skills"
+                else:
+                    rel = normalized.lstrip("/")
+                return self.skills_backend, rel
+            return None, path
+
+        # Handle /memory (with or without trailing slash)
+        if normalized == "/memory" or normalized.startswith("/memory/"):
+            if self.memory_backend:
+                if normalized == "/memory":
+                    rel = "memory"
+                else:
+                    rel = normalized.lstrip("/")
+                return self.memory_backend, rel
+            return None, path
+
+        # Default to workspace backend
         if self.workspace_backend:
             return self.workspace_backend, normalized.lstrip("/")
 

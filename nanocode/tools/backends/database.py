@@ -1,8 +1,8 @@
 """Database filesystem backend - stores skills and memories in SQLite."""
 
 from datetime import datetime
-from typing import Optional
-import json
+
+from nanocode.tools.backends.base import FileSystemBackend
 
 
 class DatabaseBackend(FileSystemBackend):
@@ -30,6 +30,7 @@ class DatabaseBackend(FileSystemBackend):
     async def _get_skill_by_path(self, path: str):
         """Resolve a path to a Skill DB record."""
         from sqlalchemy import select
+
         from nanocode.storage.models import Skill
 
         parts = [p for p in path.split("/") if p]
@@ -38,34 +39,46 @@ class DatabaseBackend(FileSystemBackend):
         else:
             skill_name = parts[-1].replace(".md", "")
 
-        stmt = select(Skill).where(
+        conditions = [
             Skill.name == skill_name,
             Skill.scope == self.scope,
-            Skill.scope_id == self.scope_id or Skill.scope_id.is_(None),
-        )
+        ]
+        if self.scope_id:
+            conditions.append(Skill.scope_id == self.scope_id)
+        else:
+            conditions.append(Skill.scope_id.is_(None))
+
+        stmt = select(Skill).where(*conditions)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def _get_memory_by_path(self, path: str):
         """Resolve a path to a Memory DB record."""
         from sqlalchemy import select
+
         from nanocode.storage.models import Memory
 
         parts = [p for p in path.split("/") if p]
         key = parts[-1] if parts else "MEMORY.md"
 
-        stmt = select(Memory).where(
+        conditions = [
             Memory.key == key,
             Memory.scope == self.scope,
-            Memory.scope_id == self.scope_id or Memory.scope_id.is_(None),
-        )
+        ]
+        if self.scope_id:
+            conditions.append(Memory.scope_id == self.scope_id)
+        else:
+            conditions.append(Memory.scope_id.is_(None))
+
+        stmt = select(Memory).where(*conditions)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def _get_or_create_skill(self, path: str, content: str = ""):
         """Get existing skill or create a new one."""
-        from nanocode.storage.models import Skill
         from sqlalchemy import select
+
+        from nanocode.storage.models import Skill
 
         parts = [p for p in path.split("/") if p]
         if parts[-1] == "SKILL.md" and len(parts) >= 2:
@@ -73,11 +86,16 @@ class DatabaseBackend(FileSystemBackend):
         else:
             skill_name = parts[-1].replace(".md", "")
 
-        stmt = select(Skill).where(
+        conditions = [
             Skill.name == skill_name,
             Skill.scope == self.scope,
-            Skill.scope_id == self.scope_id or Skill.scope_id.is_(None),
-        )
+        ]
+        if self.scope_id:
+            conditions.append(Skill.scope_id == self.scope_id)
+        else:
+            conditions.append(Skill.scope_id.is_(None))
+
+        stmt = select(Skill).where(*conditions)
         result = await self.session.execute(stmt)
         skill = result.scalar_one_or_none()
 
@@ -99,17 +117,23 @@ class DatabaseBackend(FileSystemBackend):
 
     async def _get_or_create_memory(self, path: str, content: str = ""):
         """Get existing memory or create a new one."""
-        from nanocode.storage.models import Memory
         from sqlalchemy import select
+
+        from nanocode.storage.models import Memory
 
         parts = [p for p in path.split("/") if p]
         key = parts[-1] if parts else "MEMORY.md"
 
-        stmt = select(Memory).where(
+        conditions = [
             Memory.key == key,
             Memory.scope == self.scope,
-            Memory.scope_id == self.scope_id or Memory.scope_id.is_(None),
-        )
+        ]
+        if self.scope_id:
+            conditions.append(Memory.scope_id == self.scope_id)
+        else:
+            conditions.append(Memory.scope_id.is_(None))
+
+        stmt = select(Memory).where(*conditions)
         result = await self.session.execute(stmt)
         memory = result.scalar_one_or_none()
 
@@ -134,10 +158,12 @@ class DatabaseBackend(FileSystemBackend):
         return str(uuid.uuid4())
 
     def _is_skill_path(self, path: str) -> bool:
-        return "/skills/" in path or path.startswith("skills/")
+        normalized = path.lstrip("/")
+        return normalized.startswith("skills/")
 
     def _is_memory_path(self, path: str) -> bool:
-        return "/memory/" in path or path.startswith("memory/")
+        normalized = path.lstrip("/")
+        return normalized.startswith("memory/")
 
     async def read(self, path: str, offset: int = None, limit: int = None) -> dict:
         try:
@@ -284,15 +310,21 @@ class DatabaseBackend(FileSystemBackend):
 
     async def list_dir(self, path: str = "") -> list[dict]:
         from sqlalchemy import select
-        from nanocode.storage.models import Skill, Memory
+
+        from nanocode.storage.models import Memory, Skill
 
         results = []
         try:
             if not path or path.strip("/") in ("skills", ""):
-                stmt = select(Skill).where(
+                conditions = [
                     Skill.scope == self.scope,
-                    Skill.scope_id == self.scope_id or Skill.scope_id.is_(None),
-                )
+                ]
+                if self.scope_id:
+                    conditions.append(Skill.scope_id == self.scope_id)
+                else:
+                    conditions.append(Skill.scope_id.is_(None))
+
+                stmt = select(Skill).where(*conditions)
                 result = await self.session.execute(stmt)
                 for skill in result.scalars().all():
                     results.append({
@@ -301,10 +333,15 @@ class DatabaseBackend(FileSystemBackend):
                         "is_dir": False,
                     })
             if not path or path.strip("/") in ("memory", ""):
-                stmt = select(Memory).where(
+                conditions = [
                     Memory.scope == self.scope,
-                    Memory.scope_id == self.scope_id or Memory.scope_id.is_(None),
-                )
+                ]
+                if self.scope_id:
+                    conditions.append(Memory.scope_id == self.scope_id)
+                else:
+                    conditions.append(Memory.scope_id.is_(None))
+
+                stmt = select(Memory).where(*conditions)
                 result = await self.session.execute(stmt)
                 for memory in result.scalars().all():
                     results.append({

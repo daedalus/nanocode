@@ -157,10 +157,10 @@ class BashTool(Tool):
         """Create a sanitized environment without credentials."""
         import os
         env = {}
-        for key in self.SAFE_ENV_VARS:
-            val = os.environ.get(key)
+        for var_name in self.SAFE_ENV_VARS:
+            val = os.environ.get(var_name)
             if val is not None:
-                env[key] = val
+                env[var_name] = val
         # Explicitly NOT passing: OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.
         return env
 
@@ -736,7 +736,7 @@ class EditTool(Tool):
             loop = asyncio.get_event_loop()
 
             def read_file():
-                with open(filePath, "r", encoding="utf-8") as f:
+                with open(filePath, encoding="utf-8") as f:
                     return f.read()
 
             content = await loop.run_in_executor(None, read_file)

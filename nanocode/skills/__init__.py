@@ -425,8 +425,9 @@ class SkillsManager:
         if not self._db_session:
             return
         try:
-            from nanocode.storage.models import Skill as DBSkill
             from sqlalchemy import select
+
+            from nanocode.storage.models import Skill as DBSkill
 
             for skill in skills:
                 stmt = select(DBSkill).where(
@@ -437,8 +438,8 @@ class SkillsManager:
                 db_skill = result.scalar_one_or_none()
 
                 if not db_skill:
-                    from datetime import datetime
                     import uuid
+                    from datetime import datetime
                     db_skill = DBSkill(
                         id=str(uuid.uuid4()),
                         name=skill.name,
