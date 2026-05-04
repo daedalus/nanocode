@@ -611,6 +611,9 @@ class AutonomousAgent:
         self.tool_registry = ToolRegistry()
         self.tool_executor = ToolExecutor(self.tool_registry, self.hook_manager)
 
+        # fs_router will be created on first use (requires async context)
+        self._fs_router = None
+
         register_builtin_tools(
             self.tool_registry, self.config.tools, self.file_tracker, self.lsp_manager
         )
@@ -624,6 +627,43 @@ class AutonomousAgent:
         self.tool_registry.register_handler("mcp", self._handle_mcp_tool)
 
         self.doom_loop_handler = create_doom_loop_handler()
+
+    async def _ensure_fs_router(self):
+        """Lazily create the file-system router (requires DB session)."""
+        if self._fs_router is not None:
+            return self._fs_router
+
+        from nanocode.tools.backends import (
+            DatabaseBackend,
+            FileSystemRouter,
+            LocalFSBackend,
+        )
+        from nanocode import storage
+
+        workspace_backend = LocalFSBackend(self.config.get("base_dir", os.getcwd()))
+        skills_backend = None
+        memory_backend = None
+
+        try:
+            db = await storage.get_db()
+            async with db.session() as session:
+                skills_backend = DatabaseBackend(session, scope="user")
+                memory_backend = DatabaseBackend(session, scope="user")
+        except Exception as e:
+            logger.warning(f"Failed to create DB backends: {e}")
+
+        self._fs_router = FileSystemRouter(
+            workspace_backend=workspace_backend,
+            skills_backend=skills_backend,
+            memory_backend=memory_backend,
+        )
+
+        # Inject fs_router into tools that support it
+        for tool in self.tool_registry.list_tools():
+            if hasattr(tool, "fs_router"):
+                tool.fs_router = self._fs_router
+
+        return self._fs_router
 
     def _init_skills(self):
         """Initialize skills system."""
