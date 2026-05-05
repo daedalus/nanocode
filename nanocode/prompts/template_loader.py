@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, FileSystemLoader, Template
+from jinja2 import Environment, FileSystemLoader, Template, select_autoescape
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +102,7 @@ class PromptTemplateLoader:
             loader=FileSystemLoader(str(self.template_dir)),
             trim_blocks=True,
             lstrip_blocks=True,
+            autoescape=select_autoescape(["html", "xml", "htm"]),
         )
 
         # Add custom filters if needed

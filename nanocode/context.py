@@ -410,7 +410,7 @@ class ScrapManager:
         import hashlib
         import uuid
 
-        content_hash = hashlib.md5(content.encode()).hexdigest()[:8]
+        content_hash = hashlib.md5(content.encode(), usedforsecurity=False).hexdigest()[:8]  # nosec B324 - non-security hash
         filename = f"scrap_{uuid.uuid4().hex[:8]}_{content_hash}.{extension}"
         filepath = os.path.join(self.scrap_dir, filename)
 

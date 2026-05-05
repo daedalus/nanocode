@@ -92,15 +92,15 @@ class TestInteractiveCLI:
         # Mock input to return clear command then exit
         with patch("builtins.input", side_effect=["/clear", "/exit"]):
             with patch.object(cli.ui, "print_welcome"):
-                with patch("nanocode.cli.os.system") as mock_system:
+                with patch("nanocode.cli.subprocess.run") as mock_run:
                     with patch.object(cli.ui, "print_message"):
                         try:
                             await cli.run()
                         except StopAsyncIteration:
                             pass
 
-                        # Verify system clear was called (it will be 'clear' on Unix-like systems)
-                        mock_system.assert_called_once()
+                        # Verify subprocess.run was called with clear command
+                        mock_run.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_run_history_command(self, cli):

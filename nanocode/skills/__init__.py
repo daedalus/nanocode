@@ -350,7 +350,7 @@ class SkillsManager:
         if not name:
             import hashlib
 
-            name = hashlib.md5(url.encode()).hexdigest()[:8]
+            name = hashlib.md5(url.encode(), usedforsecurity=False).hexdigest()[:8]  # nosec B324
 
         skill = Skill(
             name=name,

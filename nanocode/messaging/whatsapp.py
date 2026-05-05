@@ -42,7 +42,7 @@ class WhatsAppPlatform(MessagingPlatform):
 
         self.runner = web.AppRunner(self.app)
         await self.runner.setup()
-        site = web.TCPSite(self.runner, "0.0.0.0", self.webhook_port)
+        site = web.TCPSite(self.runner, "0.0.0.0", self.webhook_port)  # nosec B104 - WhatsApp webhook requires external access
         await site.start()
         logger.info(f"WhatsApp webhook server started on port {self.webhook_port}")
 

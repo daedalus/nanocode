@@ -75,7 +75,7 @@ class BloomFilter:
     def _hashes(self, item: str) -> list:
         result = []
         for i in range(self.hash_count):
-            h = hashlib.md5((item + str(i)).encode()).hexdigest()
+            h = hashlib.md5((item + str(i)).encode(), usedforsecurity=False).hexdigest()  # nosec B324
             result.append(int(h, 16) % self.size)
         return result
 
@@ -110,6 +110,14 @@ class BloomFilter:
         return bf
 
 
+def _validate_sql_identifier(name: str) -> str:
+    """Validate that a string is a safe SQL identifier (alphanumeric + underscore)."""
+    import re
+    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", name):
+        raise ValueError(f"Invalid SQL identifier: {name!r}")
+    return name
+
+
 class SQLiteCache:
     """Generic SQLite cache with bloom filter for fast pre-filtering.
 
@@ -139,9 +147,9 @@ class SQLiteCache:
     ) -> None:
         self.db_path = db_path
         self.bloom_path = str(db_path) + ".bloom"
-        self.table = table
-        self.key_col = key_col
-        self.value_col = value_col
+        self.table = _validate_sql_identifier(table)
+        self.key_col = _validate_sql_identifier(key_col)
+        self.value_col = _validate_sql_identifier(value_col)
         self.key_hash = key_hash or (lambda x: x)
         self._conn = sqlite3.connect(str(db_path))
         self._conn.row_factory = sqlite3.Row
@@ -154,19 +162,19 @@ class SQLiteCache:
         logger.info("Cache initialized: %s", db_path)
 
     def _initialize(self) -> None:
-        self._conn.execute(f"""
+        self._conn.execute(f"""  # nosec B608 - identifiers validated in __init__
             CREATE TABLE IF NOT EXISTS {self.table} (
                 {self.key_col} TEXT PRIMARY KEY,
                 {self.value_col} TEXT NOT NULL
             )
         """)
-        self._conn.execute(f"""
+        self._conn.execute(f"""  # nosec B608 - identifiers validated in __init__
             CREATE INDEX IF NOT EXISTS idx_{self.key_col} ON {self.table}({self.key_col})
         """)
         self._conn.commit()
 
     def _load(self) -> None:
-        cursor = self._conn.execute(f"SELECT {self.key_col} FROM {self.table}")
+        cursor = self._conn.execute(f"SELECT {self.key_col} FROM {self.table}")  # nosec B608
         self._key_set = {row[0] for row in cursor.fetchall()}
         if self._key_set and os.path.exists(self.bloom_path):
             self.bloom = BloomFilter.load(self.bloom_path)
@@ -208,7 +216,7 @@ class SQLiteCache:
         if cache_key in self.bloom:
             if cache_key in self._key_set:
                 cursor = self._conn.execute(
-                    f"SELECT {self.value_col} FROM {self.table} WHERE {self.key_col} = ?",
+                    f"SELECT {self.value_col} FROM {self.table} WHERE {self.key_col} = ?",  # nosec B608
                     (cache_key,),
                 )
                 row = cursor.fetchone()
@@ -225,7 +233,7 @@ class SQLiteCache:
         value_json = json.dumps(value)
         try:
             self._conn.execute(
-                f"INSERT INTO {self.table} ({self.key_col}, {self.value_col}) VALUES (?, ?)",
+                f"INSERT INTO {self.table} ({self.key_col}, {self.value_col}) VALUES (?, ?)",  # nosec B608
                 (cache_key, value_json),
             )
         except sqlite3.IntegrityError:
@@ -239,7 +247,7 @@ class SQLiteCache:
 
     def clear(self) -> None:
         """Clear all cached entries."""
-        self._conn.execute(f"DELETE FROM {self.table}")
+        self._conn.execute(f"DELETE FROM {self.table}")  # nosec B608
         self._conn.commit()
         self._key_set.clear()
         self.bloom = BloomFilter(capacity=10000)

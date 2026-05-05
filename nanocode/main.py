@@ -123,8 +123,8 @@ def parse_args():
     parser.add_argument(
         "--serve-host",
         type=str,
-        default="0.0.0.0",
-        help="HTTP server host (default: 0.0.0.0)",
+        default="127.0.0.1",  # localhost only by default for security
+        help="HTTP server host (default: 127.0.0.1, use 0.0.0.0 for all interfaces)",
     )
     parser.add_argument(
         "--serve-port",
@@ -567,7 +567,13 @@ async def main():
         handlers = [
             logging.FileHandler(log_file)
             if log_file
-            else logging.FileHandler("/tmp/nanocode.log")
+            else logging.FileHandler(
+                os.path.join(
+                    os.environ.get("XDG_STATE_HOME",
+                                 os.path.expanduser("~/.local/state")),
+                    "nanocode", "nanocode.log"
+                )
+            )
         ]
 
         # Only add StreamHandler when --debug is used AND NOT in TUI mode
@@ -617,7 +623,13 @@ async def main():
         handlers = [
             logging.FileHandler(log_file)
             if log_file
-            else logging.FileHandler("/tmp/nanocode.log")
+            else logging.FileHandler(
+                os.path.join(
+                    os.environ.get("XDG_STATE_HOME",
+                                 os.path.expanduser("~/.local/state")),
+                    "nanocode", "nanocode.log"
+                )
+            )
         ]
         logging.basicConfig(
             level=logging.DEBUG,

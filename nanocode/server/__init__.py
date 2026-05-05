@@ -248,7 +248,7 @@ class AgentServer:
 
     def __init__(
         self,
-        host: str = "0.0.0.0",
+        host: str = "127.0.0.1",  # localhost only by default for security
         port: int = 8080,
         agent=None,
         auth_username: str = None,
@@ -757,7 +757,7 @@ class AgentServer:
 
 
 async def run_server(
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",  # localhost only by default for security
     port: int = 8080,
     agent=None,
     auth_username: str = None,

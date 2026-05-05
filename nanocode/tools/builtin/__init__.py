@@ -209,7 +209,7 @@ class BashTool(Tool):
             work_path = Path(workdir) if workdir else Path.cwd()
             result = subprocess.run(
                 command,
-                shell=True,
+                shell=True,  # nosem nosec B602 - intentional: bash tool executes shell commands
                 capture_output=True,
                 text=True,
                 timeout=timeout,
@@ -390,7 +390,7 @@ class BashSessionTool(Tool):
 
                 result = subprocess.run(
                     command,
-                    shell=True,
+                    shell=True,  # nosem nosec B602 - intentional: bash tool executes shell commands
                     capture_output=True,
                     text=True,
                     timeout=timeout,

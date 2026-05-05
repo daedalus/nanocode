@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 import sys
 import threading
 import traceback
@@ -553,7 +554,7 @@ class InteractiveCLI:
                         continue
 
                     if command == "/clear":
-                        os.system("clear" if os.name == "posix" else "cls")
+                        subprocess.run(["clear"] if os.name == "posix" else ["cls"], shell=False)
                         continue
 
                     if command == "/history":

@@ -500,4 +500,4 @@ def get_file_hash(path: str) -> str:
     path_obj = Path(path)
     if not path_obj.exists():
         return ""
-    return hashlib.md5(path_obj.read_bytes()).hexdigest()
+    return hashlib.md5(path_obj.read_bytes(), usedforsecurity=False).hexdigest()  # nosec B324 - file integrity check
