@@ -615,7 +615,10 @@ class AutonomousAgent:
         self._fs_router = None
 
         register_builtin_tools(
-            self.tool_registry, self.config.tools, self.file_tracker, self.lsp_manager
+            self.tool_registry, self.config.tools, self.file_tracker, self.lsp_manager,
+            fs_router=self._fs_router,
+            worktree=str(self.config.get("base_dir", ".")),
+            session_id=getattr(self, "_session_id", "default")
         )
 
         self.task_tool = create_task_tool(

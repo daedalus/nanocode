@@ -2258,7 +2258,11 @@ Footer {
                         ctx = self.agent.context_manager
                         if hasattr(ctx, "_messages"):
                             msg_mgr = MessageActionManager(ctx._messages)
-                            result = msg_mgr.revert_with_snapshot(msg_index)
+                            worktree = str(self.agent.config.get("base_dir", "."))
+                            session_id = getattr(self.agent, "_session_id", "default")
+                            result = await msg_mgr.revert_with_snapshot(
+                                msg_index, worktree, session_id
+                            )
                             if result.get("success"):
                                 # Update context
                                 ctx._messages = msg_mgr._messages

@@ -142,18 +142,18 @@ class MessageActionManager:
         """Check if redo is available."""
         return len(self._redo_stack) > 0
 
-    def revert_with_snapshot(self, at_index: int) -> dict:
+    async def revert_with_snapshot(self, at_index: int, worktree: str = ".", session_id: str = "default") -> dict:
         """Revert to a specific message index with filesystem awareness (like opencode)."""
         if not self._messages or at_index < 0 or at_index >= len(self._messages):
             return {"success": False, "error": "Invalid index"}
 
         from nanocode.snapshot import create_snapshot_manager
 
-        snapshot_manager = create_snapshot_manager()
+        snapshot_manager = create_snapshot_manager(worktree, session_id)
 
         snapshot_hash = None
         try:
-            snapshot_hash = snapshot_manager.track()
+            snapshot_hash = await snapshot_manager.create_snapshot(session_id, "Pre-revert snapshot")
         except Exception:
             pass
 
@@ -213,10 +213,12 @@ class MessageActionManager:
             return msg.copy() if isinstance(msg, dict) else msg
         return None
 
-    def fork(
+    async def fork(
         self,
         fork_id: str = None,
         message_count: int = None,
+        worktree: str = ".",
+        session_id: str = "default",
     ) -> tuple[list[dict], str]:
         """Fork current session at a point, returns messages and fork_id."""
         fork_id = fork_id or str(uuid.uuid4())[:8]
@@ -225,6 +227,17 @@ class MessageActionManager:
             messages_to_fork = self._messages[:message_count]
         else:
             messages_to_fork = self._messages.copy()
+
+        # Create a snapshot before forking (like opencode does)
+        try:
+            from nanocode.snapshot import create_snapshot_manager
+
+            snapshot_manager = create_snapshot_manager(worktree, session_id)
+            snapshot_hash = await snapshot_manager.create_snapshot(
+                session_id, f"Fork {fork_id}"
+            )
+        except Exception:
+            snapshot_hash = None
 
         self._action_history.append(
             MessageAction(

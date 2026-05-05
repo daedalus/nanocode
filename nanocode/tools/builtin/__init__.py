@@ -2308,7 +2308,8 @@ def create_builtin_tools(
 
 
 def register_builtin_tools(
-    registry: ToolRegistry, config: dict = None, file_tracker=None, lsp_manager=None, fs_router=None
+    registry: ToolRegistry, config: dict = None, file_tracker=None, lsp_manager=None, fs_router=None,
+    worktree: str = ".", session_id: str = "default"
 ):
     """Register all built-in tools."""
     from nanocode.tools import ToolExecutor
@@ -2332,7 +2333,7 @@ def register_builtin_tools(
         from nanocode.snapshot import create_snapshot_manager
         from nanocode.tools.builtin.snapshot import register_snapshot_tools
 
-        snapshot_manager = create_snapshot_manager()
-        register_snapshot_tools(registry, snapshot_manager)
+        snapshot_manager = create_snapshot_manager(worktree, session_id)
+        register_snapshot_tools(registry, snapshot_manager, session_id)
     except ImportError:
         pass

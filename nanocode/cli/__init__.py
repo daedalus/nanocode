@@ -1212,7 +1212,12 @@ class InteractiveCLI:
         from nanocode.message_actions import create_message_manager
 
         manager = create_message_manager()
-        messages, fork_id = manager.fork(message_count=name)
+
+        worktree = str(self.nanocode.config.get("base_dir", "."))
+        session_id = getattr(self.nanocode, "_session_id", "default")
+        messages, fork_id = await manager.fork(
+            message_count=name, worktree=worktree, session_id=session_id
+        )
 
         if name:
             manager.save_as(name)
@@ -1347,11 +1352,13 @@ class InteractiveCLI:
         try:
             from nanocode.snapshot import create_snapshot_manager
 
-            manager = create_snapshot_manager()
-            snapshot_hash = await manager.track()
+            worktree = str(self.nanocode.config.get("base_dir", "."))
+            session_id = getattr(self.nanocode, "_session_id", "default")
+            manager = create_snapshot_manager(worktree, session_id)
+            snapshot_hash = await manager.create_snapshot(session_id, "CLI snapshot")
 
             if snapshot_hash:
-                self.ui.print_success(f"Snapshot created: {snapshot_hash}")
+                self.ui.print_success(f"Snapshot created: {snapshot_hash[:8]}...")
             else:
                 self.ui.print_error("Failed to create snapshot")
         except Exception as e:
@@ -1368,19 +1375,21 @@ class InteractiveCLI:
         try:
             from nanocode.snapshot import create_snapshot_manager
 
-            manager = create_snapshot_manager()
+            worktree = str(self.nanocode.config.get("base_dir", "."))
+            session_id = getattr(self.nanocode, "_session_id", "default")
+            manager = create_snapshot_manager(worktree, session_id)
 
             if snapshot_hash == "latest":
-                snapshots = await manager.list_snapshots()
+                snapshots = await manager.list_snapshots(session_id)
                 if not snapshots:
                     self.ui.print_error("No snapshots available")
                     return
                 snapshot_hash = snapshots[0]["hash"]
 
-            success = await manager.restore(snapshot_hash)
+            success = await manager.restore_snapshot(session_id, snapshot_hash)
 
             if success:
-                self.ui.print_success(f"Reverted to snapshot: {snapshot_hash}")
+                self.ui.print_success(f"Reverted to snapshot: {snapshot_hash[:8]}...")
             else:
                 self.ui.print_error("Failed to revert snapshot")
         except Exception as e:
@@ -1391,8 +1400,10 @@ class InteractiveCLI:
         try:
             from nanocode.snapshot import create_snapshot_manager
 
-            manager = create_snapshot_manager()
-            snapshots = await manager.list_snapshots()
+            worktree = str(self.nanocode.config.get("base_dir", "."))
+            session_id = getattr(self.nanocode, "_session_id", "default")
+            manager = create_snapshot_manager(worktree, session_id)
+            snapshots = await manager.list_snapshots(session_id)
 
             if not snapshots:
                 print(self.ui.color("yellow", "\nNo snapshots available."), flush=True)
@@ -1402,7 +1413,7 @@ class InteractiveCLI:
             print(self.ui.color("cyan", "\nAvailable Snapshots:"), flush=True)
             print(self.ui.color("gray", "─" * 40), flush=True)
             for s in snapshots:
-                print(f"  • {self.ui.color('magenta', s['hash'])} ({s['timestamp']})", flush=True)
+                print(f"  • {self.ui.color('magenta', s['hash'][:8]+'...')} {s.get('message', '')}", flush=True)
         except Exception as e:
             self.ui.print_error(f"Error: {e}")
 

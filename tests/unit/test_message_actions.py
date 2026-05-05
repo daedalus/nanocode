@@ -1,5 +1,6 @@
 """Tests for message actions."""
 
+import pytest
 
 from nanocode.message_actions import (
     MessageAction,
@@ -108,7 +109,8 @@ class TestMessageActionManager:
 
         assert copied is None
 
-    def test_fork(self):
+    @pytest.mark.asyncio
+    async def test_fork(self):
         """Test forking messages."""
         messages = [
             {"role": "a", "content": "1"},
@@ -116,12 +118,13 @@ class TestMessageActionManager:
         ]
         manager = MessageActionManager(messages)
 
-        forked, fork_id = manager.fork()
+        forked, fork_id = await manager.fork()
 
         assert len(forked) == 2
         assert fork_id is not None
 
-    def test_fork_with_count(self):
+    @pytest.mark.asyncio
+    async def test_fork_with_count(self):
         """Test forking with specific count."""
         messages = [
             {"role": "a", "content": "1"},
@@ -130,7 +133,7 @@ class TestMessageActionManager:
         ]
         manager = MessageActionManager(messages)
 
-        forked, fork_id = manager.fork(message_count=2)
+        forked, fork_id = await manager.fork(message_count=2)
 
         assert len(forked) == 2
 
