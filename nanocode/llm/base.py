@@ -7,32 +7,31 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Any, AsyncGenerator, Optional, Dict, List
+from typing import Any, AsyncGenerator
 
 import httpx
 from httpx import HTTPStatusError
 
+from nanocode.llm.events import (
+    FinishStepEvent,
+    ReasoningDeltaEvent,
+    StreamEvent,
+    TextDeltaEvent,
+    ToolCallEvent,
+)
 from nanocode.retry import (
     ProviderOverloadedError,
     RateLimitError,
     RetryConfig,
     retry_with_backoff,
 )
-from nanocode.tools import ToolCall
-from nanocode.llm.events import (
-    StreamEvent,
-    EventType,
-    ReasoningStartEvent,
-    ReasoningDeltaEvent,
-    ReasoningEndEvent,
-    ToolCallEvent,
-    TextStartEvent,
-    TextDeltaEvent,
-    TextEndEvent,
-    FinishStepEvent,
-    ErrorEvent,
+from nanocode.retry_guard import (
+    check_rate_limit,
+    clear_rate_limit,
+    format_remaining,
+    record_rate_limit,
 )
-
+from nanocode.tools import ToolCall
 
 logger = logging.getLogger(__name__)
 
@@ -223,9 +222,25 @@ class LLMBase(ABC):
         headers: dict = None,
         json: dict = None,
         on_retry: callable = None,
+        provider: str = "unknown",
         **kwargs,
     ) -> httpx.Response:
-        """Make an HTTP request with retry logic."""
+        """Make an HTTP request with retry logic.
+
+        Args:
+            provider: Provider name for cross-session rate limit tracking.
+        """
+
+        remaining = check_rate_limit(provider)
+        if remaining is not None:
+            logger.info(
+                "Skipping %s request to %s — rate-limited for %s more %s",
+                method, url, format_remaining(remaining), provider,
+            )
+            raise RateLimitError(
+                f"Provider {provider} is rate-limited. Resets in {format_remaining(remaining)}.",
+                retry_after=remaining,
+            )
 
         if headers is None:
             headers = {}
@@ -233,6 +248,7 @@ class LLMBase(ABC):
             headers["User-Agent"] = self.user_agent
 
         async def make_request():
+            nonlocal provider
             response = await self._client.request(
                 method=method,
                 url=url,
@@ -242,6 +258,7 @@ class LLMBase(ABC):
             )
 
             if response.status_code == 429:
+                record_rate_limit(provider, headers=dict(response.headers))
                 retry_after = response.headers.get("retry-after")
                 error = RateLimitError(
                     f"Rate limited: {response.text[:200]}",
@@ -304,6 +321,7 @@ class LLMBase(ABC):
                     response=response,
                 )
 
+            clear_rate_limit(provider)
             return response
 
         if self.retry_config.max_retries > 0:
