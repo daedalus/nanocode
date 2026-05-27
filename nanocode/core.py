@@ -288,6 +288,7 @@ class AutonomousAgent:
         self._init_drift_watchdog() if self.drift_mode != "off" else None
         self._init_cache()
         self._init_review()
+        self._delegate_depth = 0
 
     def _init_session(self):
         """Initialize session management."""
@@ -601,6 +602,7 @@ class AutonomousAgent:
 
     def _init_tools(self):
         """Initialize tool system."""
+        from nanocode.agents.delegate import create_delegate_tool
         from nanocode.doom_loop import create_doom_loop_handler
         from nanocode.tools.task import create_task_tool
 
@@ -622,6 +624,12 @@ class AutonomousAgent:
         )
         self.task_tool.set_parent_agent(self)
         self.tool_registry.register(self.task_tool)
+
+        self.delegate_tool = create_delegate_tool(
+            self.tool_registry, self.config._data if hasattr(self.config, "_data") else {}
+        )
+        self.delegate_tool.set_parent_llm(self.llm)
+        self.tool_registry.register(self.delegate_tool)
 
         self.tool_registry.register_handler("mcp", self._handle_mcp_tool)
 
