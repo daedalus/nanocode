@@ -516,73 +516,62 @@ class AgentPermissionsScreen(ModalScreen):
         self._load_agents()
         self.query_one("#agent-list", DataTable).focus()
 
-    def _load_agents(self):
+    def _load_permission_overrides(self, config_path) -> dict:
+        """Load permission overrides from config.yaml."""
         from pathlib import Path
 
         import yaml
 
-        from nanocode.agents import get_agent_registry, PermissionAction
+        config_path_obj = Path(config_path)
+        if not config_path_obj.exists():
+            return {}
+        with open(config_path_obj) as f:
+            config = yaml.safe_load(f) or {}
+        perm_overrides = {}
+        agents_config = config.get("agents", {})
+        for name, rules in agents_config.items():
+            if isinstance(rules, list):
+                perm_overrides[name] = rules
+        if not perm_overrides:
+            perms_config = config.get("permissions") or {}
+            for name, rules in perms_config.get("agents", {}).items():
+                if isinstance(rules, list):
+                    perm_overrides[name] = rules
+        return config, perm_overrides
+
+    def _get_agent_base_permission(self, agent, perm_overrides: dict) -> str:
+        """Determine base permission level for an agent."""
+        rules = agent.permission if hasattr(agent, "permission") else []
+        if agent.name in perm_overrides and isinstance(perm_overrides[agent.name], list):
+            for rule_dict in perm_overrides[agent.name]:
+                if isinstance(rule_dict, dict):
+                    if rule_dict.get("permission") == "*" and rule_dict.get("pattern") == "*":
+                        return rule_dict.get("action", "ask")
+        elif rules:
+            for rule in rules:
+                if rule.permission == "*" and rule.pattern == "*":
+                    return rule.action.value
+        return "ask"
+
+    def _load_agents(self):
+        from nanocode.agents import get_agent_registry
 
         registry = get_agent_registry()
 
-        # Load permission overrides from config
-        config_path = "config.yaml"
-        perm_overrides = {}
-        if Path(config_path).exists():
-            with open(config_path) as f:
-                config = yaml.safe_load(f) or {}
-            
-            # Get permissions from agents.config section or permissions.agents section
-            agents_config = config.get("agents", {})
-            
-            # Handle list format: agents = {"build": [...], "plan": [...]}
-            for name, rules in agents_config.items():
-                if isinstance(rules, list):
-                    perm_overrides[name] = rules
-            
-            # Also check permissions.agents section
-            if not perm_overrides:
-                perms_config = config.get("permissions") or {}
-                for name, rules in perms_config.get("agents", {}).items():
-                    if isinstance(rules, list):
-                        perm_overrides[name] = rules
-            
-            # Apply config to registry
+        config, perm_overrides = self._load_permission_overrides("config.yaml")
+        if config:
             registry.apply_config(config)
 
         agents = []
-
-        # Get all non-hidden agents (primary + subagents)
         for agent in registry.list_all():
             if agent.hidden:
                 continue
-
-            # Get permission rules
             rules = agent.permission if hasattr(agent, "permission") else []
-
-            # Get base permission from config overrides or default rule
-            base_perm = "ask"
-            if agent.name in perm_overrides and isinstance(perm_overrides[agent.name], list):
-                # It's a list of rules - find the default rule (*/*)
-                for rule_dict in perm_overrides[agent.name]:
-                    if isinstance(rule_dict, dict):
-                        if rule_dict.get("permission") == "*" and rule_dict.get("pattern") == "*":
-                            base_perm = rule_dict.get("action", "ask")
-                            break
-            elif rules:
-                # Fallback to rules from registry
-                for rule in rules:
-                    if rule.permission == "*" and rule.pattern == "*":
-                        base_perm = rule.action.value
-                        break
-
-            agents.append(
-                {
-                    "name": agent.name,
-                    "rules": rules,
-                    "base_permission": base_perm,
-                }
-            )
+            agents.append({
+                "name": agent.name,
+                "rules": rules,
+                "base_permission": self._get_agent_base_permission(agent, perm_overrides),
+            })
 
         self._agents = agents
         self._filtered = agents
@@ -1608,155 +1597,175 @@ Footer {
             pass
         return None
 
-    def _update_sidebar(self) -> None:
-        """Update sidebar content with current state info."""
-        if not self._sidebar_visible:
-            return
-
+    def _add_context_info(self, lines):
         from rich.text import Text
 
-        lines = []
+        if not (self.agent and hasattr(self.agent, "context_manager")):
+            return
+        ctx = self.agent.context_manager
+        usage = ctx.get_token_usage()
+        current = usage.get("current_tokens", 0)
+        max_tok = usage.get("context_limit", 0)
+        if max_tok > 0:
+            lines.append(f"Context: {current:,} / {max_tok:,} ({current / max_tok * 100:.0f}%)")
+        else:
+            lines.append(f"Context: {current:,}")
+        lines.append(f"Msgs: {usage.get('message_count', 0)}")
 
-        if self.agent and hasattr(self.agent, "context_manager"):
-            ctx = self.agent.context_manager
-            usage = ctx.get_token_usage()
-            current = usage.get("current_tokens", 0)
-            max_tok = usage.get("context_limit", 0)
-            if max_tok > 0:
-                pct = (current / max_tok) * 100
-                lines.append(f"Context: {current:,} / {max_tok:,} ({pct:.0f}%)")
-            else:
-                lines.append(f"Context: {current:,}")
-            lines.append(f"Msgs: {usage.get('message_count', 0)}")
-
+    def _add_agent_info(self, lines):
         if self.agent and hasattr(self.agent, "current_agent"):
             lines.append(f"Agent: {self.agent.current_agent.name}")
 
-        if self.agent and hasattr(self.agent, "llm") and self.agent.llm:
-            model = getattr(self.agent.llm, "model", "unknown")
-            lines.append(f"Model: {model}")
-            max_out = getattr(self.agent.llm, "max_tokens", None)
-            if max_out:
-                lines.append(f"Max out: {max_out:,}")
+    def _add_model_info(self, lines):
+        if not (self.agent and hasattr(self.agent, "llm") and self.agent.llm):
+            return
+        model = getattr(self.agent.llm, "model", "unknown")
+        lines.append(f"Model: {model}")
+        max_out = getattr(self.agent.llm, "max_tokens", None)
+        if max_out:
+            lines.append(f"Max out: {max_out:,}")
 
+    def _add_session_info(self, lines):
         if hasattr(self, "_session_id") and self._session_id:
             lines.append(f"Session: {self._session_id[:12]}")
 
-        if self.agent and hasattr(self.agent, "tool_registry"):
-            task_tool = self.agent.tool_registry.get("task")
-            if task_tool and hasattr(task_tool, "sessions"):
-                active = sum(1 for s in task_tool.sessions.values() if not s.completed)
-                if active > 0:
-                    lines.append(f"Active tasks: {active}")
+    def _add_active_tasks(self, lines):
+        if not (self.agent and hasattr(self.agent, "tool_registry")):
+            return
+        task_tool = self.agent.tool_registry.get("task")
+        if task_tool and hasattr(task_tool, "sessions"):
+            active = sum(1 for s in task_tool.sessions.values() if not s.completed)
+            if active > 0:
+                lines.append(f"Active tasks: {active}")
 
-            todo_tool = self.agent.tool_registry.get("todo")
-            if todo_tool and hasattr(todo_tool, "todo_service"):
-                session_id = getattr(self.agent, "_session_id", None)
-                if session_id:
-                    todos = todo_tool.todo_service.get_todos(session_id)
-                    if todos:
-                        from rich.text import Text
-                        lines.append(Text.from_markup("[#d79921]─ Todos ─[/#d79921]"))
-                        for t in todos:
-                            if t.status == "completed":
-                                icon = Text.from_markup("[#98971f]✓[/#98971f]")
-                            elif t.status == "in_progress":
-                                icon = Text.from_markup("[#83a598]◐[/#83a598]")
-                            elif t.status == "cancelled":
-                                icon = Text.from_markup("[#fb4934]✗[/#fb4934]")
-                            else:
-                                icon = Text.from_markup("[#928374]○[/#928374]")
-                            content = (
-                                t.content[:30] + "..."
-                                if len(t.content) > 30
-                                else t.content
-                            )
-                            lines.append(Text(f"  ") + icon + Text(f" {content}"))
-            elif todo_tool and hasattr(todo_tool, "tasks"):
-                todo_items = todo_tool.tasks
-                if todo_items:
-                    from rich.text import Text
-                    from rich.text import Text
-                    lines.append(Text.from_markup("[#d79921]─ Todos ─[/#d79921]"))
-                    for tid, t in todo_items.items():
-                        if t.get("status") == "completed":
-                            icon = Text.from_markup("[#98971f]✓[/#98971f]")
-                        elif t.get("status") == "in_progress":
-                            icon = Text.from_markup("[#83a598]◐[/#83a598]")
-                        else:
-                            icon = Text.from_markup("[#928374]○[/#928374]")
-                        content = t.get("content", "")[:30]
-                        lines.append(Text(f"  ") + icon + Text(f" {content}"))
+    def _add_todo_line(self, lines, icon_markup, content):
+        from rich.text import Text
 
-        if self.agent:
-            if hasattr(self.agent, "_mcp_available"):
-                mcp_available = self.agent._mcp_available
-                if mcp_available:
-                    lines.append(Text("─ MCP ─", style="#d79921"))
-                    for name, enabled in list(mcp_available.items())[:15]:
-                        dot = (
-                            Text("●", style="#98971f")
-                            if enabled
-                            else Text("○", style="#928374")
-                        )
-                        lines.append(Text("  ") + dot + Text(f" {name}"))
+        icon = Text.from_markup(icon_markup)
+        truncated = content[:30] + "..." if len(content) > 30 else content
+        lines.append(Text("  ") + icon + Text(f" {truncated}"))
 
-            if hasattr(self.agent, "lsp_manager") and self.agent.lsp_manager:
-                lsp_servers = (
-                    list(self.agent.lsp_manager._servers.keys())
-                    if hasattr(self.agent.lsp_manager, "_servers")
-                    else []
-                )
-                if lsp_servers:
-                    lines.append(Text("─ LSP ─", style="#d79921"))
-                    for server_id in lsp_servers[:10]:
-                        lines.append(f"  {server_id}")
-                    if len(lsp_servers) > 10:
-                        lines.append(f"  ... and {len(lsp_servers) - 10} more")
+    def _add_todos_via_service(self, lines, todo_tool):
+        session_id = getattr(self.agent, "_session_id", None)
+        if not session_id:
+            return
+        todos = todo_tool.todo_service.get_todos(session_id)
+        if not todos:
+            return
+        from rich.text import Text
 
-            if hasattr(self.agent, "modified_files") and self.agent.modified_files:
-                try:
-                    self.agent.modified_files.refresh_from_git()
-                    modified = self.agent.modified_files.get_modified_files()
-                    if modified:
-                        lines.append(Text("─ Modified ─", style="#d79921"))
-                        for f in modified[:15]:
-                            adds = (
-                                Text(f"+{f.additions}", style="#98971f")
-                                if f.additions > 0
-                                else Text("")
-                            )
-                            dels = (
-                                Text(f"-{f.deletions}", style="#fb4934")
-                                if f.deletions > 0
-                                else Text("")
-                            )
-                            parts = []
-                            if adds:
-                                parts.append(adds)
-                            if dels:
-                                parts.append(dels)
-                            stats = Text(" ") + adds + dels if parts else Text("")
-                            lines.append(
-                                Text("  ")
-                                + Text(f.relative_path, style="#83a598")
-                                + stats
-                            )
-                        if len(modified) > 15:
-                            lines.append(f"  ... and {len(modified) - 15} more")
-                except Exception:
-                    pass
+        lines.append(Text.from_markup("[#d79921]─ Todos ─[/#d79921]"))
+        for t in todos:
+            icon_map = {
+                "completed": "[#98971f]✓[/#98971f]",
+                "in_progress": "[#83a598]◐[/#83a598]",
+                "cancelled": "[#fb4934]✗[/#fb4934]",
+            }
+            icon = icon_map.get(t.status, "[#928374]○[/#928374]")
+            self._add_todo_line(lines, icon, t.content)
+
+    def _add_todos_via_tasks(self, lines, todo_tool):
+        todo_items = todo_tool.tasks
+        if not todo_items:
+            return
+        from rich.text import Text
+
+        lines.append(Text.from_markup("[#d79921]─ Todos ─[/#d79921]"))
+        for tid, t in todo_items.items():
+            icon_map = {
+                "completed": "[#98971f]✓[/#98971f]",
+                "in_progress": "[#83a598]◐[/#83a598]",
+            }
+            icon = icon_map.get(t.get("status"), "[#928374]○[/#928374]")
+            self._add_todo_line(lines, icon, t.get("content", ""))
+
+    def _add_todos_info(self, lines):
+        if not (self.agent and hasattr(self.agent, "tool_registry")):
+            return
+        todo_tool = self.agent.tool_registry.get("todo")
+        if not todo_tool:
+            return
+        if hasattr(todo_tool, "todo_service"):
+            self._add_todos_via_service(lines, todo_tool)
+        elif hasattr(todo_tool, "tasks"):
+            self._add_todos_via_tasks(lines, todo_tool)
+
+    def _add_mcp_info(self, lines):
+        from rich.text import Text
+
+        if not (self.agent and hasattr(self.agent, "_mcp_available") and self.agent._mcp_available):
+            return
+        lines.append(Text("─ MCP ─", style="#d79921"))
+        for name, enabled in list(self.agent._mcp_available.items())[:15]:
+            dot = Text("●", style="#98971f") if enabled else Text("○", style="#928374")
+            lines.append(Text("  ") + dot + Text(f" {name}"))
+
+    def _add_lsp_info(self, lines):
+        from rich.text import Text
+
+        if not (self.agent and hasattr(self.agent, "lsp_manager") and self.agent.lsp_manager):
+            return
+        lsp_servers = (
+            list(self.agent.lsp_manager._servers.keys())
+            if hasattr(self.agent.lsp_manager, "_servers")
+            else []
+        )
+        if not lsp_servers:
+            return
+        lines.append(Text("─ LSP ─", style="#d79921"))
+        for server_id in lsp_servers[:10]:
+            lines.append(f"  {server_id}")
+        if len(lsp_servers) > 10:
+            lines.append(f"  ... and {len(lsp_servers) - 10} more")
+
+    def _add_modified_files(self, lines):
+        from rich.text import Text
+
+        if not (self.agent and hasattr(self.agent, "modified_files") and self.agent.modified_files):
+            return
+        try:
+            self.agent.modified_files.refresh_from_git()
+            modified = self.agent.modified_files.get_modified_files()
+            if not modified:
+                return
+            lines.append(Text("─ Modified ─", style="#d79921"))
+            for f in modified[:15]:
+                adds = Text(f"+{f.additions}", style="#98971f") if f.additions > 0 else Text("")
+                dels = Text(f"-{f.deletions}", style="#fb4934") if f.deletions > 0 else Text("")
+                stats_parts = [p for p in [adds, dels] if str(p)]
+                stats = Text(" ") + Text("").join(stats_parts) if stats_parts else Text("")
+                lines.append(Text("  ") + Text(f.relative_path, style="#83a598") + stats)
+            if len(modified) > 15:
+                lines.append(f"  ... and {len(modified) - 15} more")
+        except Exception:
+            pass
+
+    def _render_sidebar(self, lines):
+        from rich.text import Text
 
         try:
             sidebar_body = self.query_one("#sidebar-body", RichLog)
             sidebar_body.clear()
             for line in lines:
-                if isinstance(line, Text):
-                    sidebar_body.write(line)
-                else:
-                    sidebar_body.write(Text(line))
+                sidebar_body.write(Text(line) if not isinstance(line, Text) else line)
         except Exception:
             pass
+
+    def _update_sidebar(self) -> None:
+        """Update sidebar content with current state info."""
+        if not self._sidebar_visible:
+            return
+        lines = []
+        self._add_context_info(lines)
+        self._add_agent_info(lines)
+        self._add_model_info(lines)
+        self._add_session_info(lines)
+        self._add_active_tasks(lines)
+        self._add_todos_info(lines)
+        self._add_mcp_info(lines)
+        self._add_lsp_info(lines)
+        self._add_modified_files(lines)
+        self._render_sidebar(lines)
 
     def action_toggle_sidebar(self) -> None:
         """Toggle sidebar visibility."""
@@ -1998,100 +2007,90 @@ Footer {
         if tool_call.state == ToolState.ERROR:
             self._print_error(tool_call.output if tool_call.output else "Tool failed")
 
+    def _format_glob_call(self, tool_name, arguments) -> ToolCall:
+        root = arguments.get("path", "")
+        suffix = f"in {self._normalize_path(root)}" if root else ""
+        return ToolCall(tool=tool_name, title=f'Glob "{arguments.get("pattern", "")}"', description=suffix, icon="✱")
+
+    def _format_grep_call(self, tool_name, arguments) -> ToolCall:
+        root = arguments.get("path", "")
+        suffix = f"in {self._normalize_path(root)}" if root else ""
+        return ToolCall(tool=tool_name, title=f'Grep "{arguments.get("pattern", "")}"', description=suffix, icon="✱")
+
+    def _format_read_call(self, tool_name, arguments) -> ToolCall:
+        filepath = self._normalize_path(arguments.get("path", ""))
+        extra_args = {k: v for k, v in arguments.items() if k != "filePath" and isinstance(v, (str, int, bool))}
+        desc = f"[{', '.join(f'{k}={v}' for k, v in extra_args.items())}]" if extra_args else ""
+        return ToolCall(tool=tool_name, title=f"Read {filepath}", description=desc, icon="→")
+
+    def _format_write_call(self, tool_name, arguments) -> ToolCall:
+        return ToolCall(tool=tool_name, title=f"Write {self._normalize_path(arguments.get('path', ''))}", icon="←")
+
+    def _format_edit_call(self, tool_name, arguments) -> ToolCall:
+        return ToolCall(tool=tool_name, title=f"Edit {self._normalize_path(arguments.get('path', ''))}", icon="←")
+
+    def _format_webfetch_call(self, tool_name, arguments) -> ToolCall:
+        return ToolCall(tool=tool_name, title=f"WebFetch {arguments.get('url', '')}", icon="%")
+
+    def _format_codesearch_call(self, tool_name, arguments) -> ToolCall:
+        return ToolCall(tool=tool_name, title=f'Exa Code Search "{arguments.get("query", "")}"', icon="◇")
+
+    def _format_websearch_call(self, tool_name, arguments) -> ToolCall:
+        return ToolCall(tool=tool_name, title=f'Exa Web Search "{arguments.get("query", "")}"', icon="◈")
+
+    def _format_task_call(self, tool_name, arguments) -> ToolCall:
+        desc = arguments.get("description", "")
+        subagent = arguments.get("subagent_type", "")
+        agent_name = subagent if subagent else "unknown"
+        name = desc if desc else f"{agent_name} Task"
+        return ToolCall(tool=tool_name, title=name, description=f"{agent_name} Agent", icon="•")
+
+    def _format_skill_call(self, tool_name, arguments) -> ToolCall:
+        return ToolCall(tool=tool_name, title=f'Skill "{arguments.get("name", "")}"', icon="→")
+
+    def _format_bash_call(self, tool_name, arguments) -> ToolCall:
+        command = arguments.get("command", "")
+        workdir = arguments.get("workdir", "")
+        if workdir and workdir != ".":
+            try:
+                workdir = os.path.relpath(workdir, os.getcwd())
+            except ValueError:
+                pass
+            title = f"# {command} in {workdir}"
+        else:
+            title = f"# {command}"
+        return ToolCall(tool=tool_name, title=title, icon="$")
+
+    def _format_todowrite_call(self, tool_name, arguments) -> ToolCall:
+        return ToolCall(tool=tool_name, title="Todos", icon="#")
+
+    def _normalize_path(self, path: str) -> str:
+        if not path:
+            return ""
+        try:
+            return os.path.relpath(path, os.getcwd()) or "."
+        except ValueError:
+            return path
+
     def _format_tool_call(self, tool_name: str, arguments: dict) -> ToolCall:
         """Format a tool call based on its type, matching opencode's tool handlers."""
-
-        def normalize_path(path: str) -> str:
-            if not path:
-                return ""
-            try:
-                return os.path.relpath(path, os.getcwd()) or "."
-            except ValueError:
-                return path
-
-        if tool_name == "glob":
-            root = arguments.get("path", "")
-            pattern = arguments.get("pattern", "")
-            title = f'Glob "{pattern}"'
-            suffix = f"in {normalize_path(root)}" if root else ""
-            return ToolCall(tool=tool_name, title=title, description=suffix, icon="✱")
-
-        if tool_name == "grep":
-            root = arguments.get("path", "")
-            pattern = arguments.get("pattern", "")
-            title = f'Grep "{pattern}"'
-            suffix = f"in {normalize_path(root)}" if root else ""
-            return ToolCall(tool=tool_name, title=title, description=suffix, icon="✱")
-
-        if tool_name == "read":
-            filepath = normalize_path(arguments.get("path", ""))
-            extra_args = {
-                k: v
-                for k, v in arguments.items()
-                if k != "filePath" and isinstance(v, (str, int, bool))
-            }
-            desc = (
-                f"[{', '.join(f'{k}={v}' for k, v in extra_args.items())}]"
-                if extra_args
-                else ""
-            )
-            return ToolCall(
-                tool=tool_name, title=f"Read {filepath}", description=desc, icon="→"
-            )
-
-        if tool_name == "write":
-            filepath = normalize_path(arguments.get("path", ""))
-            return ToolCall(tool=tool_name, title=f"Write {filepath}", icon="←")
-
-        if tool_name == "edit":
-            filepath = normalize_path(arguments.get("path", ""))
-            return ToolCall(tool=tool_name, title=f"Edit {filepath}", icon="←")
-
-        if tool_name == "webfetch":
-            url = arguments.get("url", "")
-            return ToolCall(tool=tool_name, title=f"WebFetch {url}", icon="%")
-
-        if tool_name == "codesearch":
-            query = arguments.get("query", "")
-            return ToolCall(
-                tool=tool_name, title=f'Exa Code Search "{query}"', icon="◇"
-            )
-
-        if tool_name == "websearch":
-            query = arguments.get("query", "")
-            return ToolCall(tool=tool_name, title=f'Exa Web Search "{query}"', icon="◈")
-
-        if tool_name == "task":
-            desc = arguments.get("description", "")
-            subagent = arguments.get("subagent_type", "")
-            agent_name = subagent if subagent else "unknown"
-            icon = "•"
-            name = desc if desc else f"{agent_name} Task"
-            return ToolCall(
-                tool=tool_name, title=name, description=f"{agent_name} Agent", icon=icon
-            )
-
-        if tool_name == "skill":
-            name = arguments.get("name", "")
-            return ToolCall(tool=tool_name, title=f'Skill "{name}"', icon="→")
-
-        if tool_name == "bash":
-            command = arguments.get("command", "")
-            workdir = arguments.get("workdir", "")
-            if workdir and workdir != ".":
-                try:
-                    workdir = os.path.relpath(workdir, os.getcwd())
-                except ValueError:
-                    pass
-                title = f"# {command} in {workdir}"
-            else:
-                title = f"# {command}"
-            return ToolCall(tool=tool_name, title=title, icon="$")
-
-        if tool_name == "todowrite":
-            return ToolCall(tool=tool_name, title="Todos", icon="#")
-
-        # Fallback for unknown tools
+        _format_handlers = {
+            "glob": self._format_glob_call,
+            "grep": self._format_grep_call,
+            "read": self._format_read_call,
+            "write": self._format_write_call,
+            "edit": self._format_edit_call,
+            "webfetch": self._format_webfetch_call,
+            "codesearch": self._format_codesearch_call,
+            "websearch": self._format_websearch_call,
+            "task": self._format_task_call,
+            "skill": self._format_skill_call,
+            "bash": self._format_bash_call,
+            "todowrite": self._format_todowrite_call,
+        }
+        handler = _format_handlers.get(tool_name)
+        if handler:
+            return handler(tool_name, arguments)
         title = str(arguments) if arguments else "Unknown"
         return ToolCall(tool=tool_name, title=f"{tool_name} {title}", icon="⚙")
 
@@ -2332,325 +2331,247 @@ Footer {
             input_widget.cursor_position = 0
 
     @work(exclusive=True)
-    async def _process_input(self, text: str):
-        import traceback
-        import logging
-
-        _tui_logger.debug(f"_process_input START: '{text[:50]}...'")
-        _tui_logger.debug(f"agent exists: {self.agent is not None}")
-        _tui_logger.debug(f"processing: {getattr(self, '_processing', 'N/A')}")
-
-        # Screen state debug
-        try:
-            _tui_logger.debug(f"Current screen: {type(self.screen).__name__}")
-            _tui_logger.debug(f"Stack size: {len(self.screen._stack)}")
-        except AttributeError:
-            pass  # Older Textual versions may not have _stack
-
-        self._print_line(f"> {text}", Style.USER_MESSAGE)
-        self._print_empty()
-
-        # Handle slash-prefixed commands locally before sending to agent
-        if text.startswith("/"):
-            await self._handle_command(text)
-            return
-
+    async def _setup_processing_state(self, text: str):
+        """Set up processing state before agent call."""
         self._processing = True
-
-        # Show and animate spinner
         spinner = self.query_one("#spinner", Static)
         spinner.update("◐")
         spinner.classes = "spinner-active"
-
-        # Start spinner animation
         self._spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
         self._spinner_index = 0
         self._spinner_timer = self.set_interval(0.15, self._update_spinner)
-
         input_widget = self.query_one("#input", Input)
         input_widget.disabled = True
+        return input_widget
 
-        if not self.agent:
-            self._print_error("No agent configured - run via 'nanocode -g textual'")
-            import sys
-            import threading
+    def _capture_io_setup(self):
+        import io
+        import logging
+        import sys
 
-            sys.stderr.write(
-                f"DEBUG: agent is None, thread={threading.current_thread().name}\n"
-            )
-            self._processing = False
-            input_widget.disabled = False
-            input_widget.focus()
-            return
+        self._saved_stdout = sys.stdout
+        self._saved_stderr = sys.stderr
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+        sys.stdout = stdout_capture
+        sys.stderr = stderr_capture
+        root_logger = logging.getLogger()
+        old_level = root_logger.level
+        root_logger.setLevel(logging.CRITICAL + 1)
+        import datetime
+        return stdout_capture, stderr_capture, root_logger, old_level, datetime
+
+    def _capture_io_restore(self, stdout_capture, stderr_capture, root_logger, old_level, datetime_mod):
+        import logging
+        import sys
+
+        sys.stdout = self._saved_stdout
+        sys.stderr = self._saved_stderr
+        root_logger.setLevel(old_level)
+        stdout_output = stdout_capture.getvalue()
+        stderr_output = stderr_capture.getvalue()
+        if stdout_output or stderr_output:
+            logger = logging.getLogger("nanocode.tui")
+            log_output = f"\n=== TUI Debug Output {datetime_mod.now().isoformat()} ===\n"
+            log_output += stdout_output
+            if stderr_output:
+                log_output += f"\nSTDERR:\n{stderr_output}"
+            logger.debug(log_output)
+
+    async def _call_agent_process(self, text: str):
+        """Call agent.process_input with capture and callbacks."""
+        import traceback
+
+        self._stream_buffer = ""
+        self._stream_timer = None
+        self._was_streamed = False
+        original_debug = self.agent.debug
+        self.agent.debug = False
 
         try:
-            if self.agent:
-                # Enable debug mode to capture tool output
-                original_debug = self.agent.debug
-                self.agent.debug = False  # Don't print debug to stdout
+            stdout_capture, stderr_capture, root_logger, old_level, datetime_mod = self._capture_io_setup()
+        except Exception:
+            return None
 
-                # Use process_input - let agent handle tool execution normally
-                # Suppress stdout/stderr print output to TUI but write to log file
-                import datetime
-                import io
-                import logging
-                import sys
-                import traceback
+        try:
+            try:
+                result = await self.agent.process_input(
+                    text,
+                    show_thinking=True,
+                    show_messages=False,
+                    on_token=self._on_token,
+                    on_tool_start=self._on_tool_start_callback,
+                    on_tool_complete=self._on_tool_complete_callback,
+                )
+            except asyncio.CancelledError as e:
+                _tui_logger.error(f"CANCELLED_ERROR: {e}")
+                self._print_error("Request timed out - please try again")
+                self.push_screen(TracebackScreen("Timeout Error", traceback.format_exc()))
+                result = None
+            except Exception as e:
+                _tui_logger.debug(f"EXCEPTION in process_input: {e}")
+                self._print_line(f"Error: {e}", Style.TEXT_DANGER)
+                result = None
+        finally:
+            self._capture_io_restore(stdout_capture, stderr_capture, root_logger, old_level, datetime_mod)
 
-                # Save original stdout/stderr
-                self._saved_stdout = sys.stdout
-                self._saved_stderr = sys.stderr
+        self.agent.debug = original_debug
+        return result
 
-                # Create capture buffers
-                stdout_capture = io.StringIO()
-                stderr_capture = io.StringIO()
-                sys.stdout = stdout_capture
-                sys.stderr = stderr_capture
+    def _on_token(self, token: str):
+        self._was_streamed = True
+        self._stream_buffer += token
+        if self._stream_timer is None:
+            self._stream_timer = self.set_interval(0.1, self._update_stream_display)
 
-                # Suppress ALL logging BEFORE touching stdout/stderr
-                # This prevents any library from writing to stderr before we capture it
-                root_logger = logging.getLogger()
-                old_level = root_logger.level
-                root_logger.setLevel(logging.CRITICAL + 1)  # Above CRITICAL = no output
+    def _on_tool_start_callback(self, tool_name, args):
+        tool_call = self._format_tool_call(tool_name, args)
+        line = f"{tool_call.icon} {tool_call.title}"
+        if tool_call.description:
+            line += f" {tool_call.description}"
+        self._print_line(line, Style.TOOL_MESSAGE)
 
-                try:
-                    # Streaming buffer for real-time display
-                    self._stream_buffer = ""
-                    self._stream_timer = None
-                    self._was_streamed = False  # Track if on_token was called
+    def _on_tool_complete_callback(self, tool_name, result):
+        if tool_name == "read":
+            self._on_tool_complete_read(result)
+        elif tool_name == "write":
+            self._on_tool_complete_write(result)
+        elif tool_name == "todowrite":
+            self._on_tool_complete_todowrite(result)
+        else:
+            self._on_tool_complete_default(tool_name, result)
 
-                    # Define callbacks for real-time updates
-                    def on_token(token: str):
-                        """Called for each token from LLM."""
-                        self._was_streamed = True  # Mark that streaming happened
-                        self._stream_buffer += token
-                        # Update display every 100ms (if not already scheduled)
-                        if self._stream_timer is None:
-                            self._stream_timer = self.set_interval(
-                                0.1, self._update_stream_display
-                            )
+    def _on_tool_complete_read(self, result):
+        if isinstance(result, dict) and not result.get("success", True):
+            self._print_line(f"✗ read: {result.get('error', '')}", Style.TEXT_DANGER)
+        else:
+            line_count = len(result.strip().split("\n")) if result else 0
+            self._print_line(f"✓ read: [{line_count} lines in context]", Style.TOOL_MESSAGE)
 
-                    def on_tool_start(tool_name, args):
-                        """Called when a tool starts execution."""
-                        # Use the same format as _format_tool_call (matches opencode)
-                        tool_call = self._format_tool_call(tool_name, args)
-                        # Display as: icon + title + description (like opencode's inline())
-                        line = f"{tool_call.icon} {tool_call.title}"
-                        if tool_call.description:
-                            line += f" {tool_call.description}"
-                        self._print_line(line, Style.TOOL_MESSAGE)
+    def _on_tool_complete_write(self, result):
+        try:
+            result_str = str(result)
+            if not result_str.startswith("Written to "):
+                self._print_line("✓ write: (completed)", Style.TOOL_MESSAGE)
+                return
+            path_part = result_str.split("\n")[0].replace("Written to ", "").rstrip(":")
+            self._print_line(f"✓ write: {path_part}", Style.TOOL_MESSAGE)
+            for line in result_str.split("\n")[1:]:
+                if line.strip():
+                    self._print_line(f"  {line}", Style.TOOL_MESSAGE)
+        except Exception:
+            pass
 
-                    def on_tool_complete(tool_name, result):
-                        """Called when a tool completes."""
-                        # Handle read tool - check for locked error
-                        if tool_name == "read":
-                            if isinstance(result, dict) and not result.get("success", True):
-                                error = result.get("error", "")
-                                self._print_line(f"✗ read: {error}", Style.TEXT_DANGER)
-                            else:
-                                line_count = len(result.strip().split("\n")) if result else 0
-                                self._print_line(f"✓ read: [{line_count} lines in context]", Style.TOOL_MESSAGE)
-                            return
-
-                        # Handle write tool specially - show file path and contents
-                        if tool_name == "write":
-                            try:
-                                result_str = str(result)
-                                if result_str.startswith("Written to "):
-                                    path_part = result_str.split("\n")[0].replace("Written to ", "").rstrip(":")
-                                    self._print_line(f"✓ write: {path_part}", Style.TOOL_MESSAGE)
-                                    lines = result_str.split("\n")[1:]
-                                    for line in lines:
-                                        if line.strip():
-                                            self._print_line(f"  {line}", Style.TOOL_MESSAGE)
-                                    return
-                                self._print_line(f"✓ write: (completed)", Style.TOOL_MESSAGE)
-                                return
-                            except Exception:
-                                pass
-
-                        # Handle todowrite tool
-                        if tool_name == "todowrite":
-                            try:
-                                result_str = str(result)
-                                # Count tasks added/updated
-                                if "added" in result_str.lower() or "updated" in result_str.lower():
-                                    self._print_line(f"✓ todos: {result_str[:100]}", Style.TOOL_MESSAGE)
-                                else:
-                                    self._print_line(f"✓ todos updated", Style.TOOL_MESSAGE)
-                                return
-                            except Exception:
-                                pass
-                        
-                        # Handle both string and dict results
-                        if isinstance(result, dict):
-                            result_str = str(result) if result else ""
-                        else:
-                            result_str = str(result) if result else ""
-                        preview = (
-                            result_str[:200] + "..."
-                            if len(result_str) > 200
-                            else result_str
-                        )
-                        self._print_line(
-                            f"✓ {tool_name}: {preview}", Style.TOOL_MESSAGE
-                        )
-
-                    _tui_logger.debug("Calling agent.process_input...")
-                    try:
-                        result = await self.agent.process_input(
-                            text,
-                            show_thinking=True,
-                            show_messages=False,
-                            on_tool_start=on_tool_start,
-                            on_tool_complete=on_tool_complete,
-                        )
-                        _tui_logger.debug(f"agent.process_input returned: type={type(result)}, len={len(str(result)) if result else 0}")
-                    except asyncio.CancelledError as e:
-                        import traceback
-                        _tui_logger.error(f"CANCELLED_ERROR: {e}")
-                        self._print_error("Request timed out - please try again")
-                        # Show traceback in modal
-                        self.push_screen(TracebackScreen("Timeout Error", traceback.format_exc()))
-                        result = None
-                    except Exception as e:
-                        _tui_logger.debug(f"EXCEPTION in process_input: {e}")
-                        self._print_line(f"Error: {e}", Style.TEXT_DANGER)
-                        result = None
-                finally:
-                    # Restore stdout/stderr first
-                    sys.stdout = self._saved_stdout
-                    sys.stderr = self._saved_stderr
-
-                    # Restore root logger level - handlers stay intact
-                    root_logger.setLevel(old_level)
-
-                # Restore stdout/stderr (but don't restore - keep them captured!)
-                # Actually, keep them captured permanently to prevent any print from showing
-                # sys.stdout = self._saved_stdout
-                # sys.stderr = self._saved_stderr
-
-                # Write captured output to log
-                stdout_output = stdout_capture.getvalue()
-                stderr_output = stderr_capture.getvalue()
-
-                if stdout_output or stderr_output:
-                    logger = logging.getLogger("nanocode.tui")
-                    log_output = f"\n=== TUI Debug Output {datetime.datetime.now().isoformat()} ===\n"
-                    log_output += stdout_output
-                    if stderr_output:
-                        log_output += f"\nSTDERR:\n{stderr_output}"
-                    logger.debug(log_output)
-
-                # Restore debug setting
-                self.agent.debug = original_debug
-                _tui_logger.debug("Process input complete, showing results")
-
-                # Display tool calls using opencode's format
-                if hasattr(self.agent, "_last_tool_results"):
-                    tool_results = getattr(self.agent, "_last_tool_results", [])
-                    for tr in tool_results:
-                        tool_name = tr.get("tool_name", "unknown")
-                        arguments = tr.get("arguments", {})
-                        success = tr.get("success", False)
-
-                        # Format with full details using _format_tool_call
-                        tool_call = self._format_tool_call(tool_name, arguments)
-
-                        # Add result info from the tool call
-                        result = tr.get("result", "")
-                        if tool_name in ("grep", "glob") and result:
-                            # Count results
-                            lines = result.strip().split("\n") if result else []
-                            count = len([l for l in lines if l.strip()])
-                            suffix = f"({count} matches)"
-                            tool_call.description = suffix
-                        elif tool_name == "read" and result:
-                            lines = result.strip().split("\n")
-                            count = len(lines)
-                            # Include offset/limit from arguments if present
-                            offset = arguments.get("offset")
-                            limit = arguments.get("limit")
-                            if offset or limit:
-                                suffix = f"[{count} lines, offset={offset}, limit={limit}]"
-                            else:
-                                suffix = f"[{count} lines]"
-                            tool_call.description = suffix
-
-                        status = "✓" if success else "✗"
-                        # Skip status line if result already shows arrow format (e.g., skill tool)
-                        if result and result.startswith("→"):
-                            continue
-                        self._print_line(
-                            f"~ {tool_call.icon} {tool_call.title} {tool_call.description} {status}",
-                            Style.TOOL_MESSAGE,
-                        )
-
-                # Display thinking (with left border styling like opencode)
-                # Show all thinking parts like opencode's reasoning parts
-                if self.show_thinking and hasattr(self.agent, "_all_thinking"):
-                    all_thinking = getattr(self.agent, "_all_thinking", [])
-                    for thinking in all_thinking:
-                        if thinking and thinking not in (result or ""):
-                            self._print_line(f"| Thinking: {thinking}", Style.THINKING)
-                            self._print_empty()
-
-                # Display final response - only if NOT already streamed via on_token
-                # (streaming already wrote to output_area via _update_stream_display)
-                if not getattr(self, '_was_streamed', False) and result and len(result) > 0:
-                    _tui_logger.debug(f"Displaying result: len={len(result)}")
-                    print(f"[TUI DEBUG] Displaying: {result[:100]}...", file=sys.stderr)
-                    try:
-                        output_area = self.query_one("#output-area")
-                        _tui_logger.debug(f"Output area found, adding line...")
-                        output_area.add_line(result, "assistant")
-                        _tui_logger.debug(f"Output line added successfully")
-                        output_area.refresh()
-                    except Exception as e:
-                        _tui_logger.debug(f"Output area error: {e}")
-                        self._print_line(result, Style.ASSISTANT_MESSAGE)
-                else:
-                    print(f"[TUI DEBUG] Skipping result display (already streamed)", file=sys.stderr)
-
-                # Completion marker like opencode's `▣`
-                self._print_line("▣", Style.TEXT_SUCCESS_BOLD)
-
-                # Print summary with elapsed time
-                summary = getattr(self.agent.state, "last_summary", None)
-                if summary:
-                    elapsed = summary.get("elapsed", 0)
-                    files = summary.get("files", 0)
-                    additions = summary.get("additions", 0)
-                    deletions = summary.get("deletions", 0)
-
-                    if files > 0 or elapsed > 0:
-                        parts = []
-                        if files > 0:
-                            parts.append(f"{files} file(s)")
-                            if additions > 0:
-                                parts.append(f"+{additions}")
-                            if deletions > 0:
-                                parts.append(f"-{deletions}")
-                        if elapsed > 0:
-                            if elapsed < 60:
-                                parts.append(f"{elapsed:.1f}s")
-                            else:
-                                mins = int(elapsed // 60)
-                                secs = elapsed % 60
-                                parts.append(f"{mins}m {secs:.0f}s")
-                        summary_str = " | ".join(parts)
-                        self._print_line(f"│ {summary_str}", Style.TEXT_DIM)
+    def _on_tool_complete_todowrite(self, result):
+        try:
+            result_str = str(result)
+            if "added" in result_str.lower() or "updated" in result_str.lower():
+                self._print_line(f"✓ todos: {result_str[:100]}", Style.TOOL_MESSAGE)
             else:
-                self._print_error("No agent configured")
-            
-            # Refresh output area after all output is done
+                self._print_line("✓ todos updated", Style.TOOL_MESSAGE)
+        except Exception:
+            pass
+
+    def _on_tool_complete_default(self, tool_name, result):
+        preview = str(result) if result else ""
+        if len(preview) > 200:
+            preview = preview[:200] + "..."
+        self._print_line(f"✓ {tool_name}: {preview}", Style.TOOL_MESSAGE)
+
+    def _display_tool_results(self):
+        if not (hasattr(self.agent, "_last_tool_results")):
+            return
+        tool_results = getattr(self.agent, "_last_tool_results", [])
+        for tr in tool_results:
+            tool_name = tr.get("tool_name", "unknown")
+            arguments = tr.get("arguments", {})
+            success = tr.get("success", False)
+            tool_call = self._format_tool_call(tool_name, arguments)
+            result = tr.get("result", "")
+            if tool_name in ("grep", "glob") and result:
+                lines = result.strip().split("\n") if result else []
+                count = len([l for l in lines if l.strip()])
+                tool_call.description = f"({count} matches)"
+            elif tool_name == "read" and result:
+                lines = result.strip().split("\n")
+                count = len(lines)
+                offset = arguments.get("offset")
+                limit = arguments.get("limit")
+                if offset or limit:
+                    tool_call.description = f"[{count} lines, offset={offset}, limit={limit}]"
+                else:
+                    tool_call.description = f"[{count} lines]"
+            status = "✓" if success else "✗"
+            if result and result.startswith("→"):
+                continue
+            self._print_line(f"~ {tool_call.icon} {tool_call.title} {tool_call.description} {status}", Style.TOOL_MESSAGE)
+
+    def _display_thinking(self, result):
+        if not (self.show_thinking and hasattr(self.agent, "_all_thinking")):
+            return
+        all_thinking = getattr(self.agent, "_all_thinking", [])
+        for thinking in all_thinking:
+            if thinking and thinking not in (result or ""):
+                self._print_line(f"| Thinking: {thinking}", Style.THINKING)
+                self._print_empty()
+
+    def _display_response(self, result):
+        if not getattr(self, '_was_streamed', False) and result and len(result) > 0:
+            _tui_logger.debug(f"Displaying result: len={len(result)}")
+            try:
+                output_area = self.query_one("#output-area")
+                output_area.add_line(result, "assistant")
+                output_area.refresh()
+            except Exception as e:
+                _tui_logger.debug(f"Output area error: {e}")
+                self._print_line(result, Style.ASSISTANT_MESSAGE)
+
+    def _display_summary(self):
+        summary = getattr(self.agent.state, "last_summary", None)
+        if not summary:
+            return
+        elapsed = summary.get("elapsed", 0)
+        files = summary.get("files", 0)
+        additions = summary.get("additions", 0)
+        deletions = summary.get("deletions", 0)
+        if not (files > 0 or elapsed > 0):
+            return
+        parts = []
+        if files > 0:
+            parts.append(f"{files} file(s)")
+            if additions > 0:
+                parts.append(f"+{additions}")
+            if deletions > 0:
+                parts.append(f"-{deletions}")
+        if elapsed > 0:
+            if elapsed < 60:
+                parts.append(f"{elapsed:.1f}s")
+            else:
+                mins = int(elapsed // 60)
+                secs = elapsed % 60
+                parts.append(f"{mins}m {secs:.0f}s")
+        self._print_line(f"│ {' | '.join(parts)}", Style.TEXT_DIM)
+
+    @work(exclusive=True)
+    async def _process_input(self, text: str):
+        _tui_logger.debug(f"Processing input: {text[:50]!r}")
+
+        input_widget = await self._setup_processing_state(text)
+
+        try:
+            result = await self._call_agent_process(text)
+
+            self._display_tool_results()
+            self._display_thinking(result)
+            self._display_response(result)
+            self._display_summary()
+
             try:
                 output_area = self.query_one("#output-area", RichLog)
                 _tui_logger.debug("Post-output refresh: refreshing output_area")
                 output_area.refresh()
                 _tui_logger.debug("Post-output refresh: refreshing self")
                 self.refresh()
-                # Scroll to bottom to ensure all content is visible
                 output_area.scroll_end(animate=False)
             except Exception as e:
                 _tui_logger.debug(f"Post-output refresh error: {e}")
@@ -2658,130 +2579,214 @@ Footer {
             import traceback
             _tui_logger.error(f"OUTER_CANCELLED_ERROR: {e}")
             self._print_error("Request timed out - please try again")
-            # Show traceback in modal
             self.push_screen(TracebackScreen("Timeout Error", traceback.format_exc()))
         except Exception as e:
             import traceback
             _tui_logger.debug(f"OUTER_EXCEPTION: {e}")
-
             self._print_error(f"Error: {e}")
-            # Show traceback in modal
             self.push_screen(TracebackScreen("Error", traceback.format_exc()))
         finally:
-            _tui_logger.debug("In finally block, cleaning up...")
-            # Stop spinner
-            if hasattr(self, "_spinner_timer") and self._spinner_timer:
-                _tui_logger.debug("Stopping spinner timer")
-                self._spinner_timer.stop()
-                self._spinner_timer = None
-                _tui_logger.debug("Spinner timer stopped")
-            else:
-                _tui_logger.debug("No spinner timer to stop")
+            self._cleanup_after_processing(input_widget)
+
+    def _cleanup_after_processing(self, input_widget):
+        _tui_logger.debug("In finally block, cleaning up...")
+        if hasattr(self, "_spinner_timer") and self._spinner_timer:
+            _tui_logger.debug("Stopping spinner timer")
+            self._spinner_timer.stop()
+            self._spinner_timer = None
+            _tui_logger.debug("Spinner timer stopped")
+        else:
+            _tui_logger.debug("No spinner timer to stop")
+        try:
+            spinner = self.query_one("#spinner", Static)
+            spinner.update("")
+            spinner.classes = ""
+            _tui_logger.debug("Spinner cleaned up")
+        except Exception as e:
+            _tui_logger.debug(f"Spinner cleanup error: {e}")
+
+        if hasattr(self, "_stream_timer") and self._stream_timer:
+            _tui_logger.debug("Stopping stream timer")
+            self._stream_timer.stop()
+            self._stream_timer = None
+            _tui_logger.debug("Stream timer stopped")
+        if hasattr(self, "_stream_buffer") and self._stream_buffer:
+            _tui_logger.debug(f"Flushing stream buffer: {len(self._stream_buffer)} chars")
             try:
-                spinner = self.query_one("#spinner", Static)
-                spinner.update("")  # Clear spinner
-                spinner.classes = ""  # Remove active class
-                _tui_logger.debug("Spinner cleaned up")
+                output_area = self.query_one("#output-area", RichLog)
+                output_area.write(self._stream_buffer)
+                self._stream_buffer = ""
+                _tui_logger.debug("Stream buffer flushed")
             except Exception as e:
-                _tui_logger.debug(f"Spinner cleanup error: {e}")
+                _tui_logger.debug(f"Stream buffer flush error: {e}")
 
-            # Clean up streaming
-            if hasattr(self, "_stream_timer") and self._stream_timer:
-                _tui_logger.debug("Stopping stream timer")
-                self._stream_timer.stop()
-                self._stream_timer = None
-                _tui_logger.debug("Stream timer stopped")
-            # Flush any remaining stream buffer
-            if hasattr(self, "_stream_buffer") and self._stream_buffer:
-                _tui_logger.debug(f"Flushing stream buffer: {len(self._stream_buffer)} chars")
-                try:
-                    output_area = self.query_one("#output-area", RichLog)
-                    output_area.write(self._stream_buffer)
-                    self._stream_buffer = ""
-                    _tui_logger.debug("Stream buffer flushed")
-                except Exception as e:
-                    _tui_logger.debug(f"Stream buffer flush error: {e}")
+        _tui_logger.debug("Setting _processing = False")
+        self._processing = False
+        _tui_logger.debug("Finally block part 1 complete")
 
-            _tui_logger.debug("Setting _processing = False")
-            self._processing = False
-            _tui_logger.debug("Finally block part 1 complete")
+        self._refresh_output_area()
 
-            # Force screen refresh using call_later to ensure it happens after render cycle
-            has_app = hasattr(self, 'app') and self.app
-            _tui_logger.debug(f"Pre-refresh: has_app={has_app}")
+        input_widget.focus()
+        _tui_logger.debug(f"Post-focus: focused={self.focused}, screen_visible={self.screen.visible}")
+        input_widget.disabled = False
 
-            def do_refresh():
-                _tui_logger.debug("do_refresh: starting")
-                try:
-                    _tui_logger.debug("do_refresh: querying output_area")
-                    output_area = self.query_one("#output-area", RichLog)
-                    _tui_logger.debug("do_refresh: refreshing output_area")
-                    output_area.refresh()
-                    _tui_logger.debug("do_refresh: refreshing self")
-                    self.refresh()
-                    _tui_logger.debug("do_refresh: refreshing screen")
-                    self.screen.refresh()
-                    # Also refresh the layout
-                    if hasattr(self, 'layout') and self.layout:
-                        _tui_logger.debug("do_refresh: refreshing layout")
-                        self.layout.refresh()
-                    _tui_logger.debug("call_later refresh done")
-                except Exception as e:
-                    _tui_logger.debug(f"call_later refresh error: {e}")
+        try:
+            self.refresh()
+            self.screen.refresh()
+            if hasattr(self, 'layout') and self.layout:
+                self.layout.refresh()
+        except Exception as e:
+            _tui_logger.debug(f"Post-focus refresh error: {e}")
 
-            if has_app:
-                _tui_logger.debug("Using call_later for refresh")
-                _tui_logger.debug(f"Pre-call_later: _processing={self._processing}")
-                # First, try synchronous refresh immediately
-                try:
-                    _tui_logger.debug("SYNC refresh attempt")
-                    # Verify output_area exists first
-                    output_area = self.query_one("#output-area", RichLog)
-                    output_area.refresh()
-                    self.refresh()
-                    self.screen.refresh()
-                    if hasattr(self, 'layout') and self.layout:
-                        self.layout.refresh()
-                    _tui_logger.debug("SYNC refresh done")
-                except Exception as e:
-                    _tui_logger.debug(f"SYNC refresh error: {e}")
-                # Then schedule call_later as backup
-                self.app.call_later(do_refresh)
-                _tui_logger.debug("call_later scheduled")
-            else:
-                _tui_logger.debug("Using direct refresh (no app)")
-                try:
-                    self.refresh()
-                    self.screen.refresh()
-                    if hasattr(self, 'layout') and self.layout:
-                        self.layout.refresh()
-                except Exception as e:
-                    _tui_logger.debug(f"Screen refresh failed: {e}")
+        def force_repaint():
+            try:
+                self.refresh(repaint_children=True)
+            except Exception:
+                pass
+        if hasattr(self, 'app') and self.app:
+            self.app.call_later(force_repaint)
 
-            input_widget.focus()
-            _tui_logger.debug(f"Post-focus: focused={self.focused}, screen_visible={self.screen.visible}")
-            input_widget.disabled = False
-            
-            # Refresh AFTER enabling input
+        _tui_logger.debug("Input re-enabled after refresh")
+        _tui_logger.debug("Finally block part 2 complete - all cleanup done")
+
+    def _refresh_output_area(self):
+        has_app = hasattr(self, 'app') and self.app
+        _tui_logger.debug(f"Pre-refresh: has_app={has_app}")
+
+        def do_refresh():
+            _tui_logger.debug("do_refresh: starting")
+            try:
+                _tui_logger.debug("do_refresh: querying output_area")
+                output_area = self.query_one("#output-area", RichLog)
+                _tui_logger.debug("do_refresh: refreshing output_area")
+                output_area.refresh()
+                _tui_logger.debug("do_refresh: refreshing self")
+                self.refresh()
+                _tui_logger.debug("do_refresh: refreshing screen")
+                self.screen.refresh()
+                if hasattr(self, 'layout') and self.layout:
+                    _tui_logger.debug("do_refresh: refreshing layout")
+                    self.layout.refresh()
+                _tui_logger.debug("call_later refresh done")
+            except Exception as e:
+                _tui_logger.debug(f"call_later refresh error: {e}")
+
+        if has_app:
+            _tui_logger.debug("Using call_later for refresh")
+            _tui_logger.debug(f"Pre-call_later: _processing={self._processing}")
+            try:
+                _tui_logger.debug("SYNC refresh attempt")
+                output_area = self.query_one("#output-area", RichLog)
+                output_area.refresh()
+                self.refresh()
+                self.screen.refresh()
+                if hasattr(self, 'layout') and self.layout:
+                    self.layout.refresh()
+                _tui_logger.debug("SYNC refresh done")
+            except Exception as e:
+                _tui_logger.debug(f"SYNC refresh error: {e}")
+            self.app.call_later(do_refresh)
+            _tui_logger.debug("call_later scheduled")
+        else:
+            _tui_logger.debug("Using direct refresh (no app)")
             try:
                 self.refresh()
                 self.screen.refresh()
                 if hasattr(self, 'layout') and self.layout:
                     self.layout.refresh()
             except Exception as e:
-                _tui_logger.debug(f"Post-focus refresh error: {e}")
-            
-            # Force an additional refresh using call_later if app is available
-            def force_repaint():
-                try:
-                    self.refresh(repaint_children=True)
-                except Exception:
-                    pass
-            if hasattr(self, 'app') and self.app:
-                self.app.call_later(force_repaint)
-            
-            _tui_logger.debug("Input re-enabled after refresh")
-            _tui_logger.debug("Finally block part 2 complete - all cleanup done")
+                _tui_logger.debug(f"Screen refresh failed: {e}")
+
+    async def _handle_exit(self):
+        session_id = getattr(self.agent, "_session_id", "unknown") if self.agent else "unknown"
+        self.exit()
+        print()
+        from rich.console import Console
+        c = Console()
+        c.print("[cyan]░██████╗ ███████╗████████╗██████╗  ██████╗ ██████╗  █████╗ ██████╗ ██████╗ [/cyan]")
+        c.print("[cyan]██╔════╝ ██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██╔══██╗██╔══██╗██╔══██╗██╔══██╗[/cyan]")
+        c.print("[cyan]██║  ███╗█████╗     ██║   ██████╔╝██║   ██║██████╔╝███████║██████╔╝███████║[/cyan]")
+        c.print("[cyan]██║   ██║██╔══╝     ██║   ██╔══██╗██║   ██║██╔══██╗██╔══██║██╔══██╗██╔══██║[/cyan]")
+        c.print("[cyan]╚██████╔╝███████╗   ██║   ██║  ██║╚██████╔╝██████╔╝██║  ██║██║  ██║██║  ██║[/cyan]")
+        c.print("[cyan] ╚═════╝ ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝[/cyan]")
+        print()
+        print(f"Session: {session_id}")
+
+    async def _handle_tools(self):
+        if self.agent and hasattr(self.agent, "tool_registry"):
+            tools = self.agent.tool_registry.list_tools()
+            self._print_line("Available tools:")
+            for t in tools:
+                name = t.name if hasattr(t, "name") else "unknown"
+                desc = t.description if hasattr(t, "description") else ""
+                self._print_line(f"  {name}: {desc}")
+        else:
+            self._print_line("No tools available")
+
+    async def _handle_skills(self):
+        if self.agent and hasattr(self.agent, "skills_manager"):
+            skills = self.agent.skills_manager.list_skills()
+            self._print_line("Available skills:")
+            for s in skills:
+                name = s.get("name", "unknown") if isinstance(s, dict) else getattr(s, "name", "unknown")
+                desc = s.get("description", "") if isinstance(s, dict) else getattr(s, "description", "")
+                self._print_line(f"  {name}: {desc}")
+        else:
+            self._print_line("No skills found")
+
+    async def _handle_agents(self):
+        if self.agent and hasattr(self.agent, "nanocode_registry"):
+            agents = self.agent.nanocode_registry.list_primary()
+            self._print_line("Available agents:")
+            for a in agents:
+                name = a.name if hasattr(a, "name") else "unknown"
+                desc = a.description if hasattr(a, "description") else ""
+                self._print_line(f"  {name}: {desc}")
+
+    async def _handle_agent_switch(self, parts):
+        agent_name = parts[1] if len(parts) > 1 else None
+        if agent_name and self.agent and hasattr(self.agent, "switch_agent"):
+            success = self.agent.switch_agent(agent_name)
+            if success:
+                self._print_line(f"Switched to agent: {agent_name}")
+            else:
+                self._print_error(f"Unknown agent: {agent_name}")
+        else:
+            self._print_line("Use /agents to list available agents")
+
+    async def _handle_tasks(self):
+        if not (self.agent and hasattr(self.agent, "tool_registry")):
+            return
+        task_tool = self.agent.tool_registry.get_tool("task")
+        if not (task_tool and hasattr(task_tool, "sessions")):
+            self._print_line("Task tool not available")
+            return
+        sessions = task_tool.sessions
+        if not sessions:
+            self._print_line("No active subagent sessions")
+            return
+        self._print_line("Active subagent sessions:")
+        for sid, sess in sessions.items():
+            status = "completed" if sess.completed else "running"
+            aname = sess.agent.name if hasattr(sess.agent, "name") else "?"
+            self._print_line(f"  {sid[:8]}: {aname} [{status}]")
+
+    async def _handle_kill(self, parts):
+        task_id = parts[1] if len(parts) > 1 else None
+        if not (task_id and self.agent and hasattr(self.agent, "tool_registry")):
+            self._print_error("Usage: /kill <session_id>")
+            return
+        task_tool = self.agent.tool_registry.get_tool("task")
+        if task_tool and hasattr(task_tool, "sessions") and task_id in task_tool.sessions:
+            del task_tool.sessions[task_id]
+            self._print_line(f"Killed session: {task_id[:8]}")
+        else:
+            self._print_error(f"Session not found: {task_id[:8]}")
+
+    async def _handle_debug_toggle(self):
+        if self.agent:
+            self.agent.debug = not getattr(self.agent, "debug", False)
+            self._print_line(f"Debug: {self.agent.debug}")
 
     async def _handle_command(self, command: str):
         """Handle slash-prefixed commands locally."""
@@ -2789,113 +2794,40 @@ Footer {
         parts = command.split()
 
         if cmd in ("/exit", "/quit", "/q"):
-            session_id = (
-                getattr(self.agent, "_session_id", "unknown")
-                if self.agent
-                else "unknown"
-            )
-            self.exit()
-            print()
-            from rich.console import Console
+            return await self._handle_exit()
 
-            c = Console()
-            c.print(
-                "[cyan]░██████╗ ███████╗████████╗██████╗  ██████╗ ██████╗  █████╗ ██████╗ ██████╗ [/cyan]"
-            )
-            c.print(
-                "[cyan]██╔════╝ ██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██╔══██╗██╔══██╗██╔══██╗██╔══██╗[/cyan]"
-            )
-            c.print(
-                "[cyan]██║  ███╗█████╗     ██║   ██████╔╝██║   ██║██████╔╝███████║██████╔╝███████║[/cyan]"
-            )
-            c.print(
-                "[cyan]██║   ██║██╔══╝     ██║   ██╔══██╗██║   ██║██╔══██╗██╔══██║██╔══██╗██╔══██║[/cyan]"
-            )
-            c.print(
-                "[cyan]╚██████╔╝███████╗   ██║   ██║  ██║╚██████╔╝██████╔╝██║  ██║██║  ██║██║  ██║[/cyan]"
-            )
-            c.print(
-                "[cyan] ╚═════╝ ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝[/cyan]"
-            )
-            print()
-            print(f"Session: {session_id}")
+        _message_cmds = {
+            "/history": "Use Ctrl+H for history",
+            "/provider": "Use --provider flag to set provider",
+            "/plan": "Planning not yet implemented in TUI",
+            "/checkpoint": "Checkpoints not yet implemented in TUI",
+            "/snapshot": "Snapshots not yet implemented in TUI",
+            "/snapshots": "Snapshots not yet implemented in TUI",
+            "/resume": "Use nanocode -r <session_id> to resume",
+        }
+        msg = _message_cmds.get(cmd)
+        if msg:
+            self._print_line(msg)
             return
-
-        if cmd == "/help":
-            self._print_line("Available commands:")
-            for c, desc in self.CLI_COMMANDS:
-                self._print_line(f"  {c:<20} {desc}")
-            return
-
-        if cmd == "/clear":
-            output = self.query_one("#output-area")
-            output.clear_lines()
-            self._show_welcome()
-            return
-
-        if cmd == "/history":
-            self._print_line("Use Ctrl+H for history")
-            return
-
-        if cmd == "/tools":
-            if self.agent and hasattr(self.agent, "tool_registry"):
-                tools = self.agent.tool_registry.list_tools()
-                self._print_line("Available tools:")
-                for t in tools:
-                    name = t.name if hasattr(t, "name") else "unknown"
-                    desc = t.description if hasattr(t, "description") else ""
-                    self._print_line(f"  {name}: {desc}")
-            else:
-                self._print_line("No tools available")
-            return
-
-        if cmd == "/provider":
-            self._print_line("Use --provider flag to set provider")
-            return
-
-        if cmd == "/plan":
-            self._print_line("Planning not yet implemented in TUI")
-            return
-
+        # Check /resume with argument
         if cmd.startswith("/resume"):
             self._print_line("Use nanocode -r <session_id> to resume")
             return
 
-        if cmd == "/checkpoint":
-            self._print_line("Checkpoints not yet implemented in TUI")
-            return
-
-        if cmd == "/skills":
-            if self.agent and hasattr(self.agent, "skills_manager"):
-                skills = self.agent.skills_manager.list_skills()
-                self._print_line("Available skills:")
-                for s in skills:
-                    name = (
-                        s.get("name", "unknown")
-                        if isinstance(s, dict)
-                        else getattr(s, "name", "unknown")
-                    )
-                    desc = (
-                        s.get("description", "")
-                        if isinstance(s, dict)
-                        else getattr(s, "description", "")
-                    )
-                    self._print_line(f"  {name}: {desc}")
-            else:
-                self._print_line("No skills found")
-            return
-
-        if cmd == "/snapshot":
-            self._print_line("Snapshots not yet implemented in TUI")
-            return
-
-        if cmd == "/snapshots":
-            self._print_line("Snapshots not yet implemented in TUI")
-            return
-
-        if cmd == "/trace":
-            if self.agent:
-                self._print_line("Trace not yet implemented")
+        _action_cmds = {
+            "/help": lambda: (self._print_line("Available commands:"), [self._print_line(f"  {c:<20} {d}") for c, d in self.CLI_COMMANDS]),
+            "/clear": lambda: (self.query_one("#output-area").clear_lines(), self._show_welcome()),
+            "/tools": lambda: self._handle_tools(),
+            "/skills": lambda: self._handle_skills(),
+            "/agents": lambda: self._handle_agents(),
+            "/tasks": lambda: self._handle_tasks(),
+            "/debug": lambda: self._handle_debug_toggle(),
+        }
+        handler = _action_cmds.get(cmd)
+        if handler:
+            result = handler()
+            if hasattr(result, "__await__"):
+                await result
             return
 
         if cmd == "/compact":
@@ -2909,75 +2841,18 @@ Footer {
             self._print_line(f"Show thinking: {self.show_thinking}")
             return
 
-        if cmd == "/agents":
-            if self.agent and hasattr(self.agent, "nanocode_registry"):
-                agents = self.agent.nanocode_registry.list_primary()
-                self._print_line("Available agents:")
-                for a in agents:
-                    name = a.name if hasattr(a, "name") else "unknown"
-                    desc = a.description if hasattr(a, "description") else ""
-                    self._print_line(f"  {name}: {desc}")
-            return
-
-        if cmd.startswith("/agent "):
-            agent_name = parts[1] if len(parts) > 1 else None
-            if agent_name and self.agent and hasattr(self.agent, "switch_agent"):
-                success = self.agent.switch_agent(agent_name)
-                if success:
-                    self._print_line(f"Switched to agent: {agent_name}")
-                else:
-                    self._print_error(f"Unknown agent: {agent_name}")
-            else:
-                self._print_line("Use /agents to list available agents")
-            return
-
-        if cmd == "/tasks":
-            if self.agent and hasattr(self.agent, "tool_registry"):
-                task_tool = self.agent.tool_registry.get_tool("task")
-                if task_tool and hasattr(task_tool, "sessions"):
-                    sessions = task_tool.sessions
-                    if sessions:
-                        self._print_line("Active subagent sessions:")
-                        for sid, sess in sessions.items():
-                            status = "completed" if sess.completed else "running"
-                            aname = (
-                                sess.agent.name if hasattr(sess.agent, "name") else "?"
-                            )
-                            self._print_line(f"  {sid[:8]}: {aname} [{status}]")
-                    else:
-                        self._print_line("No active subagent sessions")
-                else:
-                    self._print_line("Task tool not available")
-            return
-
-        if cmd.startswith("/kill "):
-            task_id = parts[1] if len(parts) > 1 else None
-            if task_id and self.agent and hasattr(self.agent, "tool_registry"):
-                task_tool = self.agent.tool_registry.get_tool("task")
-                if (
-                    task_tool
-                    and hasattr(task_tool, "sessions")
-                    and task_id in task_tool.sessions
-                ):
-                    del task_tool.sessions[task_id]
-                    self._print_line(f"Killed session: {task_id[:8]}")
-                else:
-                    self._print_error(f"Session not found: {task_id[:8]}")
-            else:
-                self._print_error("Usage: /kill <session_id>")
-            return
-
-        if cmd == "/debug":
+        if cmd == "/trace":
             if self.agent:
-                self.agent.debug = not getattr(self.agent, "debug", False)
-                self._print_line(f"Debug: {self.agent.debug}")
+                self._print_line("Trace not yet implemented")
             return
 
-        # Unknown command
-        self._print_error(
-            f"Unknown command: {command}. Type /help for available commands."
-        )
-        return
+        # Prefix-based commands
+        if cmd.startswith("/agent "):
+            return await self._handle_agent_switch(parts)
+        if cmd.startswith("/kill "):
+            return await self._handle_kill(parts)
+
+        self._print_error(f"Unknown command: {command}. Type /help for available commands.")
 
 
 async def run_tui(agent=None, show_thinking: bool = True):

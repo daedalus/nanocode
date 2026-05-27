@@ -337,6 +337,92 @@ class ToolExecutor:
         self.execution_history: list[dict] = []
         logger.debug("ToolExecutor initialized")
 
+    async def _run_pre_tool_hooks(
+        self, tool_name: str, arguments: dict, session_id: str | None, agent_name: str | None
+    ) -> tuple[dict | None, str | None]:
+        """Run pre-tool hooks. Returns (modified_args, error_message) or (None, None) if allowed."""
+        if not self.hook_manager:
+            return None, None
+        hook_result = await self.hook_manager.run_pre_tool_hooks(tool_name, arguments, session_id, agent_name)
+        if hook_result.action == HookAction.DENY:
+            return None, hook_result.message or "Tool blocked by hook"
+        if hook_result.modified_args:
+            return hook_result.modified_args, None
+        return None, None
+
+    async def _execute_handler(self, tool_name: str, arguments: dict) -> ToolResult:
+        """Execute a handler for an unregistered tool name."""
+        handler = self.registry._handlers.get(tool_name)
+        if not handler:
+            return ToolResult(success=False, content=None, error=f"Unknown tool: {tool_name}")
+        try:
+            result = await handler(**arguments)
+            return ToolResult(success=True, content=result)
+        except Exception as e:
+            return ToolResult(success=False, content=None, error=str(e))
+
+    async def _execute_registered_tool(self, tool_name: str, arguments: dict, agent_name: str | None, session_id: str | None) -> ToolResult:
+        """Execute a registered tool with validation and timing."""
+        import time
+        import json
+        start = time.monotonic()
+        if agent_name is not None:
+            arguments["_agent_name"] = agent_name
+        if session_id is not None:
+            arguments["_session_id"] = session_id
+        agent_info = await self._get_agent_info(agent_name)
+        if isinstance(arguments, str):
+            try:
+                arguments = json.loads(arguments)
+            except json.JSONDecodeError as e:
+                return ToolResult(success=False, error=f"Invalid JSON arguments for tool '{tool_name}': {e}")
+        tool = self.registry.get(tool_name)
+        if hasattr(tool, 'validate_args'):
+            is_valid, error_msg = tool.validate_args(arguments)
+            if not is_valid:
+                return ToolResult(success=False, error=error_msg)
+        self._inject_agent_schema(tool_name, agent_info)
+        arguments.pop("_agent_name", None)
+        arguments.pop("_session_id", None)
+        result_obj = await tool.execute(**arguments)
+        elapsed = time.monotonic() - start
+        logger.debug(f"Tool '{tool_name}' executed in {elapsed:.2f}s")
+        if elapsed > 5:
+            logger.warning(f"Tool '{tool_name}' took {elapsed:.2f}s (>5s slow!)")
+        return result_obj
+
+    async def _get_agent_info(self, agent_name: str | None):
+        if agent_name is None:
+            return None
+        try:
+            from nanocode.agents import get_agent_registry
+            registry = get_agent_registry()
+            return registry.get(agent_name)
+        except Exception:
+            return None
+
+    def _inject_agent_schema(self, tool_name: str, agent_info):
+        """Pass agent_info to tools that support get_schema(agent_info)."""
+        if agent_info is None:
+            return
+        tool = self.registry.get(tool_name)
+        if hasattr(tool, 'get_schema'):
+            try:
+                tool.get_schema(agent_info)
+            except TypeError:
+                try:
+                    tool.get_schema()
+                except Exception:
+                    pass
+
+    async def _run_post_tool_hooks(self, tool_name: str, arguments: dict, result_obj: ToolResult, session_id: str | None, agent_name: str | None):
+        if not self.hook_manager:
+            return
+        await self.hook_manager.run_post_tool_hooks(tool_name, arguments, result_obj.content, result_obj.success, session_id, agent_name)
+
+    def _record_execution(self, tool_name: str, arguments: dict, result_obj: ToolResult):
+        self.execution_history.append({"tool": tool_name, "arguments": arguments, "result": result_obj.to_dict()})
+
     async def execute(
         self,
         tool_name: str,
@@ -347,124 +433,20 @@ class ToolExecutor:
         """Execute a tool by name with arguments."""
         logger.debug(f"ToolExecutor.execute('{tool_name}', {arguments})")
 
-        # Run pre-tool hooks
-        if self.hook_manager:
-            hook_result = await self.hook_manager.run_pre_tool_hooks(
-                tool_name, arguments, session_id, agent_name
-            )
-            if hook_result.action == HookAction.DENY:
-                logger.warning(
-                    f"Tool '{tool_name}' blocked by pre-hook: {hook_result.message}"
-                )
-                return ToolResult(
-                    success=False,
-                    content=None,
-                    error=hook_result.message or "Tool blocked by hook",
-                )
-            if hook_result.modified_args:
-                arguments = hook_result.modified_args
-                logger.debug(f"Tool args modified by hook: {arguments}")
+        modified_args, hook_error = await self._run_pre_tool_hooks(tool_name, arguments, session_id, agent_name)
+        if hook_error:
+            return ToolResult(success=False, content=None, error=hook_error)
+        if modified_args is not None:
+            arguments = modified_args
 
         tool = self.registry.get(tool_name)
-
         if not tool:
-            logger.debug(
-                f"Tool '{tool_name}' not found in registry, checking handlers..."
-            )
-            if handler := self.registry._handlers.get(tool_name):
-                try:
-                    logger.debug(f"Executing handler for '{tool_name}'")
-                    result = await handler(**arguments)
-                    result_obj = ToolResult(success=True, content=result)
-                except Exception as e:
-                    logger.error(f"Handler for '{tool_name}' failed: {e}")
-                    result_obj = ToolResult(success=False, content=None, error=str(e))
-            else:
-                logger.warning(f"Unknown tool: '{tool_name}'")
-                result_obj = ToolResult(
-                    success=False, content=None, error=f"Unknown tool: {tool_name}"
-                )
+            result_obj = await self._execute_handler(tool_name, arguments)
         else:
-            logger.debug(f"Executing tool '{tool_name}'")
-            import time
-            start = time.monotonic()
-            
-            # Add agent and session info to arguments for tools that might need it
-            if agent_name is not None:
-                arguments["_agent_name"] = agent_name
-            if session_id is not None:
-                arguments["_session_id"] = session_id
-            
-            # Get agent info for tools that support it (like skill tool)
-            agent_info = None
-            if agent_name is not None:
-                try:
-                    from nanocode.agents import get_agent_registry
-                    registry = get_agent_registry()
-                    agent_info = registry.get(agent_name)
-                except Exception:
-                    pass  # Agent info is optional
-            
-            # Validate arguments before executing
-            if isinstance(arguments, str):
-                try:
-                    import json
-                    arguments = json.loads(arguments)
-                except json.JSONDecodeError as e:
-                    logger.error(f"Tool '{tool_name}' has invalid JSON arguments: {arguments}")
-                    result_obj = ToolResult(
-                        success=False,
-                        error=f"Invalid JSON arguments for tool '{tool_name}': {e}",
-                    )
-                    return result_obj
-            # Check required arguments
-            if hasattr(tool, 'validate_args'):
-                is_valid, error_msg = tool.validate_args(arguments)
-                if not is_valid:
-                    logger.warning(f"Tool '{tool_name}' missing required arguments: {error_msg}")
-                    result_obj = ToolResult(success=False, error=error_msg)
-                    return result_obj
-            # For tools that accept agent_info in get_schema (like skill tool), pass it
-            if hasattr(tool, 'get_schema') and agent_info is not None:
-                try:
-                    # Try calling get_schema with agent_info
-                    tool.get_schema(agent_info)
-                except TypeError:
-                    # Tool's get_schema doesn't accept agent_info, call without args
-                    try:
-                        tool.get_schema()
-                    except Exception:
-                        pass
-            
-            # Remove internal arguments that most tools don't expect
-            # Tools that need agent_name/session_id should accept **kwargs
-            arguments.pop("_agent_name", None)
-            arguments.pop("_session_id", None)
-            
-            result_obj = await tool.execute(**arguments)
-            elapsed = time.monotonic() - start
-            logger.debug(f"Tool '{tool_name}' executed in {elapsed:.2f}s")
-            if elapsed > 5:
-                logger.warning(f"Tool '{tool_name}' took {elapsed:.2f}s (>5s slow!)")
+            result_obj = await self._execute_registered_tool(tool_name, arguments, agent_name, session_id)
 
-        # Run post-tool hooks
-        if self.hook_manager:
-            await self.hook_manager.run_post_tool_hooks(
-                tool_name,
-                arguments,
-                result_obj.content,
-                result_obj.success,
-                session_id,
-                agent_name,
-            )
-
-        self.execution_history.append(
-            {
-                "tool": tool_name,
-                "arguments": arguments,
-                "result": result_obj.to_dict(),
-            }
-        )
+        await self._run_post_tool_hooks(tool_name, arguments, result_obj, session_id, agent_name)
+        self._record_execution(tool_name, arguments, result_obj)
 
         if result_obj.success:
             logger.info(f"Tool '{tool_name}' executed successfully")

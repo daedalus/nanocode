@@ -448,15 +448,9 @@ class AutonomousAgent:
                 cache_dir = None  # Will use default
         self.file_tracker = FileTracker(cache_dir)
 
-    def _init_llm(self):
-        """Initialize LLM provider."""
+    def _load_registry(self):
+        """Ensure model registry is loaded."""
         import asyncio
-        default_model = self.config.get("llm.default_model")
-        default_connector = self.config.default_connector
-        user_agent = self.config.get("llm.user_agent", "nanocode/1.0")
-        proxy = self.config.proxy
-
-        # Load model registry once
         from nanocode.llm.registry import get_registry
         registry = get_registry()
         if not registry._providers:
@@ -464,119 +458,101 @@ class AutonomousAgent:
                 registry._providers = registry._load_from_cache() or {}
             else:
                 asyncio.create_task(registry.load())
+        return registry
 
-        # Validate required config
+    def _find_endpoint_config(self, default_connector: str, default_model: str):
+        """Find matching endpoint config from connectors list."""
+        endpoint_list = self.config.connectors.get(default_connector, [])
+        if not isinstance(endpoint_list, list):
+            endpoint_list = [endpoint_list]
+
+        model_connector = default_model.split("/")[0] if "/" in default_model else default_connector
+
+        for endpoint in endpoint_list:
+            if isinstance(endpoint, dict) and endpoint.get("name") == model_connector:
+                return endpoint.copy()
+        if endpoint_list:
+            return endpoint_list[0].copy()
+        return None
+
+    def _resolve_max_tokens(self, registry, model: str, default_connector: str, explicit: int | None) -> int | None:
+        """Resolve max_tokens from registry if not explicitly set."""
+        if explicit:
+            return explicit
+        from nanocode.llm.router import OUTPUT_TOKEN_MAX
+        model_id = model if "/" in model else f"{default_connector}/{model}"
+        info = registry.get_model_by_full_id(model_id)
+        if info and info.max_output_tokens > 0:
+            return max(info.max_output_tokens, OUTPUT_TOKEN_MAX)
+        return None
+
+    def _init_llm_from_connector(self, default_connector: str, default_model: str, user_agent: str, proxy: str | None, registry):
+        """Initialize LLM from connector endpoint config."""
+        provider_config = self._find_endpoint_config(default_connector, default_model)
+        if provider_config:
+            model = provider_config.pop("model", default_model)
+            explicit_max_tokens = provider_config.pop("max_tokens", None)
+            logger.info(f"Using default_connector: {default_connector}, model: {model}")
+            logger.info(f"URL: {provider_config.get('base_url')}")
+
+            explicit_max_tokens = self._resolve_max_tokens(registry, model, default_connector, explicit_max_tokens)
+            from nanocode.llm import create_llm
+
+            self.llm = create_llm(
+                default_connector,
+                model=model,
+                user_agent=user_agent,
+                proxy=proxy,
+                debug=self.debug,
+                max_tokens=explicit_max_tokens,
+                **provider_config,
+            )
+            return True
+        logger.warning(f"Connector {default_connector} has no endpoint config")
+        return False
+
+    def _init_llm(self):
+        """Initialize LLM provider."""
+        default_model = self.config.get("llm.default_model")
+        default_connector = self.config.default_connector
+        user_agent = self.config.get("llm.user_agent", "nanocode/1.0")
+        proxy = self.config.proxy
+
+        registry = self._load_registry()
+
         if not default_connector:
             raise ValueError("No default_connector configured. Set llm.default_connector in config.yaml")
         if not default_model:
             raise ValueError("No default_model configured. Set llm.default_model in config.yaml")
 
-        # FIRST: Use default_connector from config when set (before registry logic)
-        if default_connector:
-            connectors = self.config.connectors
-            if default_connector in connectors:
-                # connectors[default_connector] is a list of endpoint configs
-                endpoint_list = connectors[default_connector]
-                if not isinstance(endpoint_list, list):
-                    endpoint_list = [endpoint_list]
-
-                # Find the endpoint matching default_model
-                provider_config = None
-                # Extract the connector name from default_model (e.g., "opencode/big-pickle" -> "opencode")
-                model_connector = default_model.split("/")[0] if "/" in default_model else default_connector
-
-                for endpoint in endpoint_list:
-                    if isinstance(endpoint, dict) and endpoint.get("name") == model_connector:
-                        provider_config = endpoint.copy()
-                        break
-
-                if provider_config is None and endpoint_list:
-                    provider_config = endpoint_list[0].copy()
-
-                if provider_config:
-                    model = provider_config.pop("model", default_model)
-                    explicit_max_tokens = provider_config.pop("max_tokens", None)
-                    logger.info(
-                        f"Using default_connector: {default_connector}, model: {model}"
-                    )
-                    logger.info(f"URL: {provider_config.get('base_url')}")
-
-                    # Try to get max_tokens from registry if not explicitly set
-                    if not explicit_max_tokens:
-                        from nanocode.llm.router import OUTPUT_TOKEN_MAX
-                        model_id = model if "/" in model else f"{default_connector}/{model}"
-                        registry_model_info = registry.get_model_by_full_id(model_id)
-                        if registry_model_info and registry_model_info.max_output_tokens > 0:
-                            explicit_max_tokens = max(registry_model_info.max_output_tokens, OUTPUT_TOKEN_MAX)
-
-                    from nanocode.llm import create_llm
-
-                    llm = create_llm(
-                        default_connector,
-                        model=model,
-                        user_agent=user_agent,
-                        proxy=proxy,
-                        debug=self.debug,
-                        max_tokens=explicit_max_tokens,
-                        **provider_config,
-                    )
-                    self.llm = llm
-                    return
-                else:
-                    logger.warning(
-                        f"Connector {default_connector} has no endpoint config"
-                    )
-            else:
-                logger.warning(
-                    f"Connector {default_connector} not in connectors: {list(connectors.keys())}"
-                )
-
-            # Only use registry if no default_connector
-            from nanocode.llm.router import get_router
-
-            connectors = self.config.get("llm.connectors", {})
-            router = get_router()
-
-            for provider, config in connectors.items():
-                router.add_explicit_provider(provider, config)
-
-            provider_config = router.get_provider_config(default_model)
-            logger.info(
-                f"Model: {default_model} -> Provider: {provider_config.provider}, URL: {provider_config.base_url}"
-            )
-
-            from nanocode.llm import create_llm
-
-            self.llm = create_llm(
-                provider_config.provider,
-                base_url=provider_config.base_url,
-                api_key=provider_config.api_key or "dummy",
-                model=provider_config.model,
-                user_agent=user_agent,
-                proxy=proxy,
-            )
+        # Try connector endpoint config first
+        if default_connector in self.config.connectors:
+            if self._init_llm_from_connector(default_connector, default_model, user_agent, proxy, registry):
+                return
         else:
-            connectors = self.config.connectors
-            default = self.config.default_connector
+            logger.warning(f"Connector {default_connector} not in connectors: {list(self.config.connectors.keys())}")
 
-            if default in connectors:
-                provider_config = connectors[default]
-                self.llm = create_llm(
-                    default,
-                    **provider_config,
-                    user_agent=user_agent,
-                    proxy=proxy,
-                    debug=self.debug,
-                )
-            else:
-                self.llm = create_llm(
-                    "openai",
-                    api_key="dummy",
-                    model="gpt-4",
-                    user_agent=user_agent,
-                    proxy=proxy,
-                    debug=self.debug,
-                )
+        # Fallback: use router from registry
+        from nanocode.llm.router import get_router
+
+        connectors = self.config.get("llm.connectors", {})
+        router = get_router()
+        for provider, config in connectors.items():
+            router.add_explicit_provider(provider, config)
+
+        provider_config = router.get_provider_config(default_model)
+        logger.info(f"Model: {default_model} -> Provider: {provider_config.provider}, URL: {provider_config.base_url}")
+
+        from nanocode.llm import create_llm
+
+        self.llm = create_llm(
+            provider_config.provider,
+            base_url=provider_config.base_url,
+            api_key=provider_config.api_key or "dummy",
+            model=provider_config.model,
+            user_agent=user_agent,
+            proxy=proxy,
+        )
 
     def _init_pipeline(self):
         """Initialize the event-based agent pipeline (matching opencode).
@@ -720,6 +696,45 @@ class AutonomousAgent:
         """Async initialization - load model registry from API."""
         await self.context_manager.init_async()
 
+    def _get_agents_info(self) -> str:
+        if not self.nanocode_registry:
+            return ""
+        lines = []
+        for agent in self.nanocode_registry.list():
+            mode = agent.mode.value if hasattr(agent.mode, "value") else agent.mode
+            lines.append(f"- {agent.name}: {mode} agent (native={agent.native})")
+        return "\n".join(lines)
+
+    def _get_tools_info(self) -> str:
+        if not self.tool_registry:
+            return ""
+        lines = []
+        for name, tool in self.tool_registry._tools.items():
+            desc = getattr(tool, "description", "") or ""
+            lines.append(f"- {name}: {desc}")
+        return "\n".join(lines)
+
+    def _get_mcp_info(self) -> str:
+        if not hasattr(self, "mcp_manager") or not self.mcp_manager:
+            return ""
+        return "\n".join(f"- {name}" for name in self.mcp_manager._clients.keys())
+
+    def _get_lsp_info(self) -> str:
+        if not hasattr(self, "lsp_manager") or not self.lsp_manager:
+            return ""
+        return "\n".join(f"- {server_id}" for server_id in self.lsp_manager._servers.keys())
+
+    def _get_skills_info(self) -> str:
+        if not hasattr(self, "skills_manager") or not self.skills_manager:
+            return ""
+        lines = []
+        for name, skill in self.skills_manager.skills.items():
+            desc = getattr(skill, "description", "") or ""
+            if len(desc) > 500:
+                desc = desc[:500] + "..."
+            lines.append(f"- {name}: {desc}")
+        return "\n".join(lines)
+
     def _build_system_prompt(self) -> str:
         """Build system prompt using Jinja2 templates and context chips."""
         cwd = os.getcwd()
@@ -729,53 +744,13 @@ class AutonomousAgent:
             else "config.yaml"
         )
 
-        # Get agents
-        agents_info = []
-        if self.nanocode_registry:
-            for agent in self.nanocode_registry.list():
-                mode = agent.mode.value if hasattr(agent.mode, "value") else agent.mode
-                agents_info.append(
-                    f"- {agent.name}: {mode} agent (native={agent.native})"
-                )
-
-        # Get tools
-        tools_info = []
-        if self.tool_registry:
-            for name, tool in self.tool_registry._tools.items():
-                desc = getattr(tool, "description", "") or ""
-                tools_info.append(f"- {name}: {desc}")
-
-        # Get MCP servers
-        mcp_info = []
-        if hasattr(self, "mcp_manager") and self.mcp_manager:
-            for name in self.mcp_manager._clients.keys():
-                mcp_info.append(f"- {name}")
-
-        # Get LSP servers
-        lsp_info = []
-        if hasattr(self, "lsp_manager") and self.lsp_manager:
-            for server_id in self.lsp_manager._servers.keys():
-                lsp_info.append(f"- {server_id}")
-
-        # Get skills
-        # NOTE: Only include skill NAME and DESCRIPTION in system prompt
-        # NEVER include the full skill content (body) in the system prompt
-        skill_info = []
-        if hasattr(self, "skills_manager") and self.skills_manager:
-            for name, skill in self.skills_manager.skills.items():
-                desc = getattr(skill, "description", "") or ""
-                # Safety: truncate description to 500 chars to prevent accidental body leak
-                if len(desc) > 500:
-                    desc = desc[:500] + "..."
-                skill_info.append(f"- {name}: {desc}")
-
         # Use Jinja2 template rendering
         prompt = render_system_prompt(
-            agents="\n".join(agents_info) if agents_info else "",
-            tools="\n".join(tools_info) if tools_info else "",
-            skills="\n".join(skill_info) if skill_info else "",
-            mcp_servers="\n".join(mcp_info) if mcp_info else "",
-            lsp_servers="\n".join(lsp_info) if lsp_info else "",
+            agents=self._get_agents_info(),
+            tools=self._get_tools_info(),
+            skills=self._get_skills_info(),
+            mcp_servers=self._get_mcp_info(),
+            lsp_servers=self._get_lsp_info(),
             cwd=cwd,
             config_file=config_file,
         )
@@ -895,13 +870,8 @@ class AutonomousAgent:
 
         return is_overflow, total
 
-    def _prune_old_tool_results(self) -> int:
-        """Prune old tool results to free context space. Returns number of messages pruned."""
-        messages = self.context_manager._messages
-        if len(messages) < 6:
-            return 0
-
-        PRUNE_MINIMUM = 20000
+    def _find_prunable_tool_results(self, messages) -> tuple[list[tuple[int, int]], int]:
+        """Find tool results that can be pruned. Returns (to_remove, pruned_tokens)."""
         PRUNE_PROTECT = 40000
         PRUNE_PROTECTED_TOOLS = {"skill"}
 
@@ -921,17 +891,29 @@ class AutonomousAgent:
 
             for j in range(len(msg.parts) - 1, -1, -1):
                 part = msg.parts[j]
-                if part.part_type == MessagePartType.TOOL_RESULT:
-                    tool_name = getattr(part, "tool_name", None) or ""
-                    if tool_name in PRUNE_PROTECTED_TOOLS:
-                        continue
-                    estimate = len(str(part.content)) // 4
-                    total += estimate
-                    if total > PRUNE_PROTECT:
-                        pruned += estimate
-                        to_remove.append((i, j))
+                if part.part_type != MessagePartType.TOOL_RESULT:
+                    continue
+                if (getattr(part, "tool_name", None) or "") in PRUNE_PROTECTED_TOOLS:
+                    continue
+                estimate = len(str(part.content)) // 4
+                total += estimate
+                if total > PRUNE_PROTECT:
+                    pruned += estimate
+                    to_remove.append((i, j))
 
-        if pruned > PRUNE_MINIMUM:
+        return to_remove, pruned
+
+    def _prune_old_tool_results(self) -> int:
+        """Prune old tool results to free context space. Returns number of messages pruned."""
+        messages = self.context_manager._messages
+        if len(messages) < 6:
+            return 0
+
+        to_remove, pruned = self._find_prunable_tool_results(messages)
+        if pruned <= 20000:
+            return 0
+
+        for i, j in reversed(to_remove):
             for i, j in reversed(to_remove):
                 msg = messages[i]
                 if j < len(msg.parts):
@@ -1190,6 +1172,75 @@ Conversation:
             logger.warning(f"Failed to load checkpoint: {e}")
         return None
 
+    async def _handle_doom_loop(self, tool_name: str, args: dict, agent_name: str) -> tuple[bool, str | None]:
+        """Handle doom loop detection. Returns (blocked, error_message)."""
+        if self.yolo:
+            return False, None
+
+        if not self.doom_loop_handler.check_tool_call(tool_name, args):
+            return False, None
+
+        loop_info = self.doom_loop_handler.detection.get_loop_info()
+        if loop_info and loop_info.get("show_warning", True):
+            warning = self.doom_loop_handler.get_loop_warning()
+            if warning:
+                logger.warning(f"[{agent_name}] DOOM LOOP DETECTED for '{tool_name}': {warning}")
+                if self.debug:
+                    console.print(f"\n[red]{warning}[/red]\n")
+
+        if not self.current_agent:
+            return False, None
+
+        doom_action = self.permission_handler.check_permission(
+            self.current_agent, "doom_loop", {"tool": tool_name, "args": args},
+        )
+
+        if doom_action == PermissionAction.DENY:
+            msg = f"Error: Doom loop detected - tool '{tool_name}' called repeatedly with same arguments. Permission denied."
+            logger.warning(f"[{agent_name}] Doom loop permission DENIED for '{tool_name}'")
+            return True, msg
+
+        if doom_action == PermissionAction.ASK:
+            try:
+                await self.permission_handler.request_permission(
+                    self.current_agent, "doom_loop", {"tool": tool_name, "args": args},
+                )
+                self.doom_loop_handler.reset()
+                return False, None
+            except Exception as e:
+                logger.error(f"[{agent_name}] Doom loop permission denied: {e}")
+                return True, f"Error: Doom loop detected - permission denied by user."
+
+        self.doom_loop_handler.reset(tool_name)
+        return False, None
+
+    def _call_tool_start_callback(self, tool_name: str, args: dict, agent_name: str):
+        """Call on_tool_start callback if set."""
+        if hasattr(self, "_on_tool_start") and self._on_tool_start:
+            try:
+                self._on_tool_start(tool_name, args)
+            except Exception as e:
+                logger.warning(f"[{agent_name}] on_tool_start callback failed: {e}")
+
+    def _call_tool_complete_callback(self, tool_name: str, result, agent_name: str):
+        """Call on_tool_complete callback if set."""
+        if hasattr(self, "_on_tool_complete") and self._on_tool_complete:
+            try:
+                self._on_tool_complete(tool_name, self.tool_executor.format_result(result))
+            except Exception as e:
+                logger.warning(f"[{agent_name}] on_tool_complete callback failed: {e}")
+
+    async def _check_tool_permission(self, tool_name: str, args: dict, agent_name: str) -> PermissionAction | None:
+        """Check tool permission. Returns None if no agent (allow), otherwise the action."""
+        if not self.current_agent:
+            return PermissionAction.ALLOW
+        if self.yolo:
+            logger.debug(f"[YOLO] Auto-allowing '{tool_name}'")
+            return PermissionAction.ALLOW
+        action = self.permission_handler.check_permission(self.current_agent, tool_name, args)
+        logger.debug(f"[{agent_name}] Permission check for '{tool_name}': {action.value}")
+        return action
+
     async def _handle_tool_calls(self, tool_calls: list) -> list[dict]:
         """Handle tool calls from LLM with permission checking and doom loop detection."""
         agent_name = self.current_agent.name if self.current_agent else "unknown"
@@ -1197,7 +1248,6 @@ Conversation:
         start = time.monotonic()
         logger.info(f"[{agent_name}] Handling {len(tool_calls)} tool call(s)")
 
-        # Save checkpoint BEFORE handling tool calls (durable execution)
         try:
             step_number = getattr(self, "_current_step", 0) + 1
             self._current_step = step_number
@@ -1209,182 +1259,42 @@ Conversation:
         for i, tc in enumerate(tool_calls):
             tool_name = tc.name
             args = tc.arguments
-            logger.debug(
-                f"[{agent_name}] Tool call {i + 1}/{len(tool_calls)}: {tool_name}({args})"
-            )
+            logger.debug(f"[{agent_name}] Tool call {i + 1}/{len(tool_calls)}: {tool_name}({args})")
 
-            # Call on_tool_start callback
-            if hasattr(self, "_on_tool_start") and self._on_tool_start:
+            self._call_tool_start_callback(tool_name, args, agent_name)
+
+            doom_blocked, doom_error = await self._handle_doom_loop(tool_name, args, agent_name)
+            if doom_blocked:
+                results.append({"tool_call_id": tc.id, "tool_name": tool_name, "result": doom_error, "success": False})
+                continue
+
+            action = await self._check_tool_permission(tool_name, args, agent_name)
+            if action == PermissionAction.DENY:
+                logger.warning(f"[{agent_name}] Permission DENIED for '{tool_name}'")
+                results.append({"tool_call_id": tc.id, "tool_name": tool_name, "result": f"Error: Permission denied for tool '{tool_name}'", "success": False})
+                continue
+            if action == PermissionAction.ASK:
+                logger.info(f"[{agent_name}] Requesting permission for '{tool_name}'")
                 try:
-                    self._on_tool_start(tool_name, args)
+                    await self.permission_handler.request_permission(self.current_agent, tool_name, args)
+                    logger.debug(f"[{agent_name}] Permission granted for '{tool_name}'")
                 except Exception as e:
-                    logger.warning(f"[{agent_name}] on_tool_start callback failed: {e}")
-
-            # Skip doom loop detection in yolo mode
-            if self.yolo:
-                is_doom_loop = False
-            else:
-                is_doom_loop = self.doom_loop_handler.check_tool_call(tool_name, args)
-            
-            if is_doom_loop:
-                loop_info = self.doom_loop_handler.detection.get_loop_info()
-                should_show_warning = (
-                    loop_info.get("show_warning", True) if loop_info else True
-                )
-
-                if should_show_warning:
-                    warning = self.doom_loop_handler.get_loop_warning()
-                    if warning:
-                        logger.warning(
-                            f"[{agent_name}] DOOM LOOP DETECTED for '{tool_name}': {warning}"
-                        )
-                        if self.debug:
-                            console.print(f"\n[red]{warning}[/red]\n")
-
-                doom_loop_msg = f"\n[DOOM LOOP WARNING] {self.doom_loop_handler.get_loop_warning()}\n"
-
-                if self.current_agent:
-                    doom_action = self.permission_handler.check_permission(
-                        self.current_agent,
-                        "doom_loop",
-                        {"tool": tool_name, "args": args},
-                    )
-                    if doom_action == PermissionAction.DENY:
-                        logger.warning(
-                            f"[{agent_name}] Doom loop permission DENIED for '{tool_name}'"
-                        )
-                        results.append(
-                            {
-                                "tool_call_id": tc.id,
-                                "tool_name": tool_name,
-                                "result": f"Error: Doom loop detected - tool '{tool_name}' called repeatedly with same arguments. Permission denied.{doom_loop_msg}",
-                                "success": False,
-                            }
-                        )
-                        continue
-                    elif doom_action == PermissionAction.ASK:
-                        logger.info(
-                            f"[{agent_name}] Requesting permission to break doom loop for '{tool_name}'"
-                        )
-                        # In TUI mode, doom_loop permission is handled by callback
-                        # If callback exists, it will show dialog and return response
-                        try:
-                            await self.permission_handler.request_permission(
-                                self.current_agent,
-                                "doom_loop",
-                                {"tool": tool_name, "args": args},
-                            )
-                            logger.debug(
-                                f"[{agent_name}] Doom loop permission granted for '{tool_name}'"
-                            )
-                            # Reset doom loop state after permission granted
-                            self.doom_loop_handler.reset()  # Reset all, not just tool_name
-                        except Exception as e:
-                            logger.error(
-                                f"[{agent_name}] Doom loop permission denied for '{tool_name}': {e}"
-                            )
-                            results.append(
-                                {
-                                    "tool_call_id": tc.id,
-                                    "tool_name": tool_name,
-                                    "result": f"Error: Doom loop detected - permission denied by user.{doom_loop_msg}",
-                                    "success": False,
-                                }
-                            )
-                            continue
-                    else:
-                        # Permission granted - reset doom loop state for this tool
-                        self.doom_loop_handler.reset(tool_name)
-                        logger.info(
-                            f"[{agent_name}] Doom loop permission granted - executing tool '{tool_name}'"
-                        )
-
-            if self.current_agent:
-                if self.yolo:
-                    action = PermissionAction.ALLOW
-                    logger.debug(f"[YOLO] Auto-allowing '{tool_name}'")
-                else:
-                    action = self.permission_handler.check_permission(
-                        self.current_agent, tool_name, args
-                    )
-                    logger.debug(
-                        f"[{agent_name}] Permission check for '{tool_name}': {action.value}"
-                    )
-
-                if action == PermissionAction.DENY:
-                    logger.warning(
-                        f"[{agent_name}] Permission DENIED for '{tool_name}'"
-                    )
-                    results.append(
-                        {
-                            "tool_call_id": tc.id,
-                            "tool_name": tool_name,
-                            "result": f"Error: Permission denied for tool '{tool_name}'",
-                            "success": False,
-                        }
-                    )
+                    logger.error(f"[{agent_name}] Permission request failed for '{tool_name}': {e}")
+                    results.append({"tool_call_id": tc.id, "tool_name": tool_name, "result": f"Error: {str(e)}", "success": False})
                     continue
-                if action == PermissionAction.ASK:
-                    logger.info(
-                        f"[{agent_name}] Requesting permission for '{tool_name}'"
-                    )
-                    try:
-                        await self.permission_handler.request_permission(
-                            self.current_agent, tool_name, args
-                        )
-                        logger.debug(
-                            f"[{agent_name}] Permission granted for '{tool_name}'"
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"[{agent_name}] Permission request failed for '{tool_name}': {e}"
-                        )
-                        results.append(
-                            {
-                                "tool_call_id": tc.id,
-                                "tool_name": tool_name,
-                                "result": f"Error: {str(e)}",
-                                "success": False,
-                            }
-                        )
-                        continue
 
             logger.debug(f"[{agent_name}] Executing tool: {tool_name}")
-            result = await self.tool_executor.execute(
-                tool_name, args, self._session_id, agent_name
-            )
+            exec_result = await self.tool_executor.execute(tool_name, args, self._session_id, agent_name)
+            self._call_tool_complete_callback(tool_name, exec_result, agent_name)
 
-            if result.success:
-                logger.info(f"[{agent_name}] Tool '{tool_name}' succeeded")
-            else:
-                logger.warning(
-                    f"[{agent_name}] Tool '{tool_name}' failed: {result.error}"
-                )
-
-            # Call on_tool_complete callback
-            if hasattr(self, "_on_tool_complete") and self._on_tool_complete:
-                try:
-                    self._on_tool_complete(
-                        tool_name, self.tool_executor.format_result(result)
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"[{agent_name}] on_tool_complete callback failed: {e}"
-                    )
-
-            tool_logger.debug(
-                f"[{agent_name}] Tool call: {tool_name}({args}) -> success={result.success}"
-            )
-
-            results.append(
-                {
-                    "tool_call_id": tc.id,
-                    "tool_name": tool_name,
-                    "arguments": args,
-                    "result": self.tool_executor.format_result(result),
-                    "success": result.success,
-                }
-            )
+            tool_logger.debug(f"[{agent_name}] Tool call: {tool_name}({args}) -> success={exec_result.success}")
+            results.append({
+                "tool_call_id": tc.id,
+                "tool_name": tool_name,
+                "arguments": args,
+                "result": self.tool_executor.format_result(exec_result),
+                "success": exec_result.success,
+            })
 
         logger.debug(f"[{agent_name}] Finished handling {len(tool_calls)} tool call(s) in {time.monotonic() - start:.2f}s")
         return results
@@ -1583,16 +1493,8 @@ Conversation:
             traceback.print_exc()
             raise
 
-    async def _process_input_impl(
-        self,
-        user_input: str,
-        show_thinking: bool = True,
-        show_messages: bool = False,
-        on_token: callable = None,
-        on_tool_start: callable = None,
-        on_tool_complete: callable = None,
-    ) -> str:
-        """Process a user input through the agent."""
+    def _setup_processing(self, user_input: str, on_token, on_tool_start, on_tool_complete) -> str:
+        """Initialize state for a processing session. Returns agent_name."""
         agent_name = self.current_agent.name if self.current_agent else "unknown"
         if self._session_logger:
             self._session_logger.info(f"[{agent_name}] Processing input: {user_input}")
@@ -1608,539 +1510,396 @@ Conversation:
         self.context_manager.add_message("user", user_input)
         logger.debug(f"[{agent_name}] User message added to context")
 
-        # Store callbacks for this processing session
         self._on_token = on_token
         self._on_tool_start = on_tool_start
         self._on_tool_complete = on_tool_complete
+        return agent_name
 
+    def _display_llm_request(self, messages: list, show_messages: bool):
+        """Display LLM request info for debugging."""
+        if self.debug:
+            console.print(f"\n[debug][DEBUG] Sending {len(messages)} messages to LLM...[/debug]")
+            for i, msg in enumerate(messages):
+                role = msg.role if hasattr(msg, "role") else msg.get("role", "?")
+                if role == "system":
+                    continue
+                content = msg.content if hasattr(msg, "content") else str(msg.get("content", ""))
+                display = content[:200] + "..." if len(content) > 200 else content
+                console.print(f"  [dim]{i}: {role}: {display}[/dim]")
+
+        if show_messages:
+            console.print("\n[debug]=== LLM REQUEST ===[/debug]")
+            for i, msg in enumerate(messages):
+                content = msg.content if hasattr(msg, "content") else str(msg.get("content", ""))
+                role = msg.role if hasattr(msg, "role") else msg.get("role", "?")
+                print(f"\n[{i}] {role.upper()}:")
+                print(content if len(content) > 0 else content)
+            print("\n")
+
+    async def _make_first_llm_request(self, messages: list, tools: list, user_input: str, agent_name: str):
+        """Make first LLM request or return cached response."""
+        cached_response = self._check_cache(messages, tools)
+        logger.debug(f"[DEBUG] User input: '{user_input}'")
+        logger.debug(f"[DEBUG] Context messages before LLM: {len(messages)}")
+        if cached_response:
+            cache_logger.warning(f"[{agent_name}] Using CACHED response (this is a bug if input changed!)")
+            logger.warning(f"[{agent_name}] Cache hit! Messages: {len(messages)}, User input: {user_input[:50]}")
+            if self.debug:
+                console.print("\n[warning][WARN] CACHE HIT - Previous response reused![/warning]")
+            self._last_message = None
+            return cached_response
+
+        session_id = getattr(self.context_manager, "session_id", "default")
+        message = await self.pipeline.process_stream(
+            session_id=session_id,
+            messages=messages,
+            tools=tools,
+            on_token=self._on_token,
+        )
+        self._last_message = message
+        self._put_cache(messages, tools, message)
+        response = self.pipeline.to_llm_response(message)
+        logger.info(f"[{agent_name}] LLM response received")
+        logger.info(f"[{agent_name}] Thinking: {response.thinking[:100] if response.thinking else 'None'}...")
+        return response
+
+    def _display_llm_response(self, response, show_messages: bool, show_thinking: bool):
+        """Display LLM response info for debugging."""
+        if self.debug:
+            console.print("\n[debug][DEBUG] LLM Response:[/debug]")
+            if response.thinking:
+                console.print(f"  [thought]| Thinking:[/thought]\n{response.thinking}")
+            if response.has_tool_calls:
+                console.print(f"  [tool_call]Tool Calls: {[tc.name for tc in response.tool_calls]}[/tool_call]")
+            else:
+                console.print(f"  [content]Content: {response.content}[/content]")
+
+        if show_messages:
+            console.print("\n[debug]=== LLM RESPONSE ===[/debug]")
+            if response.thinking:
+                console.print(f"\n[thought]| Thinking:[/thought]\n{response.thinking}")
+            if response.has_tool_calls:
+                print("\nTool Calls:")
+                for tc in response.tool_calls:
+                    print(f"  - {tc.name}: {tc.arguments}")
+            print(f"\nContent:\n{response.content if response.content else '(empty)'}")
+            print()
+
+        if response.thinking and show_thinking and self.debug:
+            console.print(self._format_thinking(response.thinking))
+
+    async def _execute_tool_iteration(
+        self, iteration: int, max_agent_steps: int, final_response, tool_results_history: list, show_thinking: bool, agent_name: str
+    ):
+        """Run a single tool-call iteration. Returns next final_response."""
+        is_last_step = iteration >= max_agent_steps
+
+        if hasattr(self, "snapshot_manager") and self.snapshot_manager.enabled:
+            try:
+                last_snapshot_hash = await self.snapshot_manager.track()
+                if last_snapshot_hash and self.debug:
+                    logger.debug(f"[{agent_name}] Snapshot taken: {last_snapshot_hash[:8]}...")
+            except Exception as e:
+                logger.debug(f"[{agent_name}] Snapshot failed: {e}")
+
+        logger.info(f"[{agent_name}] Tool call iteration {iteration}/{max_agent_steps}: {[tc.name for tc in final_response.tool_calls]}")
+
+        tool_results = await self._handle_tool_calls(final_response.tool_calls)
+        tool_results_history.extend(tool_results)
+
+        for tr in tool_results:
+            result_content = self.context_manager.truncate_tool_result(tr["result"])
+            self.context_manager.add_tool_result(tr["tool_name"], tr["tool_call_id"], result_content)
+
+        messages = self.context_manager.prepare_messages()
+
+        is_overflow, tokens = self._check_context_overflow()
+        if is_overflow:
+            logger.info(f"[{agent_name}] Context overflow in iteration {iteration}")
+            pruned = self._prune_old_tool_results()
+            if pruned == 0:
+                await self._compact_context()
+            messages = self.context_manager.prepare_messages()
+
+        if final_response.thinking:
+            self._all_thinking.append(final_response.thinking)
+            if show_thinking and self.debug:
+                console.print(self._format_thinking(final_response.thinking))
+
+        if is_last_step:
+            messages.append({"role": "user", "content": MAX_STEPS_MESSAGE})
+            logger.debug(f"[{agent_name}] Forcing text-only response (max steps reached)")
+            return await self._chat_with_pipeline(messages, None, on_token=self._on_token)
+
+        return await self._chat_with_pipeline(messages, tools, on_token=self._on_token)
+
+    def _format_tool_result_for_augmented(self, tr: dict) -> str:
+        """Format a single tool result for augmented content (like opencode)."""
+        tool_name = tr["tool_name"]
+        args = tr.get("arguments", {})
+        result_str = str(tr["result"])
+        if tool_name == "bash":
+            return f"\n$ {args.get('command', '')}\n  {result_str}"
+        elif tool_name in ("glob", "grep"):
+            pattern = args.get("pattern", "")
+            root = args.get("path", "")
+            suffix = f" in {root}" if root else ""
+            icon = {"glob": "✱", "grep": "✱"}.get(tool_name, "✱")
+            return f"\n{icon} {tool_name.capitalize()} \"{pattern}\"{suffix}\n  {result_str}"
+        elif tool_name == "read":
+            filepath = args.get("path", "")
+            extra = ""
+            if "offset" in args or "limit" in args:
+                opts = ", ".join(f"{k}={v}" for k, v in args.items() if k in ("offset", "limit"))
+                extra = f" [{opts}]"
+            return f"\n→ Read {filepath}{extra}\n  {result_str}"
+        elif tool_name == "write":
+            return f"\n← Write {args.get('path', '')}\n  {result_str}"
+        elif tool_name == "edit":
+            return f"\n← Edit {args.get('path', '')}\n  {result_str}"
+        elif tool_name == "webfetch":
+            return f"\n% WebFetch {args.get('url', '')}\n  {result_str}"
+        elif tool_name == "skill":
+            return f"\n→ Skill \"{args.get('name', '')}\"\n  {result_str}"
+        return f"\n⚙ {tool_name}\n  {result_str}"
+
+    def _build_augmented_content(self, content: str, response, tool_results_history: list, show_messages: bool) -> str:
+        """Build augmented content with thinking and tool use info."""
+        augmented = content
+        if response.thinking:
+            augmented += f"\n\n[thought]| Thinking:[/thought] {response.thinking}"
+
+        if tool_results_history:
+            tool_info = "".join(self._format_tool_result_for_augmented(tr) for tr in tool_results_history)
+            augmented += tool_info
+            if show_messages:
+                tool_summary = "\n\n[Tool Summary]"
+                for tr in tool_results_history:
+                    tool_summary += f"\n- {tr['tool_name']}: executed"
+                augmented += tool_summary
+        return augmented
+
+    async def _handle_post_tool_continuation(self, tool_results_history: list, tools: list, agent_name: str) -> tuple[str, list]:
+        """After tool loop, force continuation to write complete content. Returns (content, updated_history)."""
+        messages = self.context_manager.prepare_messages()
+        messages.append({
+            "role": "user",
+            "content": "IMPORTANT: 1) Use 'todo(action='write', todos=[...])' to track your progress on each step. 2) Write COMPLETE content to every file you created. Do NOT use 'touch' or create empty files. Use the 'write' tool with full content for: README.md, pyproject.toml, source files, test files, etc.",
+        })
+        max_agent_steps = self.get_agent_steps() if self.get_agent_steps() else 20
+        iteration = 0
+        while iteration < max_agent_steps:
+            iteration += 1
+            final_response = await self._chat_with_pipeline(messages, tools, on_token=self._on_token)
+            if not final_response.has_tool_calls:
+                content = final_response.content
+                if content:
+                    self.context_manager.add_message("assistant", content)
+                return content, tool_results_history
+            tool_results = await self._handle_tool_calls(final_response.tool_calls)
+            tool_results_history.extend(tool_results)
+            for tr in tool_results:
+                result_content = self.context_manager.truncate_tool_result(tr["result"])
+                self.context_manager.add_tool_result(tr["tool_name"], tr["tool_call_id"], result_content)
+            self.context_manager.add_message("assistant", None, tool_calls=final_response.tool_calls)
+            messages = self.context_manager.prepare_messages()
+            if any("mkdir" in str(tr.get("result", "")) or "touch" in str(tr.get("result", "")) for tr in tool_results):
+                messages.append({"role": "user", "content": "Write COMPLETE content to all files and update your todo list with 'todo(action='write', todos=[...])'. Every file must have full, working content."})
+            else:
+                messages.append({"role": "user", "content": "Update todo list with 'todo(action='write', todos=[...])' and continue executing the next step. Write complete content to all files."})
+        return final_response.content, tool_results_history
+
+    async def _auto_execute_commands(self, tool_results: list[dict], agent_name: str):
+        """Auto-execute commands found in read tool results."""
+        for tr in tool_results:
+            if not (self.auto_execute and tr["tool_name"] == "read"):
+                continue
+            result_content = self.context_manager.truncate_tool_result(tr["result"])
+            commands = self._extract_commands_from_output(result_content)
+            if not commands:
+                continue
+            logger.info(f"[{agent_name}] Auto-executing {len(commands)} commands from file content")
+            for cmd in commands:
+                try:
+                    exec_result = await self.tool_registry.get("bash").execute(command=cmd)
+                    logger.info(f"[{agent_name}] Auto-exec '{cmd[:30]}...': {exec_result.success}")
+                except Exception as e:
+                    logger.warning(f"[{agent_name}] Auto-exec failed: {e}")
+
+    async def _handle_context_overflow(self, messages: list, agent_name: str) -> list:
+        """Handle context overflow by pruning or compacting. Returns updated messages."""
+        is_overflow, tokens = self._check_context_overflow()
+        if not is_overflow:
+            return messages
+        logger.info(f"[{agent_name}] Context overflow detected ({tokens} tokens)")
+        pruned = self._prune_old_tool_results()
+        if pruned == 0:
+            await self._compact_context()
+            return messages
+        return self.context_manager.prepare_messages()
+
+    async def _run_tool_iteration_loop(
+        self, initial_response, tools, tool_results_history, show_thinking, agent_name
+    ) -> tuple[str, list]:
+        """Run the tool iteration loop. Returns (content, tool_results_history)."""
+        messages = self.context_manager.prepare_messages()
+        messages = await self._handle_context_overflow(messages, agent_name)
+
+        final_response = await self._chat_with_pipeline(messages, tools)
+        if final_response.thinking:
+            self._all_thinking.append(final_response.thinking)
+            if show_thinking and self.debug:
+                console.print(self._format_thinking(final_response.thinking))
+
+        max_agent_steps = self.get_agent_steps() if self.get_agent_steps() else 20
+        iteration = 0
+        while final_response.has_tool_calls and iteration < max_agent_steps:
+            iteration += 1
+            final_response = await self._execute_tool_iteration(
+                iteration, max_agent_steps, final_response, tool_results_history, show_thinking, agent_name
+            )
+
+        if iteration >= max_agent_steps:
+            logger.warning(f"[{agent_name}] Hit max iterations ({max_agent_steps})")
+        elif final_response.has_tool_calls:
+            self.context_manager.add_message("user", AUTO_CONTINUE_MESSAGE)
+            logger.info(f"[{agent_name}] Auto-continue: injected continue message")
+            messages = self.context_manager.prepare_messages()
+            final_response = await self._chat_with_pipeline(messages, tools, on_token=self._on_token)
+            if not final_response.has_tool_calls:
+                self.context_manager.add_message("assistant", final_response.content)
+                return final_response.content, tool_results_history
+
+        return final_response.content, tool_results_history
+
+    async def _handle_tool_call_response_flow(
+        self, response, tools, show_thinking, agent_name
+    ) -> tuple[str, list]:
+        """Handle the tool call response flow. Returns (content, tool_results_history)."""
+        logger.info(f"[{agent_name}] LLM requested {len(response.tool_calls)} tool call(s): {[tc.name for tc in response.tool_calls]}")
+        if self.debug:
+            console.print(f"\n[debug][DEBUG] Handling {len(response.tool_calls)} tool calls...[/debug]")
+
+        tool_results_history: list = []
+        tool_results = await self._handle_tool_calls(response.tool_calls)
+        tool_results_history.extend(tool_results)
+        if hasattr(self, "_last_tool_results"):
+            self._last_tool_results.extend(tool_results)
+
+        for tr in tool_results:
+            if self.debug:
+                console.print(f"\n[debug][DEBUG] Tool {tr['tool_name']} result:[/debug] {tr['result']}")
+
+        self.context_manager.add_message("assistant", None, tool_calls=response.tool_calls)
+        for tr in tool_results:
+            result_content = self.context_manager.truncate_tool_result(tr["result"])
+            self.context_manager.add_tool_result(tr["tool_name"], tr["tool_call_id"], result_content)
+
+        await self._auto_execute_commands(tool_results, agent_name)
+
+        return await self._run_tool_iteration_loop(
+            response, tools, tool_results_history, show_thinking, agent_name
+        )
+
+    async def _check_and_handle_detected_commands(self, content: str, agent_name: str) -> str:
+        """Check for text-to-tool commands and reprompt signals. Returns possibly modified content."""
+        detected = detect_commands_in_text(content)
+        if detected:
+            logger.warning(f"[{agent_name}] Detected {len(detected)} command(s) in text that were not executed")
+            if self.debug:
+                console.print("\n[warning][WARN] Detected unexecuted commands:[/warning]")
+                for cmd in detected:
+                    console.print(f"  - [{cmd.tool_name}] {cmd.command[:60]}...")
+
+        should_reprompt, reason = should_reprompt_for_tools(content, tools_were_expected=bool(self.tool_registry.get_schemas()))
+        if should_reprompt:
+            logger.warning(f"[{agent_name}] Model didn't use tools: {reason}")
+            if self.debug:
+                console.print(f"\n[warning][WARN] {reason}[/warning]")
+            warning_msg = format_detected_commands_message(detected)
+            if warning_msg:
+                content += warning_msg
+        return content
+
+    async def _handle_pending_todos_flow(self, augmented: str, tools, agent_name) -> str:
+        """Handle pending todos by prompting the model to complete them."""
+        pending_todos = await self._check_pending_todos()
+        if not pending_todos:
+            return augmented
+        logger.info(f"[{agent_name}] {len(pending_todos)} pending todos, prompting to complete")
+        messages = self.context_manager.prepare_messages()
+        messages.append({
+            "role": "user",
+            "content": f"You have {len(pending_todos)} pending todo(s). Please complete them before responding:\n" +
+                      "\n".join(f"- {t}" for t in pending_todos)
+        })
+        continuation = await self._chat_with_pipeline(messages, tools)
+        if continuation and continuation.content:
+            self.context_manager.add_message("assistant", continuation.content)
+            augmented += f"\n\n{continuation.content}"
+            if continuation.has_tool_calls:
+                more_results = await self._handle_tool_calls(continuation.tool_calls)
+        return augmented
+
+    async def _process_input_impl(
+        self,
+        user_input: str,
+        show_thinking: bool = True,
+        show_messages: bool = False,
+        on_token: callable = None,
+        on_tool_start: callable = None,
+        on_tool_complete: callable = None,
+    ) -> str:
+        """Process a user input through the agent."""
+        agent_name = self._setup_processing(user_input, on_token, on_tool_start, on_tool_complete)
         tool_results_history = []
         _start_time = time.monotonic()
 
         try:
             tools = self.tool_registry.get_schemas()
             logger.debug(f"[{agent_name}] Total tools available: {len(tools)}")
-
-            # DEBUG: Print what we send to LLM
             logger.debug(f"[{agent_name}] === FIRST LLM REQUEST ===")
-
             messages = self.context_manager.prepare_messages()
             logger.debug(f"[{agent_name}] Context has {len(messages)} messages")
-            # DEBUG: Print all messages being sent to LLM
-            # logger.warning(f"[DEBUG LLM] ===== MESSAGES TO LLM =====")
-            # for i, m in enumerate(messages):
-            #     role = m.get("role", "?") if isinstance(m, dict) else getattr(m, "role", "?")
-            #     content = m.get("content", "") if isinstance(m, dict) else getattr(m, "content", "")
-            #     if content:
-            #         logger.warning(f"[DEBUG LLM] Msg {i}: {role}: {str(content)[:200]}")
 
-            if self.debug:
-                console.print(
-                    f"\n[debug][DEBUG] Sending {len(messages)} messages to LLM...[/debug]"
-                )
-                for i, msg in enumerate(messages):
-                    role = msg.role if hasattr(msg, "role") else msg.get("role", "?")
-                    if role == "system":
-                        continue
-                    content = (
-                        msg.content
-                        if hasattr(msg, "content")
-                        else str(msg.get("content", ""))
-                    )
-                    display = content[:200] + "..." if len(content) > 200 else content
-                    console.print(f"  [dim]{i}: {role}: {display}[/dim]")
-
-            if show_messages:
-                console.print("\n[debug]=== LLM REQUEST ===[/debug]")
-                for i, msg in enumerate(messages):
-                    content = (
-                        msg.content
-                        if hasattr(msg, "content")
-                        else str(msg.get("content", ""))
-                    )
-                    role = msg.role if hasattr(msg, "role") else msg.get("role", "?")
-                    print(f"\n[{i}] {role.upper()}:")
-                    print(content if len(content) > 0 else content)
-                print("\n")
-
-            # Track for show_thinking/show_messages output
+            self._display_llm_request(messages, show_messages)
             self._last_tool_results = []
-            self._all_thinking = []  # Accumulate all thinking like opencode's reasoning parts
+            self._all_thinking = []
 
             logger.debug(f"[{agent_name}] Sending request to LLM...")
-
-            cached_response = self._check_cache(messages, tools)
-            logger.debug(f"[DEBUG] User input: '{user_input}'")
-            logger.debug(f"[DEBUG] Context messages before LLM: {len(messages)}")
-            if cached_response:
-                cache_logger.warning(
-                    f"[{agent_name}] Using CACHED response (this is a bug if input changed!)"
-                )
-                logger.warning(
-                    f"[{agent_name}] Cache hit! Messages: {len(messages)}, User input: {user_input[:50]}"
-                )
-                if self.debug:
-                    console.print(
-                        "\n[warning][WARN] CACHE HIT - Previous response reused![/warning]"
-                    )
-                response = cached_response
-                # Get cached Message object if available
-                self._last_message = None
-            else:
-                # Use pipeline for LLM streaming (matches opencode architecture)
-                session_id = getattr(self.context_manager, "session_id", "default")
-                message = await self.pipeline.process_stream(
-                    session_id=session_id,
-                    messages=messages,
-                    tools=tools,
-                    on_token=self._on_token,
-                )
-                
-                # Store Message object for later use
-                self._last_message = message
-                
-                # Store in cache (Message object)
-                self._put_cache(messages, tools, message)
-                
-                # Convert to LLMResponse for backward compatibility
-                response = self.pipeline.to_llm_response(message)
-                
-                logger.info(f"[{agent_name}] LLM response received")
-                logger.info(f"[{agent_name}] Thinking: {response.thinking[:100] if response.thinking else 'None'}...")
-
-            # Track thinking from first response
-            if response.thinking:
-                # Already tracked in self._all_thinking via processor
-                pass
-
-            if self.debug:
-                console.print("\n[debug][DEBUG] LLM Response:[/debug]")
-                if response.thinking:
-                    console.print(
-                        f"  [thought]| Thinking:[/thought]\n{response.thinking}"
-                    )
-                if response.has_tool_calls:
-                    console.print(
-                        f"  [tool_call]Tool Calls: {[tc.name for tc in response.tool_calls]}[/tool_call]"
-                    )
-                else:
-                    console.print(f"  [content]Content: {response.content}[/content]")
-
-            if show_messages:
-                console.print("\n[debug]=== LLM RESPONSE ===[/debug]")
-                if response.thinking:
-                    console.print(
-                        f"\n[thought]| Thinking:[/thought]\n{response.thinking}"
-                    )
-                if response.has_tool_calls:
-                    print("\nTool Calls:")
-                    for tc in response.tool_calls:
-                        print(f"  - {tc.name}: {tc.arguments}")
-                print(
-                    f"\nContent:\n{response.content if response.content else '(empty)'}"
-                )
-                print()
-
-            if response.thinking and show_thinking and self.debug:
-                # Only print thinking when debug is explicitly enabled
-                console.print(self._format_thinking(response.thinking))
+            response = await self._make_first_llm_request(messages, tools, user_input, agent_name)
+            self._display_llm_response(response, show_messages, show_thinking)
 
             if response.has_tool_calls:
-                logger.info(
-                    f"[{agent_name}] LLM requested {len(response.tool_calls)} tool call(s): {[tc.name for tc in response.tool_calls]}"
+                content, tool_results_history = await self._handle_tool_call_response_flow(
+                    response, tools, show_thinking, agent_name
                 )
-                if self.debug:
-                    console.print(
-                        f"\n[debug][DEBUG] Handling {len(response.tool_calls)} tool calls...[/debug]"
-                    )
-
-                tool_results = await self._handle_tool_calls(response.tool_calls)
-                tool_results_history.extend(tool_results)
-                if hasattr(self, "_last_tool_results"):
-                    self._last_tool_results.extend(tool_results)
-
-                for tr in tool_results:
-                    if self.debug:
-                        console.print(
-                            f"\n[debug][DEBUG] Tool {tr['tool_name']} result:[/debug] {tr['result']}"
-                        )
-                    result_content = tr["result"]
-                    result_content = self.context_manager.truncate_tool_result(
-                        result_content
-                    )
-
-                # Add assistant message with tool_calls FIRST (before tool results)
-                # This ensures correct order: user → assistant → tool result
-                self.context_manager.add_message(
-                    "assistant",
-                    None,
-                    tool_calls=response.tool_calls,
-                )
-
-                # Then add tool results
-                for tr in tool_results:
-                    result_content = tr["result"]
-                    result_content = self.context_manager.truncate_tool_result(
-                        result_content
-                    )
-
-                    # AUTO-EXECUTE: If enabled, run commands found in file contents
-                    if (
-                        self.auto_execute
-                        and tr["tool_name"] == "read"
-                        and result_content
-                    ):
-                        commands = self._extract_commands_from_output(result_content)
-                        if commands:
-                            logger.info(
-                                f"[{agent_name}] Auto-executing {len(commands)} commands from file content"
-                            )
-                            for cmd in commands:
-                                try:
-                                    exec_result = await self.tool_registry.get(
-                                        "bash"
-                                    ).execute(command=cmd)
-                                    logger.info(
-                                        f"[{agent_name}] Auto-exec '{cmd[:30]}...': {exec_result.success}"
-                                    )
-                                except Exception as e:
-                                    logger.warning(
-                                        f"[{agent_name}] Auto-exec failed: {e}"
-                                    )
-
-                    self.context_manager.add_tool_result(
-                        tr["tool_name"],
-                        tr["tool_call_id"],
-                        result_content,
-                    )
-
-                messages = self.context_manager.prepare_messages()
-                for i, m in enumerate(messages):
-                    if m.get("role") == "tool":
-                        logger.info(
-                            f"[{agent_name}] Message {i} tool result: {m.get('content', '')[:100]}..."
-                        )
-
-                # Check for context overflow before LLM call
-                is_overflow, tokens = self._check_context_overflow()
-                if is_overflow:
-                    logger.info(
-                        f"[{agent_name}] Context overflow detected ({tokens} tokens)"
-                    )
-                    # Try to prune old tool results first
-                    pruned = self._prune_old_tool_results()
-                    if pruned == 0:
-                        # If pruning didn't help, compact context
-                        await self._compact_context()
-                    else:
-                        # Re-prepare messages after pruning
-                        messages = self.context_manager.prepare_messages()
-
-                final_response = await self._chat_with_pipeline(messages, tools)
-
-                # Track thinking from second response
-                if final_response.thinking:
-                    self._all_thinking.append(final_response.thinking)
-                    if show_thinking and self.debug:
-                        console.print(self._format_thinking(final_response.thinking))
-
-                # Continue handling tool calls in a loop until no more are requested
-                max_agent_steps = (
-                    self.get_agent_steps() if self.get_agent_steps() else 20
-                )
-                iteration = 0
-                last_snapshot_hash = None
-                while final_response.has_tool_calls and iteration < max_agent_steps:
-                    iteration += 1
-                    is_last_step = iteration >= max_agent_steps
-
-                    # Take snapshot at step boundary (like opencode)
-                    if (
-                        hasattr(self, "snapshot_manager")
-                        and self.snapshot_manager.enabled
-                    ):
-                        try:
-                            last_snapshot_hash = await self.snapshot_manager.track()
-                            if last_snapshot_hash and self.debug:
-                                logger.debug(
-                                    f"[{agent_name}] Snapshot taken: {last_snapshot_hash[:8]}..."
-                                )
-                        except Exception as e:
-                            logger.debug(f"[{agent_name}] Snapshot failed: {e}")
-
-                    logger.info(
-                        f"[{agent_name}] Tool call iteration {iteration}/{max_agent_steps}: {[tc.name for tc in final_response.tool_calls]}"
-                    )
-
-                    tool_results = await self._handle_tool_calls(
-                        final_response.tool_calls
-                    )
-                    tool_results_history.extend(tool_results)
-
-                    for tr in tool_results:
-                        result_content = tr["result"]
-                        result_content = self.context_manager.truncate_tool_result(
-                            result_content
-                        )
-                        self.context_manager.add_tool_result(
-                            tr["tool_name"],
-                            tr["tool_call_id"],
-                            result_content,
-                        )
-
-                    messages = self.context_manager.prepare_messages()
-
-                    # Check for context overflow after each iteration
-                    is_overflow, tokens = self._check_context_overflow()
-                    if is_overflow:
-                        logger.info(
-                            f"[{agent_name}] Context overflow in iteration {iteration}"
-                        )
-                        pruned = self._prune_old_tool_results()
-                        if pruned == 0:
-                            await self._compact_context()
-                        messages = self.context_manager.prepare_messages()
-
-                    # Track thinking from each iteration
-                    if final_response.thinking:
-                        self._all_thinking.append(final_response.thinking)
-                        if show_thinking and self.debug:
-                            console.print(
-                                self._format_thinking(final_response.thinking)
-                            )
-
-                    # On last step, inject MAX_STEPS message and disable tools (like opencode)
-                    if is_last_step:
-                        messages.append({"role": "user", "content": MAX_STEPS_MESSAGE})
-                        logger.debug(
-                            f"[{agent_name}] Forcing text-only response (max steps reached)"
-                        )
-                        final_response = await self._chat_with_pipeline(
-                            messages, None, on_token=self._on_token
-                        )
-                    else:
-                        final_response = await self._chat_with_pipeline(
-                            messages, tools, on_token=self._on_token
-                        )
-
-                if iteration >= max_agent_steps:
-                    logger.warning(
-                        f"[{agent_name}] Hit max iterations ({max_agent_steps})"
-                    )
-                elif final_response.has_tool_calls:
-                    # Auto-continue: inject message to continue if there are still tool calls
-                    self.context_manager.add_message("user", AUTO_CONTINUE_MESSAGE)
-                    logger.info(
-                        f"[{agent_name}] Auto-continue: injected continue message"
-                    )
-                    messages = self.context_manager.prepare_messages()
-                    final_response = await self._chat_with_pipeline(
-                        messages, tools, on_token=self._on_token
-                    )
-                    if not final_response.has_tool_calls:
-                        content = final_response.content
-                        self.context_manager.add_message("assistant", content)
-                        return content
-
-                content = final_response.content
-                logger.warning(f"[DEBUG] final_response.content = [{content}]")
             else:
                 content = response.content
-                logger.warning(f"[DEBUG] response.content = [{content}]")
 
-            # After tool execution loop, always continue if we have tool results
-            # The model should execute pending tasks, not just describe them
             if tool_results_history:
-                messages = self.context_manager.prepare_messages()
-                # Inject explicit instruction to write complete content to files
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": "IMPORTANT: 1) Use 'todo(action='write', todos=[...])' to track your progress on each step. 2) Write COMPLETE content to every file you created. Do NOT use 'touch' or create empty files. Use the 'write' tool with full content for: README.md, pyproject.toml, source files, test files, etc.",
-                    }
+                content, tool_results_history = await self._handle_post_tool_continuation(
+                    tool_results_history, tools, agent_name
                 )
-                # Loop until no more tool calls or max iterations
-                max_agent_steps = self.get_agent_steps() if self.get_agent_steps() else 20
-                iteration = 0
-                while iteration < max_agent_steps:
-                    iteration += 1
-                    final_response = await self._chat_with_pipeline(
-                        messages, tools, on_token=self._on_token
-                    )
-                    if not final_response.has_tool_calls:
-                        # No more tools called - check if we should continue
-                        content = final_response.content
-                        if content:
-                            self.context_manager.add_message("assistant", content)
-                        break
-                    # Handle tool calls
-                    tool_results = await self._handle_tool_calls(final_response.tool_calls)
-                    tool_results_history.extend(tool_results)
-                    for tr in tool_results:
-                        result_content = self.context_manager.truncate_tool_result(tr["result"])
-                        self.context_manager.add_tool_result(
-                            tr["tool_name"],
-                            tr["tool_call_id"],
-                            result_content,
-                        )
-                    # Add assistant message with tool calls
-                    self.context_manager.add_message(
-                        "assistant",
-                        None,
-                        tool_calls=final_response.tool_calls,
-                    )
-                    # Prepare messages for next iteration
-                    messages = self.context_manager.prepare_messages()
-                    # Check if model just created empty files - inject more specific instruction
-                    if any("mkdir" in str(tr.get("result", "")) or "touch" in str(tr.get("result", "")) for tr in tool_results):
-                        messages.append(
-                            {
-                                "role": "user",
-                                "content": "Write COMPLETE content to all files and update your todo list with 'todo(action='write', todos=[...])'. Every file must have full, working content.",
-                            }
-                        )
-                    else:
-                        messages.append(
-                            {
-                                "role": "user",
-                                "content": "Update todo list with 'todo(action='write', todos=[...])' and continue executing the next step. Write complete content to all files.",
-                            }
-                        )
-                else:
-                    content = final_response.content
-            else:
-                # No tool calls - store thinking
-                if response.thinking:
-                    content = response.content
 
-            # Text-to-Tool Detection: Handle model outputs text that looks like commands
-            detected = detect_commands_in_text(content)
-            if detected:
-                logger.warning(
-                    f"[{agent_name}] Detected {len(detected)} command(s) in text that were not executed"
-                )
-                if self.debug:
-                    console.print(
-                        "\n[warning][WARN] Detected unexecuted commands:[/warning]"
-                    )
-                    for cmd in detected:
-                        console.print(
-                            f"  - [{cmd.tool_name}] {cmd.command[:60]}..."
-                        )
-
-            # Check if model should have used tools but didn't
-            tools = self.tool_registry.get_schemas()
-            should_reprompt, reason = should_reprompt_for_tools(
-                content, tools_were_expected=bool(tools)
-            )
-
-            if should_reprompt:
-                logger.warning(f"[{agent_name}] Model didn't use tools: {reason}")
-                if self.debug:
-                    console.print(f"\n[warning][WARN] {reason}[/warning]")
-
-                # Add detected commands warning to content
-                warning_msg = format_detected_commands_message(detected)
-                if warning_msg:
-                    content += warning_msg
-
+            content = await self._check_and_handle_detected_commands(content, agent_name)
             self.context_manager.add_message("assistant", content)
 
-            # Only generate summary if tools were used
             if tool_results_history:
                 elapsed = time.monotonic() - _start_time
                 await self._generate_summary(tool_results_history)
                 self.state.last_summary = {**(self.state.last_summary or {}), "elapsed": elapsed}
 
-            # Build augmented content with thinking and tool use info
-            augmented = content
-
-            # Include thinking (like opencode's reasoning parts)
-            if response.thinking:
-                augmented += f"\n\n[thought]| Thinking:[/thought] {response.thinking}"
-
-            # Include tool use info (like opencode's format)
-            if tool_results_history:
-                tool_info = ""
-                for tr in tool_results_history:
-                    tool_name = tr["tool_name"]
-                    args = tr.get("arguments", {})
-                    result_str = str(tr["result"])
-                    
-                    # Format like opencode: icon + natural format
-                    if tool_name == "bash":
-                        cmd = args.get("command", "")
-                        tool_info += f"\n$ {cmd}\n  {result_str}"
-                    elif tool_name == "glob":
-                        pattern = args.get("pattern", "")
-                        root = args.get("path", "")
-                        suffix = f" in {root}" if root else ""
-                        tool_info += f"\n✱ Glob \"{pattern}\"{suffix}\n  {result_str}"
-                    elif tool_name == "grep":
-                        pattern = args.get("pattern", "")
-                        root = args.get("path", "")
-                        suffix = f" in {root}" if root else ""
-                        tool_info += f"\n✱ Grep \"{pattern}\"{suffix}\n  {result_str}"
-                    elif tool_name == "read":
-                        filepath = args.get("path", "")
-                        extra = ""
-                        if "offset" in args or "limit" in args:
-                            opts = ", ".join(f"{k}={v}" for k, v in args.items() if k in ("offset", "limit"))
-                            extra = f" [{opts}]"
-                        tool_info += f"\n→ Read {filepath}{extra}\n  {result_str}"
-                    elif tool_name == "write":
-                        filepath = args.get("path", "")
-                        tool_info += f"\n← Write {filepath}\n  {result_str}"
-                    elif tool_name == "edit":
-                        filepath = args.get("path", "")
-                        tool_info += f"\n← Edit {filepath}\n  {result_str}"
-                    elif tool_name == "webfetch":
-                        url = args.get("url", "")
-                        tool_info += f"\n% WebFetch {url}\n  {result_str}"
-                    elif tool_name == "skill":
-                        name = args.get("name", "")
-                        tool_info += f"\n→ Skill \"{name}\"\n  {result_str}"
-                    else:
-                        # Generic format
-                        tool_info += f"\n⚙ {tool_name}\n  {result_str}"
-                
-                augmented += tool_info
-
-                if show_messages:
-                    tool_summary = "\n\n[Tool Summary]"
-                    for tr in tool_results_history:
-                        tool_summary += f"\n- {tr['tool_name']}: executed"
-                    augmented += tool_summary
-
-            # Check if there are pending todos - if so, prompt to complete them
-            pending_todos = await self._check_pending_todos()
-            if pending_todos:
-                logger.info(f"[{agent_name}] {len(pending_todos)} pending todos, prompting to complete")
-                messages = self.context_manager.prepare_messages()
-                messages.append({
-                    "role": "user",
-                    "content": f"You have {len(pending_todos)} pending todo(s). Please complete them before responding:\n" +
-                              "\n".join(f"- {t}" for t in pending_todos)
-                })
-                continuation = await self._chat_with_pipeline(messages, tools)
-                if continuation and continuation.content:
-                    self.context_manager.add_message("assistant", continuation.content)
-                    augmented += f"\n\n{continuation.content}"
-                    # Handle any new tool calls
-                    if continuation.has_tool_calls:
-                        more_results = await self._handle_tool_calls(continuation.tool_calls)
-                        tool_results_history.extend(more_results)
+            augmented = self._build_augmented_content(content, response, tool_results_history, show_messages)
+            augmented = await self._handle_pending_todos_flow(augmented, tools, agent_name)
 
             self.state.state = AgentState.COMPLETE
-
-            # Fire background review (non-blocking)
             asyncio.create_task(self._spawn_background_review())
-
             logger.debug(f"[{agent_name}] Returning augmented content: {augmented}")
             return augmented
 
         except asyncio.CancelledError:
             self.state.state = AgentState.ERROR
-            # If we have tool results but got cancelled, return them as partial output
             partial = ""
             if hasattr(self, "_all_thinking") and self._all_thinking:
                 for thinking in self._all_thinking:
@@ -2266,101 +2025,65 @@ Conversation:
             return True
         return False
 
+    async def _reprompt_attempt(
+        self, attempt: int, max_retries: int, tools: list, agent_name: str
+    ) -> tuple[str, bool]:
+        """Run a single re-prompt attempt. Returns (response, should_stop)."""
+        messages = self.context_manager._messages
+        last_content = ""
+        for msg in reversed(messages):
+            if msg.role == "assistant":
+                last_content = msg.content or ""
+                break
+
+        detected = detect_commands_in_text(last_content)
+        should_reprompt, reason = should_reprompt_for_tools(last_content, tools_were_expected=bool(tools))
+
+        if not should_reprompt and not detected:
+            logger.info(f"[{agent_name}] Re-prompt succeeded on attempt {attempt}")
+            return last_content, True
+
+        reprompt_msg = create_reprompt_message(detected)
+        self.context_manager.add_message("user", reprompt_msg)
+
+        if self.debug:
+            console.print(f"\n[warning][WARN] Re-prompting for tools (attempt {attempt}/{max_retries}):[/warning]")
+            console.print(f"  Reason: {reason}")
+            if detected:
+                console.print(f"  Detected commands: {len(detected)}")
+
+        messages = self.context_manager.prepare_messages()
+        response = await self._chat_with_pipeline(messages, tools, on_token=self._on_token)
+
+        if response.has_tool_calls:
+            tool_results = await self._handle_tool_calls(response.tool_calls)
+            for tr in tool_results:
+                result_content = self.context_manager.truncate_tool_result(tr["result"])
+                self.context_manager.add_message("tool", result_content, tool_call_id=tr["tool_call_id"])
+
+        self.context_manager.add_message("assistant", response.content)
+        return "", False
+
     async def reprompt_for_tools(
         self,
         max_retries: int = 2,
         show_thinking: bool = True,
         show_messages: bool = True,
     ) -> str:
-        """Re-prompt the model to use tools when it didn't.
-
-        Call this after process_input if you suspect the model didn't use
-        tools when it should have.
-
-        Args:
-            max_retries: Maximum number of re-prompt attempts
-            show_thinking: Whether to show thinking blocks
-            show_messages: Whether to show message details
-
-        Returns:
-            The model's response after re-prompting
-        """
+        """Re-prompt the model to use tools when it didn't."""
         agent_name = self.current_agent.name if self.current_agent else "unknown"
         logger.info(f"[{agent_name}] Re-prompting for tool use")
-
         tools = self.tool_registry.get_schemas()
-        detected = []
-        attempt = 0
 
-        while attempt < max_retries:
-            attempt += 1
+        for attempt in range(1, max_retries + 1):
+            response, should_stop = await self._reprompt_attempt(attempt, max_retries, tools, agent_name)
+            if should_stop:
+                return response
 
-            # Detect commands in the last assistant message
-            messages = self.context_manager._messages
-            last_content = ""
-            for msg in reversed(messages):
-                if msg.role == "assistant":
-                    last_content = msg.content or ""
-                    break
-
-            detected = detect_commands_in_text(last_content)
-            should_reprompt, reason = should_reprompt_for_tools(
-                last_content, tools_were_expected=bool(tools)
-            )
-
-            if not should_reprompt and not detected:
-                # Model is now using tools properly or response is complete
-                logger.info(f"[{agent_name}] Re-prompt succeeded on attempt {attempt}")
-                return last_content
-
-            # Add re-prompt message
-            reprompt_msg = create_reprompt_message(detected)
-            self.context_manager.add_message(
-                "user",
-                reprompt_msg,
-            )
-
-            if self.debug:
-                console.print(
-                    f"\n[warning][WARN] Re-prompting for tools (attempt {attempt}/{max_retries}):[/warning]"
-                )
-                console.print(f"  Reason: {reason}")
-                if detected:
-                    console.print(f"  Detected commands: {len(detected)}")
-
-            # Process the re-prompt
-            messages = self.context_manager.prepare_messages()
-            response = await self._chat_with_pipeline(
-                messages, tools, on_token=self._on_token
-            )
-
-            if response.has_tool_calls:
-                logger.info(
-                    f"[{agent_name}] Re-prompt produced {len(response.tool_calls)} tool calls"
-                )
-                # Handle the tool calls
-                tool_results = await self._handle_tool_calls(response.tool_calls)
-                for tr in tool_results:
-                    result_content = tr["result"]
-                    result_content = self.context_manager.truncate_tool_result(
-                        result_content
-                    )
-                    self.context_manager.add_message(
-                        "tool",
-                        result_content,
-                        tool_call_id=tr["tool_call_id"],
-                    )
-
-            # Add assistant response
-            self.context_manager.add_message("assistant", response.content)
-
-        # Max retries reached
         logger.warning(f"[{agent_name}] Max re-prompt retries ({max_retries}) reached")
-        messages = self.context_manager._messages
-        for msg in reversed(messages):
+        for msg in reversed(self.context_manager._messages):
             if msg.role == "assistant":
                 return msg.content or ""
-
         return ""
 
     async def _generate_summary(self, tool_results: list = None):

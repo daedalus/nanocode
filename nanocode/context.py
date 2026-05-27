@@ -643,21 +643,10 @@ class ContextManager:
 
         return base
 
-    def _get_messages_for_llm(self) -> list[dict]:
-        """Get messages in format for LLM API."""
+    def _collect_tool_call_ids(self) -> list[tuple[dict, set]]:
+        """Collect tool call IDs from assistant messages. Returns list of (msg_dict, valid_ids)."""
         result = []
-
-        if self._system_parts and self.preserve_system:
-            result.append(
-                {
-                    "role": "system",
-                    "content": " ".join(p.content for p in self._system_parts),
-                }
-            )
-
-        result_msgs = []
         last_tool_call_ids = set()
-
         for msg in self._messages:
             msg_dict = msg.to_dict()
             if msg_dict.get("role") == "assistant" and msg_dict.get("tool_calls"):
@@ -666,15 +655,20 @@ class ContextManager:
                     tid = tc.get("id") if isinstance(tc, dict) else tc.id
                     if tid:
                         last_tool_call_ids.add(tid)
-            result_msgs.append((msg_dict, last_tool_call_ids))
+            result.append((msg_dict, last_tool_call_ids))
+        return result
 
-        for msg_dict, valid_tc_ids in result_msgs:
+    def _get_messages_for_llm(self) -> list[dict]:
+        """Get messages in format for LLM API."""
+        result = []
+        if self._system_parts and self.preserve_system:
+            result.append({"role": "system", "content": " ".join(p.content for p in self._system_parts)})
+        for msg_dict, valid_tc_ids in self._collect_tool_call_ids():
             if msg_dict.get("role") == "tool":
                 tid = msg_dict.get("tool_call_id")
                 if tid and valid_tc_ids and tid not in valid_tc_ids:
                     continue
             result.append(msg_dict)
-
         return result
 
     def prepare_messages(self) -> list[dict]:

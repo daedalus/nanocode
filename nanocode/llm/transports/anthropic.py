@@ -43,68 +43,49 @@ class AnthropicTransport(ProviderTransport):
             "Content-Type": "application/json",
         }
 
+    def _convert_system_msg(self, content) -> str | None:
+        if content:
+            return content if isinstance(content, str) else json.dumps(content)
+        return None
+
+    def _convert_tool_result(self, msg: dict) -> dict:
+        return {"role": "user", "content": [{"type": "tool_result", "tool_use_id": msg.get("tool_call_id", ""), "content": msg.get("content", "") if isinstance(msg.get("content"), str) else str(msg.get("content", ""))}]}
+
+    def _convert_assistant_with_tools(self, msg: dict) -> dict:
+        blocks: list[dict[str, Any]] = []
+        content = msg.get("content", "")
+        if content:
+            blocks.append({"type": "text", "text": content})
+        for tc in msg.get("tool_calls", []):
+            func = tc.get("function", {})
+            args = func.get("arguments", "{}")
+            input_val = json.loads(args) if isinstance(args, str) else (args or {})
+            blocks.append({"type": "tool_use", "id": tc.get("id", ""), "name": func.get("name", ""), "input": input_val})
+        return {"role": "assistant", "content": blocks}
+
     def convert_messages(
         self, messages: list[dict[str, Any]], **kwargs
     ) -> dict[str, Any]:
-        """Convert OpenAI-format messages to Anthropic (system, messages) tuple.
-
-        Returns {"system": str | None, "messages": list[dict]}.
-        """
+        """Convert OpenAI-format messages to Anthropic format."""
         system_parts: list[str] = []
         converted: list[dict[str, Any]] = []
 
         for msg in messages:
             role = msg.get("role", "user")
-            content = msg.get("content", "")
-
-            # System role → separate system parameter
             if role == "system":
-                if content:
-                    system_parts.append(content if isinstance(content, str) else json.dumps(content))
-                continue
+                part = self._convert_system_msg(msg.get("content", ""))
+                if part:
+                    system_parts.append(part)
+            elif role == "tool":
+                converted.append(self._convert_tool_result(msg))
+            elif role == "assistant" and msg.get("tool_calls"):
+                converted.append(self._convert_assistant_with_tools(msg))
+            elif role == "user" and isinstance(msg.get("content"), list):
+                converted.append({"role": "user", "content": msg["content"]})
+            else:
+                converted.append({"role": role, "content": msg.get("content", "")})
 
-            # Tool result → tool_result block
-            if role == "tool":
-                converted.append({
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": msg.get("tool_call_id", ""),
-                            "content": content if isinstance(content, str) else str(content),
-                        }
-                    ],
-                })
-                continue
-
-            # Tool calls → assistant message with tool_use blocks
-            if role == "assistant" and msg.get("tool_calls"):
-                blocks: list[dict[str, Any]] = []
-                if content:
-                    blocks.append({"type": "text", "text": content})
-                for tc in msg["tool_calls"]:
-                    func = tc.get("function", {})
-                    blocks.append({
-                        "type": "tool_use",
-                        "id": tc.get("id", ""),
-                        "name": func.get("name", ""),
-                        "input": json.loads(func.get("arguments", "{}")) if isinstance(func.get("arguments"), str) else (func.get("arguments") or {}),
-                    })
-                converted.append({"role": "assistant", "content": blocks})
-                continue
-
-            # User message with tool_result parts
-            if role == "user" and isinstance(content, list):
-                converted.append({"role": "user", "content": content})
-                continue
-
-            # Default: pass through as-is
-            converted.append({"role": role, "content": content})
-
-        return {
-            "system": "\n\n".join(system_parts) if system_parts else None,
-            "messages": converted,
-        }
+        return {"system": "\n\n".join(system_parts) if system_parts else None, "messages": converted}
 
     def convert_tools(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Convert OpenAI tool schemas to Anthropic input_schema format."""
@@ -179,49 +160,65 @@ class AnthropicTransport(ProviderTransport):
             return self._normalize_from_dict(response)
         return self._normalize_from_sdk(response)
 
-    def _normalize_from_dict(self, response: dict[str, Any]) -> NormalizedResponse:
-        """Normalize from a parsed JSON dict."""
+    def _normalize_blocks_dict(self, content_blocks: list) -> tuple[list[str], list[str], list]:
+        """Process content blocks from dict response."""
         text_parts: list[str] = []
         reasoning_parts: list[str] = []
         tool_calls_list: list[ToolCall] = []
-
-        for block in response.get("content", []):
-            block_type = block.get("type", "")
-            if block_type == "text":
+        for block in content_blocks:
+            t = block.get("type", "")
+            if t == "text":
                 text_parts.append(block.get("text", ""))
-            elif block_type == "thinking":
+            elif t == "thinking":
                 reasoning_parts.append(block.get("thinking", ""))
-            elif block_type == "tool_use":
-                tc_input = block.get("input", {})
-                tool_calls_list.append(
-                    build_tool_call(
-                        id=block.get("id"),
-                        name=block.get("name", ""),
-                        arguments=tc_input,
-                    )
-                )
+            elif t == "tool_use":
+                tool_calls_list.append(build_tool_call(id=block.get("id"), name=block.get("name", ""), arguments=block.get("input", {})))
+        return text_parts, reasoning_parts, tool_calls_list
 
-        finish_reason = self.map_finish_reason(
-            response.get("stop_reason", "")
+    def _normalize_blocks_sdk(self, content_blocks: list) -> tuple[list[str], list[str], list[dict], list]:
+        """Process content blocks from SDK response."""
+        text_parts: list[str] = []
+        reasoning_parts: list[str] = []
+        reasoning_details: list[dict] = []
+        tool_calls_list: list[ToolCall] = []
+        for block in content_blocks:
+            t = getattr(block, "type", "")
+            if t == "text":
+                text_parts.append(getattr(block, "text", ""))
+            elif t == "thinking":
+                reasoning_parts.append(getattr(block, "thinking", ""))
+                bd = self._to_plain_data(block)
+                if bd:
+                    reasoning_details.append(bd)
+            elif t == "tool_use":
+                tool_calls_list.append(build_tool_call(id=getattr(block, "id", None), name=getattr(block, "name", ""), arguments=getattr(block, "input", {})))
+        return text_parts, reasoning_parts, reasoning_details, tool_calls_list
+
+    def _build_usage_from_dict(self, raw_usage) -> None:
+        if not raw_usage:
+            return None
+        from nanocode.llm.transports.types import Usage
+        return Usage(
+            prompt_tokens=raw_usage.get("input_tokens", 0) or 0,
+            completion_tokens=raw_usage.get("output_tokens", 0) or 0,
+            total_tokens=(raw_usage.get("input_tokens", 0) or 0) + (raw_usage.get("output_tokens", 0) or 0),
         )
 
-        usage = None
-        raw_usage = response.get("usage")
-        if raw_usage:
-            from nanocode.llm.transports.types import Usage
-            usage = Usage(
-                prompt_tokens=raw_usage.get("input_tokens", 0) or 0,
-                completion_tokens=raw_usage.get("output_tokens", 0) or 0,
-                total_tokens=(raw_usage.get("input_tokens", 0) or 0)
-                + (raw_usage.get("output_tokens", 0) or 0),
-            )
+    def _build_usage_from_sdk(self, raw_usage) -> None:
+        if not raw_usage:
+            return None
+        from nanocode.llm.transports.types import Usage
+        return Usage(
+            prompt_tokens=getattr(raw_usage, "input_tokens", 0) or 0,
+            completion_tokens=getattr(raw_usage, "output_tokens", 0) or 0,
+            total_tokens=(getattr(raw_usage, "input_tokens", 0) or 0) + (getattr(raw_usage, "output_tokens", 0) or 0),
+        )
 
-        provider_data: dict[str, Any] = {}
-        if reasoning_parts:
-            provider_data["reasoning_details"] = [
-                {"type": "thinking", "thinking": t} for t in reasoning_parts
-            ]
-
+    def _normalize_from_dict(self, response: dict[str, Any]) -> NormalizedResponse:
+        text_parts, reasoning_parts, tool_calls_list = self._normalize_blocks_dict(response.get("content", []))
+        finish_reason = self.map_finish_reason(response.get("stop_reason", ""))
+        usage = self._build_usage_from_dict(response.get("usage"))
+        provider_data = {"reasoning_details": [{"type": "thinking", "thinking": t} for t in reasoning_parts]} if reasoning_parts else {}
         return NormalizedResponse(
             content="\n".join(text_parts) if text_parts else None,
             tool_calls=tool_calls_list or None,
@@ -232,50 +229,12 @@ class AnthropicTransport(ProviderTransport):
         )
 
     def _normalize_from_sdk(self, response: Any) -> NormalizedResponse:
-        """Normalize from an Anthropic SDK response object."""
-        text_parts: list[str] = []
-        reasoning_parts: list[str] = []
-        reasoning_details: list[dict[str, Any]] = []
-        tool_calls_list: list[ToolCall] = []
-
         content = getattr(response, "content", []) or []
-        for block in content:
-            block_type = getattr(block, "type", "")
-            if block_type == "text":
-                text_parts.append(getattr(block, "text", ""))
-            elif block_type == "thinking":
-                reasoning_parts.append(getattr(block, "thinking", ""))
-                block_dict = self._to_plain_data(block)
-                if block_dict:
-                    reasoning_details.append(block_dict)
-            elif block_type == "tool_use":
-                tc_input = getattr(block, "input", {})
-                tool_calls_list.append(
-                    build_tool_call(
-                        id=getattr(block, "id", None),
-                        name=getattr(block, "name", ""),
-                        arguments=tc_input,
-                    )
-                )
-
+        text_parts, reasoning_parts, reasoning_details, tool_calls_list = self._normalize_blocks_sdk(content)
         stop_reason = getattr(response, "stop_reason", "")
         finish_reason = self.map_finish_reason(stop_reason)
-
-        usage = None
-        raw_usage = getattr(response, "usage", None)
-        if raw_usage:
-            from nanocode.llm.transports.types import Usage
-            usage = Usage(
-                prompt_tokens=getattr(raw_usage, "input_tokens", 0) or 0,
-                completion_tokens=getattr(raw_usage, "output_tokens", 0) or 0,
-                total_tokens=(getattr(raw_usage, "input_tokens", 0) or 0)
-                + (getattr(raw_usage, "output_tokens", 0) or 0),
-            )
-
-        provider_data: dict[str, Any] = {}
-        if reasoning_details:
-            provider_data["reasoning_details"] = reasoning_details
-
+        usage = self._build_usage_from_sdk(getattr(response, "usage", None))
+        provider_data = {"reasoning_details": reasoning_details} if reasoning_details else {}
         return NormalizedResponse(
             content="\n".join(text_parts) if text_parts else None,
             tool_calls=tool_calls_list or None,

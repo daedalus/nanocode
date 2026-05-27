@@ -177,61 +177,28 @@ def calculate_retry_delay(
     return min(delay, max_delay)
 
 
+def _check_retryable_patterns(error_msg: str) -> str | None:
+    """Check common retryable error patterns in message."""
+    if "rate_limit" in error_msg or "too many requests" in error_msg or "rate limit" in error_msg:
+        return "Rate Limited"
+    if "overloaded" in error_msg:
+        return "Provider is overloaded"
+    if "exhausted" in error_msg or "unavailable" in error_msg:
+        return "Provider is overloaded"
+    if "free_usage" in error_msg or "free limit" in error_msg:
+        return None
+    return None
+
+
 def is_retryable_error(error: Exception) -> str | None:
     """Check if an error is retryable and return reason if not."""
-    if isinstance(error, asyncio.CancelledError):
-        return None  # Don't retry cancellations - let them propagate
-
-    if isinstance(error, ContextOverflowError):
+    if isinstance(error, (asyncio.CancelledError, ContextOverflowError)):
         return None
 
-    error_msg = str(error).lower()
-
-    if (
-        "rate_limit" in error_msg
-        or "too many requests" in error_msg
-        or "rate limit" in error_msg
-    ):
-        return "Rate Limited"
-
-    if "overloaded" in error_msg:
-        return "Provider is overloaded"
-
-    if "exhausted" in error_msg or "unavailable" in error_msg:
-        return "Provider is overloaded"
-
     if isinstance(error, FreeUsageLimitError):
-        return None  # Retry free usage errors too, user might add credits
+        return None
 
-    if "free_usage" in error_msg or "free limit" in error_msg:
-        return None  # Retry free usage errors too
-
-    return None
-
-    if isinstance(error, FreeUsageLimitError):
-        return str(error)
-
-    if isinstance(error, RateLimitError):
-        return str(error)
-
-    if isinstance(error, ProviderOverloadedError):
-        return str(error)
-
-    error_msg = str(error).lower()
-
-    if "rate_limit" in error_msg or "too many requests" in error_msg:
-        return "Rate Limited"
-
-    if "overloaded" in error_msg:
-        return "Provider is overloaded"
-
-    if "exhausted" in error_msg or "unavailable" in error_msg:
-        return "Provider is overloaded"
-
-    if "free_usage" in error_msg or "free limit" in error_msg:
-        return "Free usage exceeded"
-
-    return None
+    return _check_retryable_patterns(str(error).lower())
 
 
 async def retry_with_backoff(

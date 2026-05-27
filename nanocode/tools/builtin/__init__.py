@@ -346,6 +346,140 @@ class BashSessionTool(Tool):
             "required": ["action"],
         }
 
+    def _handle_bash_create(self, session_id, workdir, env):
+        """Handle bash session creation."""
+        import uuid
+
+        new_session_id = session_id or str(uuid.uuid4())[:8]
+        _bash_session_manager.create(new_session_id, workdir, env)
+        session_info = _bash_session_manager.get(new_session_id)
+        return ToolResult(
+            success=True,
+            content=f"Created bash session: {new_session_id}",
+            metadata={
+                "session_id": new_session_id,
+                "cwd": session_info["cwd"],
+                "env": session_info["env"],
+            },
+        )
+
+    def _handle_bash_run(self, session_id, command, timeout):
+        """Handle bash command execution."""
+        if not session_id:
+            return ToolResult(
+                success=False, content=None, error="session_id required for run"
+            )
+        session = _bash_session_manager.get(session_id)
+        if not session:
+            return ToolResult(
+                success=False,
+                content=None,
+                error=f"Session {session_id} not found",
+            )
+
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=session["cwd"],
+            env=session["env"],
+        )
+
+        if "cd " in command:
+            new_cwd = (
+                command.replace("cd", "")
+                .strip()
+                .split(";")[0]
+                .split("||")[0]
+                .split("&&")[0]
+            )
+            if new_cwd and not new_cwd.startswith("-"):
+                try:
+                    resolved_cwd = Path(session["cwd"]) / new_cwd
+                    if resolved_cwd.is_dir():
+                        _bash_session_manager.update_cwd(
+                            session_id, str(resolved_cwd.resolve())
+                        )
+                except Exception:
+                    pass
+
+        output = result.stdout
+        if result.stderr:
+            output += f"\nSTDERR: {result.stderr}"
+
+        return ToolResult(
+            success=result.returncode == 0,
+            content=output or "(command completed with no output)",
+            metadata={
+                "returncode": result.returncode,
+                "cwd": _bash_session_manager.get(session_id)["cwd"],
+            },
+        )
+
+    def _handle_bash_get(self, session_id):
+        """Handle bash session retrieval."""
+        if not session_id:
+            return ToolResult(
+                success=False, content=None, error="session_id required for get"
+            )
+        session = _bash_session_manager.get(session_id)
+        if not session:
+            return ToolResult(
+                success=False,
+                content=None,
+                error=f"Session {session_id} not found",
+            )
+        return ToolResult(
+            success=True, content=session, metadata={"session_id": session_id}
+        )
+
+    def _handle_bash_set_env(self, session_id, key, value):
+        """Handle setting environment variables."""
+        if not session_id or not key:
+            return ToolResult(
+                success=False,
+                content=None,
+                error="session_id and key required for set_env",
+            )
+        session = _bash_session_manager.get(session_id)
+        if not session:
+            return ToolResult(
+                success=False,
+                content=None,
+                error=f"Session {session_id} not found",
+            )
+        _bash_session_manager.update_env(session_id, key, value or "")
+        return ToolResult(
+            success=True,
+            content=f"Set {key}={value}",
+            metadata={
+                "session_id": session_id,
+                "env": _bash_session_manager.get(session_id)["env"],
+            },
+        )
+
+    def _handle_bash_list(self):
+        """Handle bash session listing."""
+        sessions = _bash_session_manager.list()
+        return ToolResult(
+            success=True, content=sessions, metadata={"count": len(sessions)}
+        )
+
+    def _handle_bash_delete(self, session_id):
+        """Handle bash session deletion."""
+        if not session_id:
+            return ToolResult(
+                success=False,
+                content=None,
+                error="session_id required for delete",
+            )
+        _bash_session_manager.remove(session_id)
+        return ToolResult(
+            success=True, content=f"Deleted session: {session_id}"
+        )
+
     async def execute(
         self,
         action: str,
@@ -358,140 +492,21 @@ class BashSessionTool(Tool):
         timeout: int = 60,
     ) -> ToolResult:
         """Handle bash session actions."""
+        _action_handlers = {
+            "create": lambda: self._handle_bash_create(session_id, workdir, env),
+            "run": lambda: self._handle_bash_run(session_id, command, timeout),
+            "get": lambda: self._handle_bash_get(session_id),
+            "set_env": lambda: self._handle_bash_set_env(session_id, key, value),
+            "list": lambda: self._handle_bash_list(),
+            "delete": lambda: self._handle_bash_delete(session_id),
+        }
+        handler = _action_handlers.get(action)
+        if not handler:
+            return ToolResult(
+                success=False, content=None, error=f"Unknown action: {action}"
+            )
         try:
-            if action == "create":
-                import uuid
-
-                new_session_id = session_id or str(uuid.uuid4())[:8]
-                _bash_session_manager.create(new_session_id, workdir, env)
-                session_info = _bash_session_manager.get(new_session_id)
-                return ToolResult(
-                    success=True,
-                    content=f"Created bash session: {new_session_id}",
-                    metadata={
-                        "session_id": new_session_id,
-                        "cwd": session_info["cwd"],
-                        "env": session_info["env"],
-                    },
-                )
-
-            elif action == "run":
-                if not session_id:
-                    return ToolResult(
-                        success=False, content=None, error="session_id required for run"
-                    )
-                session = _bash_session_manager.get(session_id)
-                if not session:
-                    return ToolResult(
-                        success=False,
-                        content=None,
-                        error=f"Session {session_id} not found",
-                    )
-
-                result = subprocess.run(
-                    command,
-                    shell=True,  # nosem nosec B602 - intentional: bash tool executes shell commands
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout,
-                    cwd=session["cwd"],
-                    env=session["env"],
-                )
-
-                if "cd " in command:
-                    new_cwd = (
-                        command.replace("cd", "")
-                        .strip()
-                        .split(";")[0]
-                        .split("||")[0]
-                        .split("&&")[0]
-                    )
-                    if new_cwd and not new_cwd.startswith("-"):
-                        try:
-                            resolved_cwd = Path(session["cwd"]) / new_cwd
-                            if resolved_cwd.is_dir():
-                                _bash_session_manager.update_cwd(
-                                    session_id, str(resolved_cwd.resolve())
-                                )
-                        except Exception:
-                            pass
-
-                output = result.stdout
-                if result.stderr:
-                    output += f"\nSTDERR: {result.stderr}"
-
-                return ToolResult(
-                    success=result.returncode == 0,
-                    content=output or "(command completed with no output)",
-                    metadata={
-                        "returncode": result.returncode,
-                        "cwd": _bash_session_manager.get(session_id)["cwd"],
-                    },
-                )
-
-            elif action == "get":
-                if not session_id:
-                    return ToolResult(
-                        success=False, content=None, error="session_id required for get"
-                    )
-                session = _bash_session_manager.get(session_id)
-                if not session:
-                    return ToolResult(
-                        success=False,
-                        content=None,
-                        error=f"Session {session_id} not found",
-                    )
-                return ToolResult(
-                    success=True, content=session, metadata={"session_id": session_id}
-                )
-
-            elif action == "set_env":
-                if not session_id or not key:
-                    return ToolResult(
-                        success=False,
-                        content=None,
-                        error="session_id and key required for set_env",
-                    )
-                session = _bash_session_manager.get(session_id)
-                if not session:
-                    return ToolResult(
-                        success=False,
-                        content=None,
-                        error=f"Session {session_id} not found",
-                    )
-                _bash_session_manager.update_env(session_id, key, value or "")
-                return ToolResult(
-                    success=True,
-                    content=f"Set {key}={value}",
-                    metadata={
-                        "session_id": session_id,
-                        "env": _bash_session_manager.get(session_id)["env"],
-                    },
-                )
-
-            elif action == "list":
-                sessions = _bash_session_manager.list()
-                return ToolResult(
-                    success=True, content=sessions, metadata={"count": len(sessions)}
-                )
-
-            elif action == "delete":
-                if not session_id:
-                    return ToolResult(
-                        success=False,
-                        content=None,
-                        error="session_id required for delete",
-                    )
-                _bash_session_manager.remove(session_id)
-                return ToolResult(
-                    success=True, content=f"Deleted session: {session_id}"
-                )
-
-            else:
-                return ToolResult(
-                    success=False, content=None, error=f"Unknown action: {action}"
-                )
-
+            return handler()
         except subprocess.TimeoutExpired:
             return ToolResult(success=False, content=None, error="Command timed out")
         except Exception as e:
@@ -1384,6 +1399,163 @@ class LSPTool(Tool):
         )
         self.lsp_manager = lsp_manager
 
+    async def _resolve_client(self, file_path):
+        """Resolve LSP client for a file path."""
+        from nanocode.lsp import path_to_file_uri
+
+        file_path = str(Path(file_path).resolve())
+        uri = path_to_file_uri(file_path)
+
+        client = self.lsp_manager.get_server_for_file(file_path)
+        if client is None:
+            client = await self.lsp_manager.auto_start_for_file(file_path)
+
+        if client is None:
+            return None, None
+        if isinstance(client, tuple):
+            client = client[0]
+        return client, uri
+
+    async def _execute_definition(self, client, uri, line, character):
+        """Handle go-to-definition."""
+        from nanocode.lsp import file_uri_to_path
+
+        result = await client.text_document__definition(uri, line - 1, character - 1)
+        if not result:
+            return ToolResult(success=True, content="No definition found")
+        locations = [
+            {"file": file_uri_to_path(loc.uri), "range": loc.range}
+            for loc in result
+        ]
+        return ToolResult(
+            success=True, content=locations, metadata={"count": len(locations)}
+        )
+
+    async def _execute_references(self, client, uri, line, character):
+        """Handle find-references."""
+        from nanocode.lsp import file_uri_to_path
+
+        result = await client.text_document__references(uri, line - 1, character - 1)
+        if not result:
+            return ToolResult(success=True, content="No references found")
+        locations = [
+            {"file": file_uri_to_path(loc.uri), "range": loc.range}
+            for loc in result
+        ]
+        return ToolResult(
+            success=True, content=locations, metadata={"count": len(locations)}
+        )
+
+    async def _execute_hover(self, client, uri, line, character):
+        """Handle hover."""
+        result = await client.text_document__hover(uri, line - 1, character - 1)
+        content = result.contents
+        if isinstance(content, dict):
+            content = content.get("value", str(content))
+        elif isinstance(content, list):
+            content = "\n".join(str(c) for c in content)
+        return ToolResult(
+            success=True, content=content, metadata={"range": result.range}
+        )
+
+    async def _execute_completion(self, client, uri, line, character):
+        """Handle code completion."""
+        result = await client.text_document__completion(uri, line - 1, character - 1)
+        if not result:
+            return ToolResult(success=True, content=[])
+        items = [
+            {"label": item.label, "kind": item.kind, "detail": item.detail}
+            for item in result
+        ]
+        return ToolResult(
+            success=True, content=items, metadata={"count": len(items)}
+        )
+
+    async def _execute_symbols(self, client, uri):
+        """Handle document symbols."""
+        from nanocode.lsp import file_uri_to_path
+
+        result = await client.text_document__symbol(uri)
+        if not result:
+            return ToolResult(success=True, content="No symbols found")
+        symbols = [
+            {
+                "name": sym.name,
+                "kind": sym.kind,
+                "location": {
+                    "file": file_uri_to_path(sym.location.uri),
+                    "range": sym.location.range,
+                },
+            }
+            for sym in result
+        ]
+        return ToolResult(
+            success=True, content=symbols, metadata={"count": len(symbols)}
+        )
+
+    async def _execute_workspace_symbol(self, client, query):
+        """Handle workspace symbol search."""
+        if not query:
+            return ToolResult(
+                success=False,
+                content=None,
+                error="query is required for workspace_symbol",
+            )
+        from nanocode.lsp import file_uri_to_path
+
+        result = await client.workspace__symbol(query)
+        if not result:
+            return ToolResult(success=True, content="No symbols found")
+        symbols = [
+            {
+                "name": sym.name,
+                "kind": sym.kind,
+                "location": {
+                    "file": file_uri_to_path(sym.location.uri),
+                    "range": sym.location.range,
+                },
+            }
+            for sym in result
+        ]
+        return ToolResult(
+            success=True, content=symbols, metadata={"count": len(symbols)}
+        )
+
+    async def _execute_implementation(self, client, uri, line, character):
+        """Handle go-to-implementation."""
+        from nanocode.lsp import file_uri_to_path
+
+        result = await client.text_document__implementation(
+            uri, line - 1, character - 1
+        )
+        if not result:
+            return ToolResult(success=True, content="No implementation found")
+        locations = [
+            {"file": file_uri_to_path(loc.uri), "range": loc.range}
+            for loc in result
+        ]
+        return ToolResult(
+            success=True, content=locations, metadata={"count": len(locations)}
+        )
+
+    async def _execute_diagnostics(self, client, uri):
+        """Handle document diagnostics."""
+        result = await client.text_document__diagnostics(uri)
+        if not result:
+            return ToolResult(success=True, content="No diagnostics")
+        diags = [
+            {
+                "message": diag.message,
+                "severity": diag.severity,
+                "range": diag.range,
+                "code": diag.code,
+            }
+            for diag in result
+        ]
+        return ToolResult(
+            success=True, content=diags, metadata={"count": len(diags)}
+        )
+
     async def execute(
         self,
         operation: str,
@@ -1398,179 +1570,31 @@ class LSPTool(Tool):
                 success=False, content=None, error="LSP manager not configured"
             )
 
+        client, uri = await self._resolve_client(file_path)
+        if client is None:
+            return ToolResult(
+                success=False,
+                content=None,
+                error="No LSP server available for this file type",
+            )
+
+        _operation_handlers = {
+            "definition": lambda: self._execute_definition(client, uri, line, character),
+            "references": lambda: self._execute_references(client, uri, line, character),
+            "hover": lambda: self._execute_hover(client, uri, line, character),
+            "completion": lambda: self._execute_completion(client, uri, line, character),
+            "symbols": lambda: self._execute_symbols(client, uri),
+            "workspace_symbol": lambda: self._execute_workspace_symbol(client, query),
+            "implementation": lambda: self._execute_implementation(client, uri, line, character),
+            "diagnostics": lambda: self._execute_diagnostics(client, uri),
+        }
+        handler = _operation_handlers.get(operation)
+        if not handler:
+            return ToolResult(
+                success=False, content=None, error=f"Unknown operation: {operation}"
+            )
         try:
-            from nanocode.lsp import file_uri_to_path, path_to_file_uri
-
-            file_path = str(Path(file_path).resolve())
-            uri = path_to_file_uri(file_path)
-
-            client = self.lsp_manager.get_server_for_file(file_path)
-            if client is None:
-                client = await self.lsp_manager.auto_start_for_file(file_path)
-
-            if client is None:
-                return ToolResult(
-                    success=False,
-                    content=None,
-                    error="No LSP server available for this file type",
-                )
-
-            if isinstance(client, tuple):
-                client = client[0]
-
-            if operation == "definition":
-                result = await client.text_document__definition(
-                    uri, line - 1, character - 1
-                )
-                if not result:
-                    return ToolResult(success=True, content="No definition found")
-                locations = []
-                for loc in result:
-                    locations.append(
-                        {
-                            "file": file_uri_to_path(loc.uri),
-                            "range": loc.range,
-                        }
-                    )
-                return ToolResult(
-                    success=True, content=locations, metadata={"count": len(locations)}
-                )
-
-            elif operation == "references":
-                result = await client.text_document__references(
-                    uri, line - 1, character - 1
-                )
-                if not result:
-                    return ToolResult(success=True, content="No references found")
-                locations = []
-                for loc in result:
-                    locations.append(
-                        {
-                            "file": file_uri_to_path(loc.uri),
-                            "range": loc.range,
-                        }
-                    )
-                return ToolResult(
-                    success=True, content=locations, metadata={"count": len(locations)}
-                )
-
-            elif operation == "hover":
-                result = await client.text_document__hover(uri, line - 1, character - 1)
-                content = result.contents
-                if isinstance(content, dict):
-                    content = content.get("value", str(content))
-                elif isinstance(content, list):
-                    content = "\n".join(str(c) for c in content)
-                return ToolResult(
-                    success=True, content=content, metadata={"range": result.range}
-                )
-
-            elif operation == "completion":
-                result = await client.text_document__completion(
-                    uri, line - 1, character - 1
-                )
-                if not result:
-                    return ToolResult(success=True, content=[])
-                items = []
-                for item in result:
-                    items.append(
-                        {
-                            "label": item.label,
-                            "kind": item.kind,
-                            "detail": item.detail,
-                        }
-                    )
-                return ToolResult(
-                    success=True, content=items, metadata={"count": len(items)}
-                )
-
-            elif operation == "symbols":
-                result = await client.text_document__symbol(uri)
-                if not result:
-                    return ToolResult(success=True, content="No symbols found")
-                symbols = []
-                for sym in result:
-                    symbols.append(
-                        {
-                            "name": sym.name,
-                            "kind": sym.kind,
-                            "location": {
-                                "file": file_uri_to_path(sym.location.uri),
-                                "range": sym.location.range,
-                            },
-                        }
-                    )
-                return ToolResult(
-                    success=True, content=symbols, metadata={"count": len(symbols)}
-                )
-
-            elif operation == "workspace_symbol":
-                if not query:
-                    return ToolResult(
-                        success=False,
-                        content=None,
-                        error="query is required for workspace_symbol",
-                    )
-                result = await client.workspace__symbol(query)
-                if not result:
-                    return ToolResult(success=True, content="No symbols found")
-                symbols = []
-                for sym in result:
-                    symbols.append(
-                        {
-                            "name": sym.name,
-                            "kind": sym.kind,
-                            "location": {
-                                "file": file_uri_to_path(sym.location.uri),
-                                "range": sym.location.range,
-                            },
-                        }
-                    )
-                return ToolResult(
-                    success=True, content=symbols, metadata={"count": len(symbols)}
-                )
-
-            elif operation == "implementation":
-                result = await client.text_document__implementation(
-                    uri, line - 1, character - 1
-                )
-                if not result:
-                    return ToolResult(success=True, content="No implementation found")
-                locations = []
-                for loc in result:
-                    locations.append(
-                        {
-                            "file": file_uri_to_path(loc.uri),
-                            "range": loc.range,
-                        }
-                    )
-                return ToolResult(
-                    success=True, content=locations, metadata={"count": len(locations)}
-                )
-
-            elif operation == "diagnostics":
-                result = await client.text_document__diagnostics(uri)
-                if not result:
-                    return ToolResult(success=True, content="No diagnostics")
-                diags = []
-                for diag in result:
-                    diags.append(
-                        {
-                            "message": diag.message,
-                            "severity": diag.severity,
-                            "range": diag.range,
-                            "code": diag.code,
-                        }
-                    )
-                return ToolResult(
-                    success=True, content=diags, metadata={"count": len(diags)}
-                )
-
-            else:
-                return ToolResult(
-                    success=False, content=None, error=f"Unknown operation: {operation}"
-                )
-
+            return await handler()
         except Exception as e:
             return ToolResult(success=False, content=None, error=str(e))
 
@@ -2004,18 +2028,10 @@ class ApplyPatchTool(Tool):
             "required": ["patchText"],
         }
 
-    async def execute(self, patchText: str) -> ToolResult:
-        """Apply a patch using opencode format."""
-        import re
-
-        patchText = patchText.strip()
-        lines = patchText.split("\n")
-        files_changed = []
-        errors = []
-
+    def _find_patch_markers(self, lines: list) -> tuple[int, int]:
+        """Find the begin and end patch markers. Returns (begin_idx, end_idx)."""
         begin_marker = "*** Begin Patch ***"
         end_marker = "*** End Patch ***"
-
         begin_idx = -1
         end_idx = -1
         for idx, line in enumerate(lines):
@@ -2025,110 +2041,90 @@ class ApplyPatchTool(Tool):
             if stripped == end_marker:
                 end_idx = idx
                 break
+        return begin_idx, end_idx
 
-        if begin_idx == -1 or end_idx == -1 or begin_idx >= end_idx:
-            return ToolResult(
-                success=False,
-                content=None,
-                error="Invalid patch format: missing *** Begin Patch / *** End Patch markers",
-            )
+    def _process_add_file_operation(self, lines, i, end_idx, files_changed, errors):
+        """Process a *** Add File: operation."""
+        file_path = lines[i][len("*** Add File:"):].strip()
+        if file_path.endswith("***"):
+            file_path = file_path[:-3].strip()
+        if not file_path:
+            return i + 1
 
-        i = begin_idx + 1
-        while i < end_idx:
-            line = lines[i].strip()
+        content_lines = []
+        i += 1
+        while i < end_idx and not lines[i].strip().startswith("***"):
+            content_lines.append(lines[i])
+            i += 1
 
-            if line.startswith("*** Add File:"):
-                file_path = line[len("*** Add File:"):].strip()
-                # Handle trailing *** from test format
-                if file_path.endswith("***"):
-                    file_path = file_path[:-3].strip()
-                if not file_path:
-                    i += 1
-                    continue
+        content = "\n".join(content_lines)
+        try:
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, "w") as f:
+                f.write(content)
+            files_changed.append(file_path)
+        except Exception as e:
+            errors.append(f"Error adding {file_path}: {e}")
+        return i
 
-                content_lines = []
-                i += 1
-                while i < end_idx and not lines[i].strip().startswith("***"):
-                    content_lines.append(lines[i])
-                    i += 1
-
-                content = "\n".join(content_lines)
-                try:
-                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-                    with open(file_path, "w") as f:
-                        f.write(content)
-                    files_changed.append(file_path)
-                except Exception as e:
-                    errors.append(f"Error adding {file_path}: {e}")
-
-            elif line.startswith("*** Delete File:"):
-                file_path = line[len("*** Delete File:"):].strip()
-                if file_path:
-                    try:
-                        if os.path.exists(file_path):
-                            os.remove(file_path)
-                        files_changed.append(file_path)
-                    except Exception as e:
-                        errors.append(f"Error deleting {file_path}: {e}")
-                i += 1
-
-            elif line.startswith("*** Update File:"):
-                file_path = line[len("*** Update File:"):].strip()
-                # Handle trailing *** from test format
-                if file_path.endswith("***"):
-                    file_path = file_path[:-3].strip()
-                if not file_path:
-                    i += 1
-                    continue
-
-                move_path = None
-                if i + 1 < end_idx and lines[i + 1].strip().startswith("*** Move to:"):
-                    move_path = lines[i + 1].strip()[len("*** Move to:"):].strip()
-                    i += 2
-
-                old_content = ""
+    def _process_delete_file_operation(self, line, i, files_changed, errors):
+        """Process a *** Delete File: operation."""
+        file_path = line[len("*** Delete File:"):].strip()
+        if file_path:
+            try:
                 if os.path.exists(file_path):
-                    with open(file_path) as f:
-                        old_content = f.read()
+                    os.remove(file_path)
+                files_changed.append(file_path)
+            except Exception as e:
+                errors.append(f"Error deleting {file_path}: {e}")
+        return i + 1
 
-                new_lines = []
+    def _process_update_file_operation(self, lines, i, end_idx, files_changed, errors):
+        """Process a *** Update File: operation."""
+        file_path = lines[i][len("*** Update File:"):].strip()
+        if file_path.endswith("***"):
+            file_path = file_path[:-3].strip()
+        if not file_path:
+            return i + 1
+
+        move_path = None
+        if i + 1 < end_idx and lines[i + 1].strip().startswith("*** Move to:"):
+            move_path = lines[i + 1].strip()[len("*** Move to:"):].strip()
+            i += 2
+
+        old_content = ""
+        if os.path.exists(file_path):
+            with open(file_path) as f:
+                old_content = f.read()
+
+        new_lines = []
+        i += 1
+        while i < end_idx:
+            l = lines[i].strip()
+            if l.startswith("***"):
+                break
+            if l == "*** End of File":
                 i += 1
-                while i < end_idx:
-                    l = lines[i].strip()
-                    if l.startswith("***"):
-                        break
-                    if l == "*** End of File":
-                        i += 1
-                        break
-                    new_lines.append(lines[i])
-                    i += 1
+                break
+            new_lines.append(lines[i])
+            i += 1
 
-                new_content = self._apply_opencode_patch(old_content, new_lines)
+        new_content = self._apply_opencode_patch(old_content, new_lines)
+        target_path = move_path or file_path
+        try:
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            with open(target_path, "w") as f:
+                f.write(new_content)
+            if move_path and move_path != file_path:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            files_changed.append(target_path)
+        except Exception as e:
+            errors.append(f"Error updating {file_path}: {e}")
+        return i
 
-                target_path = move_path or file_path
-                try:
-                    os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                    with open(target_path, "w") as f:
-                        f.write(new_content)
-
-                    if move_path and move_path != file_path:
-                        if os.path.exists(file_path):
-                            os.remove(file_path)
-                    files_changed.append(target_path)
-                except Exception as e:
-                    errors.append(f"Error updating {file_path}: {e}")
-
-            else:
-                i += 1
-
-        if errors:
-            return ToolResult(
-                success=False,
-                content=None,
-                error="\n".join(errors),
-                metadata={"files_changed": files_changed},
-            )
-
+    def _format_patch_files_output(self, files_changed: list) -> str:
+        """Format the list of changed files for output."""
         output_parts = [f"Applied patch to {len(files_changed)} file(s)"]
         for f in files_changed:
             lines_list = []
@@ -2142,10 +2138,46 @@ class ApplyPatchTool(Tool):
             except Exception:
                 lines_list = ["(could not read)"]
             output_parts.append(f"\n--- {f} ---\n" + "\n".join(lines_list))
+        return "\n".join(output_parts)
+
+    async def execute(self, patchText: str) -> ToolResult:
+        """Apply a patch using opencode format."""
+        patchText = patchText.strip()
+        lines = patchText.split("\n")
+        files_changed = []
+        errors = []
+
+        begin_idx, end_idx = self._find_patch_markers(lines)
+        if begin_idx == -1 or end_idx == -1 or begin_idx >= end_idx:
+            return ToolResult(
+                success=False,
+                content=None,
+                error="Invalid patch format: missing *** Begin Patch / *** End Patch markers",
+            )
+
+        i = begin_idx + 1
+        while i < end_idx:
+            line = lines[i].strip()
+            if line.startswith("*** Add File:"):
+                i = self._process_add_file_operation(lines, i, end_idx, files_changed, errors)
+            elif line.startswith("*** Delete File:"):
+                i = self._process_delete_file_operation(line, i, files_changed, errors)
+            elif line.startswith("*** Update File:"):
+                i = self._process_update_file_operation(lines, i, end_idx, files_changed, errors)
+            else:
+                i += 1
+
+        if errors:
+            return ToolResult(
+                success=False,
+                content=None,
+                error="\n".join(errors),
+                metadata={"files_changed": files_changed},
+            )
 
         return ToolResult(
             success=True,
-            content="\n".join(output_parts),
+            content=self._format_patch_files_output(files_changed),
             metadata={"files_changed": files_changed},
         )
 

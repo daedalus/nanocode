@@ -78,101 +78,65 @@ SHELL_COMMANDS = {
 }
 
 
-def detect_commands_in_text(text: str) -> list[DetectedCommand]:
-    """Detect commands in text that should be tool calls.
-
-    This helps handle cases where the model outputs text that looks like
-    a command but doesn't explicitly use a tool call.
-
-    Args:
-        text: The assistant's text response
-
-    Returns:
-        List of detected commands with confidence scores
-    """
+def _detect_code_block_commands(text: str) -> list[DetectedCommand]:
+    """Extract shell commands from code blocks."""
     detected = []
-    text_lower = text.lower()
-
-    # Extract code block contents first (most reliable for commands)
-    code_block_pattern = r"```(?:\w+)?\s*\n?(.*?)```"
-    for match in re.finditer(code_block_pattern, text, re.DOTALL):
+    code_block_pat = r"```(?:\w+)?\s*\n?(.*?)```"
+    for match in re.finditer(code_block_pat, text, re.DOTALL):
         content = match.group(1).strip()
         first_word = content.split()[0] if content.split() else ""
-        # Check if it looks like a shell command
-        if (
-            first_word in SHELL_COMMANDS
-            or first_word.startswith("./")
-            or first_word.startswith("-")
-        ):
-            if len(content) > 3 and not content.startswith("#"):
-                detected.append(
-                    DetectedCommand(
-                        command=content,
-                        tool_name="bash",
-                        confidence=0.9 if first_word in SHELL_COMMANDS else 0.7,
-                        explanation="Detected bash command in code block",
-                    )
-                )
+        is_shell = first_word in SHELL_COMMANDS or first_word.startswith("./") or first_word.startswith("-")
+        if is_shell and len(content) > 3 and not content.startswith("#"):
+            confidence = 0.9 if first_word in SHELL_COMMANDS else 0.7
+            detected.append(DetectedCommand(command=content, tool_name="bash", confidence=confidence, explanation="Detected bash command in code block"))
+    return detected
 
-    # Check inline backticks (`command`)
-    inline_pattern = r"`([^`]+)`"
-    for match in re.finditer(inline_pattern, text):
+
+def _detect_inline_backtick_commands(text: str) -> list[DetectedCommand]:
+    """Extract commands and file paths from inline backticks."""
+    detected = []
+    inline_pat = r"`([^`]+)`"
+    for match in re.finditer(inline_pat, text):
         content = match.group(1).strip()
         if not content:
             continue
         first_word = content.split()[0] if content.split() else ""
-        # Determine if it's a command or file path
         if first_word in SHELL_COMMANDS:
-            detected.append(
-                DetectedCommand(
-                    command=content,
-                    tool_name="bash",
-                    confidence=0.8,
-                    explanation="Detected bash command in backticks",
-                )
-            )
-        elif (
-            "." in content
-            or "/" in content
-            or first_word.endswith(".py")
-            or first_word.endswith(".yaml")
-            or first_word.endswith(".json")
-        ):
-            # Looks like a file path
-            detected.append(
-                DetectedCommand(
-                    command=content,
-                    tool_name="read",
-                    confidence=0.7,
-                    explanation="Detected file path in backticks",
-                )
-            )
+            detected.append(DetectedCommand(command=content, tool_name="bash", confidence=0.8, explanation="Detected bash command in backticks"))
+        elif "." in content or "/" in content or any(first_word.endswith(e) for e in (".py", ".yaml", ".json")):
+            detected.append(DetectedCommand(command=content, tool_name="read", confidence=0.7, explanation="Detected file path in backticks"))
+    return detected
 
-    # Check for read commands in text
+
+def _detect_read_patterns(text: str) -> list[DetectedCommand]:
+    """Detect read/view file requests in natural language."""
+    detected = []
     for pattern in COMMAND_PATTERNS["read"]:
-        matches = re.finditer(pattern, text, re.IGNORECASE)
-        for match in matches:
+        for match in re.finditer(pattern, text, re.IGNORECASE):
             filepath = match.group(1).strip()
-            detected.append(
-                DetectedCommand(
-                    command=filepath,
-                    tool_name="read",
-                    confidence=0.7,
-                    explanation=f"Detected file path: {filepath}",
-                )
-            )
+            detected.append(DetectedCommand(command=filepath, tool_name="read", confidence=0.7, explanation=f"Detected file path: {filepath}"))
+    return detected
 
-    # Deduplicate results
+
+def _deduplicate_commands(detected: list[DetectedCommand]) -> list[DetectedCommand]:
+    """Remove duplicate commands."""
     seen = set()
-    unique_detected = []
+    result = []
     for cmd in detected:
         key = (cmd.tool_name, cmd.command)
         if key not in seen:
             seen.add(key)
-            unique_detected.append(cmd)
-    detected = unique_detected
+            result.append(cmd)
+    return result
 
-    return detected
+
+def detect_commands_in_text(text: str) -> list[DetectedCommand]:
+    """Detect commands in text that should be tool calls."""
+    detected = []
+    detected.extend(_detect_code_block_commands(text))
+    detected.extend(_detect_inline_backtick_commands(text))
+    detected.extend(_detect_read_patterns(text))
+    return _deduplicate_commands(detected)
 
 
 def extract_json_from_text(text: str) -> dict | None:

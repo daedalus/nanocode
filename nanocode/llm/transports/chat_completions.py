@@ -70,95 +70,32 @@ class ChatCompletionsTransport(ProviderTransport):
         """Tools are already in OpenAI format — identity."""
         return tools
 
-    def build_kwargs(
-        self,
-        model: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        **params,
-    ) -> dict[str, Any]:
-        """Build chat.completions.create() payload.
-
-        params (all optional):
-            max_tokens: int | None
-            temperature: float | None
-            reasoning_config: dict | None — {enabled: bool, effort: str}
-            provider_profile: ProviderProfile | None
-            extra_body_additions: dict | None
-            request_overrides: dict | None
-            stream: bool — include stream: True (default: True)
-        """
-        sanitized = self.convert_messages(messages)
-
-        # Developer role swap for reasoning models
+    def _apply_developer_role(self, sanitized: list, model: str) -> list:
         model_lower = (model or "").lower()
-        if (
-            sanitized
-            and isinstance(sanitized[0], dict)
-            and sanitized[0].get("role") == "system"
-            and any(p in model_lower for p in DEVELOPER_ROLE_MODELS)
-        ):
+        if sanitized and isinstance(sanitized[0], dict) and sanitized[0].get("role") == "system" and any(p in model_lower for p in DEVELOPER_ROLE_MODELS):
             sanitized = list(sanitized)
             sanitized[0] = {**sanitized[0], "role": "developer"}
+        return sanitized
 
-        payload: dict[str, Any] = {
-            "model": model,
-            "messages": sanitized,
-            "stream": params.get("stream", True),
-        }
+    def _apply_provider_profile(self, payload: dict, profile, **params):
+        extra_body: dict[str, Any] = {}
+        profile_body = profile.build_extra_body(session_id=params.get("session_id"), model=params.get("model"), base_url=params.get("base_url"), reasoning_config=params.get("reasoning_config"))
+        if profile_body:
+            extra_body.update(profile_body)
+        extras, top_level = profile.build_api_kwargs_extras(reasoning_config=params.get("reasoning_config"), supports_reasoning=params.get("supports_reasoning", False), model=params.get("model"), session_id=params.get("session_id"))
+        payload.update(top_level)
+        if extras:
+            extra_body.update(extras)
+        if profile.fixed_temperature is not None:
+            payload["temperature"] = profile.fixed_temperature
+        if extra_body:
+            payload["extra_body"] = extra_body
 
-        # Temperature
-        temperature = params.get("temperature")
-        if temperature is not None:
-            payload["temperature"] = temperature
-
-        # Max tokens
-        max_tokens = params.get("max_tokens")
-        if max_tokens is not None:
-            payload["max_tokens"] = max_tokens
-
-        # Tools
-        if tools:
-            payload["tools"] = self.convert_tools(tools)
-
-        # Provider profile extras
-        profile = params.get("provider_profile")
-        if profile is not None:
-            extra_body: dict[str, Any] = {}
-            profile_body = profile.build_extra_body(
-                session_id=params.get("session_id"),
-                model=model,
-                base_url=params.get("base_url"),
-                reasoning_config=params.get("reasoning_config"),
-            )
-            if profile_body:
-                extra_body.update(profile_body)
-
-            extras, top_level = profile.build_api_kwargs_extras(
-                reasoning_config=params.get("reasoning_config"),
-                supports_reasoning=params.get("supports_reasoning", False),
-                model=model,
-                session_id=params.get("session_id"),
-            )
-            payload.update(top_level)
-            if extras:
-                extra_body.update(extras)
-
-            if profile.fixed_temperature is not None:
-                payload["temperature"] = profile.fixed_temperature
-
-            if extra_body:
-                payload["extra_body"] = extra_body
-
-        # extra_body additions (merged into existing extra_body)
-        additions = params.get("extra_body_additions")
+    def _apply_overrides(self, payload: dict, overrides: dict | None, additions: dict | None):
         if additions:
             current = payload.get("extra_body", {})
             current.update(additions)
             payload["extra_body"] = current
-
-        # Request overrides last
-        overrides = params.get("request_overrides")
         if overrides:
             for k, v in overrides.items():
                 if k == "extra_body" and isinstance(v, dict):
@@ -168,16 +105,35 @@ class ChatCompletionsTransport(ProviderTransport):
                 else:
                     payload[k] = v
 
-        # Catch-all: pass through any params not explicitly handled
-        _HANDLED = {
-            "stream", "temperature", "max_tokens", "reasoning_config",
-            "provider_profile", "extra_body_additions", "request_overrides",
-            "session_id", "base_url", "supports_reasoning",
-        }
+    def _apply_catchall_params(self, payload: dict, params: dict):
+        handled = {"stream", "temperature", "max_tokens", "reasoning_config", "provider_profile", "extra_body_additions", "request_overrides", "session_id", "base_url", "supports_reasoning"}
         for k, v in params.items():
-            if k not in _HANDLED and k not in payload:
+            if k not in handled and k not in payload:
                 payload[k] = v
 
+    def build_kwargs(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        **params,
+    ) -> dict[str, Any]:
+        """Build chat.completions.create() payload."""
+        sanitized = self._apply_developer_role(self.convert_messages(messages), model)
+        payload: dict[str, Any] = {"model": model, "messages": sanitized, "stream": params.get("stream", True)}
+        if params.get("temperature") is not None:
+            payload["temperature"] = params["temperature"]
+        if params.get("max_tokens") is not None:
+            payload["max_tokens"] = params["max_tokens"]
+        if tools:
+            payload["tools"] = self.convert_tools(tools)
+
+        profile = params.get("provider_profile")
+        if profile is not None:
+            self._apply_provider_profile(payload, profile, **params)
+
+        self._apply_overrides(payload, params.get("request_overrides"), params.get("extra_body_additions"))
+        self._apply_catchall_params(payload, params)
         return payload
 
     def normalize_response(

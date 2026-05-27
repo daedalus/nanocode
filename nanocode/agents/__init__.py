@@ -477,88 +477,66 @@ def set_agent_registry(registry: AgentRegistry):
     logger.info(f"Global agent registry replaced with: {agent_names}")
 
 
+def _modify_existing_agent(existing: AgentInfo, agent_config: dict):
+    """Apply config overrides to an existing agent."""
+    for key in ("description", "system_prompt", "hidden", "temperature", "top_p", "color", "steps", "variant"):
+        if key in agent_config:
+            setattr(existing, key, agent_config[key])
+    if "model" in agent_config and isinstance(agent_config["model"], dict):
+        mc = agent_config["model"]
+        existing.model = AgentModel(
+            provider_id=mc.get("provider_id", "openai"),
+            model_id=mc.get("model_id", "gpt-4"),
+        )
+
+
+def _create_new_agent(name: str, agent_config: dict) -> AgentInfo:
+    """Create a new AgentInfo from config."""
+    model_cfg = agent_config.get("model", {})
+    model = AgentModel(
+        provider_id=model_cfg.get("provider_id", "openai"),
+        model_id=model_cfg.get("model_id", "gpt-4"),
+    ) if isinstance(model_cfg, dict) else None
+
+    return AgentInfo(
+        name=name,
+        description=agent_config.get("description", f"Custom agent: {name}"),
+        mode=AgentMode(agent_config.get("mode", "subagent")),
+        native=False,
+        system_prompt=agent_config.get("system_prompt"),
+        permission=from_config(agent_config.get("permission", {})),
+        options=agent_config.get("options", {}),
+        model=model,
+        variant=agent_config.get("variant"),
+        temperature=agent_config.get("temperature"),
+        top_p=agent_config.get("top_p"),
+        color=agent_config.get("color"),
+        steps=agent_config.get("steps"),
+    )
+
+
 def create_registry_from_config(config: dict) -> AgentRegistry:
     """Create an agent registry from configuration (supports opencode-style config)."""
     logger.info("Creating agent registry from config")
     registry = create_default_agents()
-
     agents_config = config.get("agents", {})
-    logger.debug(f"Agent config: {list(agents_config.keys())}")
 
     default_agent = agents_config.get("default")
     if default_agent:
-        logger.info(f"Setting default agent from config: {default_agent}")
         try:
             registry.set_default(default_agent)
         except ValueError as e:
             logger.warning(f"Failed to set default agent: {e}")
 
-    custom_agents = agents_config.get("custom", {})
-    logger.debug(f"Custom agents in config: {list(custom_agents.keys())}")
-
-    for name, agent_config in custom_agents.items():
-        logger.debug(f"Processing agent config: {name} = {agent_config}")
-
+    for name, agent_config in agents_config.get("custom", {}).items():
         if agent_config.get("disable", False):
-            logger.info(f"Disabling agent: {name}")
             registry._agents.pop(name, None)
             continue
-
         existing = registry.get(name)
         if existing:
-            logger.debug(f"Modifying existing agent: {name}")
-            if "description" in agent_config:
-                existing.description = agent_config["description"]
-            if "system_prompt" in agent_config:
-                existing.system_prompt = agent_config["system_prompt"]
-            if "hidden" in agent_config:
-                existing.hidden = agent_config["hidden"]
-            if "temperature" in agent_config:
-                existing.temperature = agent_config["temperature"]
-            if "top_p" in agent_config:
-                existing.top_p = agent_config["top_p"]
-            if "color" in agent_config:
-                existing.color = agent_config["color"]
-            if "steps" in agent_config:
-                existing.steps = agent_config["steps"]
-            if "variant" in agent_config:
-                existing.variant = agent_config["variant"]
-            if "model" in agent_config and isinstance(agent_config["model"], dict):
-                model_cfg = agent_config["model"]
-                existing.model = AgentModel(
-                    provider_id=model_cfg.get("provider_id", "openai"),
-                    model_id=model_cfg.get("model_id", "gpt-4"),
-                )
-                logger.debug(f"  Set model: {existing.model}")
+            _modify_existing_agent(existing, agent_config)
         else:
-            logger.debug(f"Creating new agent: {name}")
-            permission_rules = from_config(agent_config.get("permission", {}))
-            model_cfg = agent_config.get("model", {})
-            model = None
-            if isinstance(model_cfg, dict):
-                model = AgentModel(
-                    provider_id=model_cfg.get("provider_id", "openai"),
-                    model_id=model_cfg.get("model_id", "gpt-4"),
-                )
-            registry.register(
-                AgentInfo(
-                    name=name,
-                    description=agent_config.get(
-                        "description", f"Custom agent: {name}"
-                    ),
-                    mode=AgentMode(agent_config.get("mode", "subagent")),
-                    native=False,
-                    system_prompt=agent_config.get("system_prompt"),
-                    permission=permission_rules,
-                    options=agent_config.get("options", {}),
-                    model=model,
-                    variant=agent_config.get("variant"),
-                    temperature=agent_config.get("temperature"),
-                    top_p=agent_config.get("top_p"),
-                    color=agent_config.get("color"),
-                    steps=agent_config.get("steps"),
-                )
-            )
+            registry.register(_create_new_agent(name, agent_config))
 
     logger.info(f"Registry created with agents: {[a.name for a in registry.list()]}")
     return registry

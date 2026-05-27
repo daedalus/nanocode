@@ -353,82 +353,58 @@ def remove(directory: str, force: bool = False) -> bool:
     return True
 
 
+def _detect_remote(worktree_root: str) -> str:
+    """Detect the remote name to use."""
+    remote_result = _run_git_command(["git", "remote"], worktree_root, check=False)
+    if remote_result.returncode != 0:
+        raise ResetFailedError("Failed to list git remotes")
+    remotes = [r.strip() for r in remote_result.stdout.split("\n") if r.strip()]
+    return "origin" if "origin" in remotes else (remotes[0] if remotes else "")
+
+
+def _detect_default_branch(worktree_root: str, remote: str) -> str:
+    """Detect default branch (main or master) and return fetch target."""
+    main_check = _run_git_command(["git", "show-ref", "--verify", "--quiet", "refs/heads/main"], worktree_root, check=False)
+    master_check = _run_git_command(["git", "show-ref", "--verify", "--quiet", "refs/heads/master"], worktree_root, check=False)
+    if main_check.returncode == 0:
+        return "origin/main" if remote else "main"
+    if master_check.returncode == 0:
+        return "origin/master" if remote else "master"
+    raise ResetFailedError("Default branch not found")
+
+
+def _fetch_and_reset(worktree_root: str, directory: str, remote: str, target: str):
+    """Fetch from remote (if available) and reset/clean the worktree."""
+    if remote:
+        branch = target.split("/")[1]
+        fetch_result = _run_git_command(["git", "fetch", remote, branch], worktree_root, check=False)
+        if fetch_result.returncode != 0:
+            raise ResetFailedError(f"Failed to fetch {target}")
+    reset_result = _run_git_command(["git", "reset", "--hard", target], directory, check=False)
+    if reset_result.returncode != 0:
+        raise ResetFailedError(reset_result.stderr or "Failed to reset worktree")
+    clean_result = _run_git_command(["git", "clean", "-ffdx"], directory, check=False)
+    if clean_result.returncode != 0:
+        raise ResetFailedError(clean_result.stderr or "Failed to clean worktree")
+
+
 def reset(directory: str) -> bool:
     """Reset a worktree to the default branch."""
     cwd = os.getcwd()
     worktree_root = get_worktree_root(cwd)
-
     if not _is_git_repo(worktree_root):
         raise NotGitError("Worktrees are only supported for git projects")
-
     directory = os.path.realpath(directory)
     primary = os.path.realpath(worktree_root)
-
     if directory == primary:
         raise ResetFailedError("Cannot reset the primary workspace")
-
     worktrees = list_worktrees(worktree_root)
-    entry = None
-    for wt in worktrees:
-        if os.path.realpath(wt.directory) == directory:
-            entry = wt
-            break
-
+    entry = next((wt for wt in worktrees if os.path.realpath(wt.directory) == directory), None)
     if not entry:
         raise ResetFailedError("Worktree not found")
-
-    remote_result = _run_git_command(["git", "remote"], worktree_root, check=False)
-    if remote_result.returncode != 0:
-        raise ResetFailedError("Failed to list git remotes")
-
-    remotes = [r.strip() for r in remote_result.stdout.split("\n") if r.strip()]
-    remote = "origin" if "origin" in remotes else (remotes[0] if remotes else "")
-
-    main_check = _run_git_command(
-        ["git", "show-ref", "--verify", "--quiet", "refs/heads/main"],
-        worktree_root,
-        check=False,
-    )
-    master_check = _run_git_command(
-        ["git", "show-ref", "--verify", "--quiet", "refs/heads/master"],
-        worktree_root,
-        check=False,
-    )
-
-    if main_check.returncode == 0:
-        target = "origin/main" if remote else "main"
-    elif master_check.returncode == 0:
-        target = "origin/master" if remote else "master"
-    else:
-        raise ResetFailedError("Default branch not found")
-
-    if remote:
-        fetch_result = _run_git_command(
-            ["git", "fetch", remote, target.split("/")[1]],
-            worktree_root,
-            check=False,
-        )
-        if fetch_result.returncode != 0:
-            raise ResetFailedError(f"Failed to fetch {target}")
-
-    reset_result = _run_git_command(
-        ["git", "reset", "--hard", target],
-        directory,
-        check=False,
-    )
-
-    if reset_result.returncode != 0:
-        raise ResetFailedError(reset_result.stderr or "Failed to reset worktree")
-
-    clean_result = _run_git_command(
-        ["git", "clean", "-ffdx"],
-        directory,
-        check=False,
-    )
-
-    if clean_result.returncode != 0:
-        raise ResetFailedError(clean_result.stderr or "Failed to clean worktree")
-
+    remote = _detect_remote(worktree_root)
+    target = _detect_default_branch(worktree_root, remote)
+    _fetch_and_reset(worktree_root, directory, remote, target)
     return True
 
 

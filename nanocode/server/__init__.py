@@ -608,66 +608,60 @@ class AgentServer:
             }
         )
 
+    def _parse_query_params(self, path: str) -> tuple[str, dict]:
+        query_params = {}
+        if "?" not in path:
+            return path, query_params
+        path, query_str = path.split("?", 1)
+        for param in query_str.split("&"):
+            if "=" in param:
+                key, value = param.split("=", 1)
+                query_params[key] = value
+        return path, query_params
+
+    def _match_dynamic_route(self, method: str, path: str, request) -> Response | None:
+        for route_method, route_path in self.router.list_routes():
+            if "{" not in route_path:
+                continue
+            route_parts = route_path.split("/")
+            path_parts = path.split("/")
+            if len(route_parts) != len(path_parts):
+                continue
+            match = True
+            params = {}
+            for i, (rp, pp) in enumerate(zip(route_parts, path_parts)):
+                if rp.startswith("{") and rp.endswith("}"):
+                    params[rp[1:-1]] = pp
+                elif rp != pp:
+                    match = False
+                    break
+            if match:
+                request.path = path
+                handler = self.router.get_handler(route_method, route_path)
+                if handler:
+                    return handler(request)
+        return None
+
     async def handle_request(
         self, method: str, path: str, headers: dict, body: Any = None
     ) -> Response:
         """Handle an HTTP request."""
         try:
-            query_params = {}
-            if "?" in path:
-                path, query_str = path.split("?", 1)
-                for param in query_str.split("&"):
-                    if "=" in param:
-                        key, value = param.split("=", 1)
-                        query_params[key] = value
-
+            path, query_params = self._parse_query_params(path)
             request = Request(method, path, headers, body, query_params)
-
-            if not self._check_auth(request) and path not in [
-                "/health",
-                "/ready",
-                "/openapi.json",
-            ]:
+            if not self._check_auth(request) and path not in ["/health", "/ready", "/openapi.json"]:
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
-
             handler = self.router.get_handler(method, path)
-
             if handler:
                 return await handler(request)
-
-            for route_method, route_path in self.router.list_routes():
-                if "{" in route_path:
-                    route_parts = route_path.split("/")
-                    path_parts = path.split("/")
-
-                    if len(route_parts) == len(path_parts):
-                        match = True
-                        params = {}
-                        for i, (rp, pp) in enumerate(zip(route_parts, path_parts)):
-                            if rp.startswith("{") and rp.endswith("}"):
-                                params[rp[1:-1]] = pp
-                            elif rp != pp:
-                                match = False
-                                break
-
-                        if match:
-                            request.path = path
-                            handler = self.router.get_handler(route_method, route_path)
-                            if handler:
-                                return await handler(request)
-
+            result = self._match_dynamic_route(method, path, request)
+            if result:
+                return await result
             raise NotFoundError(f"Route {method} {path} not found")
-
         except HTTPError as e:
-            return JSONResponse(
-                {"error": str(e)},
-                status_code=e.status_code,
-            )
+            return JSONResponse({"error": str(e)}, status_code=e.status_code)
         except Exception as e:
-            return JSONResponse(
-                {"error": str(e)},
-                status_code=500,
-            )
+            return JSONResponse({"error": str(e)}, status_code=500)
 
     async def start(self):
         """Start the server."""
@@ -679,6 +673,41 @@ class AgentServer:
         )
         print(f"Server started on http://{self.host}:{self.port}")
 
+    async def _parse_http_headers(
+        self, reader: asyncio.StreamReader
+    ) -> tuple[dict, int]:
+        """Parse HTTP headers. Returns (headers, content_length)."""
+        headers = {}
+        content_length = 0
+        while True:
+            line = await reader.readline()
+            if not line or line == b"\r\n":
+                break
+            header_line = line.decode().strip()
+            if ":" in header_line:
+                key, value = header_line.split(":", 1)
+                headers[key.strip().lower()] = value.strip()
+                if key.strip().lower() == "content-length":
+                    content_length = int(value.strip())
+        return headers, content_length
+
+    async def _parse_http_body(self, reader: asyncio.StreamReader, content_length: int) -> Any:
+        if content_length <= 0:
+            return None
+        body_data = await reader.read(content_length)
+        try:
+            return json.loads(body_data.decode())
+        except json.JSONDecodeError:
+            return body_data.decode()
+
+    def _write_http_response(self, writer: asyncio.StreamWriter, response: Response):
+        writer.write(f"HTTP/1.1 {response.status_code} OK\r\n".encode())
+        for key, value in response.headers.items():
+            writer.write(f"{key}: {value}\r\n".encode())
+        writer.write(b"\r\n")
+        if response.body:
+            writer.write(response.body.encode() if isinstance(response.body, str) else response.body)
+
     async def _handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ):
@@ -687,59 +716,18 @@ class AgentServer:
             request_data = await reader.readline()
             if not request_data:
                 return
-
             request_line = request_data.decode().strip()
             if not request_line:
                 return
-
             parts = request_line.split()
             if len(parts) < 2:
                 return
-
-            method = parts[0]
-            path = parts[1]
-
-            headers = {}
-            content_length = 0
-
-            while True:
-                line = await reader.readline()
-                if not line or line == b"\r\n":
-                    break
-
-                header_line = line.decode().strip()
-                if ":" in header_line:
-                    key, value = header_line.split(":", 1)
-                    headers[key.strip().lower()] = value.strip()
-                    if key.strip().lower() == "content-length":
-                        content_length = int(value.strip())
-
-            body = None
-            if content_length > 0:
-                body_data = await reader.read(content_length)
-                try:
-                    body = json.loads(body_data.decode())
-                except json.JSONDecodeError:
-                    body = body_data.decode()
-
+            method, path = parts[0], parts[1]
+            headers, content_length = await self._parse_http_headers(reader)
+            body = await self._parse_http_body(reader, content_length)
             response = await self.handle_request(method, path, headers, body)
-
-            writer.write(f"HTTP/1.1 {response.status_code} OK\r\n".encode())
-
-            for key, value in response.headers.items():
-                writer.write(f"{key}: {value}\r\n".encode())
-
-            writer.write(b"\r\n")
-
-            if response.body:
-                writer.write(
-                    response.body.encode()
-                    if isinstance(response.body, str)
-                    else response.body
-                )
-
+            self._write_http_response(writer, response)
             await writer.drain()
-
         except Exception as e:
             print(f"Error handling client: {e}")
 

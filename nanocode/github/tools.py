@@ -15,6 +15,18 @@ class GitHubTool(Tool):
         self.github_client = github_client
         self.git_ops = GitHubGitOperations()
 
+    async def _ensure_client(self) -> ToolResult | None:
+        if self.github_client:
+            return None
+        is_github, _ = self.git_ops.is_github_repo()
+        if not is_github:
+            return ToolResult(success=False, error="Not in a GitHub repository. Configure GitHub token or run in a GitHub repo.")
+        client = create_github_client()
+        if client:
+            self.github_client = client
+            return None
+        return ToolResult(success=False, error="GitHub not configured. Set GITHUB_TOKEN or configure in config.yaml.")
+
     async def execute(
         self,
         operation: str,
@@ -29,53 +41,37 @@ class GitHubTool(Tool):
         comment: str | None = None,
     ) -> ToolResult:
         """Execute a GitHub operation."""
-        if not self.github_client:
-            is_github, repo = self.git_ops.is_github_repo()
-            if not is_github:
-                return ToolResult(
-                    success=False,
-                    content=None,
-                    error="Not in a GitHub repository. Configure GitHub token or run in a GitHub repo.",
-                )
-            client = create_github_client()
-            if client:
-                self.github_client = client
-            else:
-                return ToolResult(
-                    success=False,
-                    content=None,
-                    error="GitHub not configured. Set GITHUB_TOKEN or configure in config.yaml.",
-                )
-
+        error = await self._ensure_client()
+        if error:
+            return error
         try:
-            if operation == "list_prs":
-                return await self._list_prs(repo, state, head, base)
-            elif operation == "get_pr":
-                return await self._get_pr(repo, pr_number)
-            elif operation == "create_pr":
-                return await self._create_pr(repo, title, body, head, base)
-            elif operation == "list_issues":
-                return await self._list_issues(repo, state)
-            elif operation == "get_issue":
-                return await self._get_issue(repo, issue_number)
-            elif operation == "create_issue":
-                return await self._create_issue(repo, title, body)
-            elif operation == "add_comment":
-                return await self._add_comment(repo, issue_number or pr_number, comment)
-            elif operation == "get_pr_files":
-                return await self._get_pr_files(repo, pr_number)
-            elif operation == "get_current_repo":
-                return await self._get_current_repo()
-            elif operation == "get_current_branch":
-                return await self._get_current_branch()
-            else:
-                return ToolResult(
-                    success=False,
-                    content=None,
-                    error=f"Unknown operation: {operation}",
-                )
+            return await self._dispatch_operation(operation, repo, pr_number, title, body, head, base, state, issue_number, comment)
         except Exception as e:
-            return ToolResult(success=False, content=None, error=str(e))
+            return ToolResult(success=False, error=str(e))
+
+    async def _dispatch_operation(self, operation: str, repo: str | None = None, pr_number: int | None = None, title: str | None = None, body: str | None = None, head: str | None = None, base: str | None = None, state: str | None = None, issue_number: int | None = None, comment: str | None = None) -> ToolResult:
+        if operation == "list_prs":
+            return await self._list_prs(repo, state, head, base)
+        elif operation == "get_pr":
+            return await self._get_pr(repo, pr_number)
+        elif operation == "create_pr":
+            return await self._create_pr(repo, title, body, head, base)
+        elif operation == "list_issues":
+            return await self._list_issues(repo, state)
+        elif operation == "get_issue":
+            return await self._get_issue(repo, issue_number)
+        elif operation == "create_issue":
+            return await self._create_issue(repo, title, body)
+        elif operation == "add_comment":
+            return await self._add_comment(repo, issue_number or pr_number, comment)
+        elif operation == "get_pr_files":
+            return await self._get_pr_files(repo, pr_number)
+        elif operation == "get_current_repo":
+            return await self._get_current_repo()
+        elif operation == "get_current_branch":
+            return await self._get_current_branch()
+        else:
+            return ToolResult(success=False, error=f"Unknown operation: {operation}")
 
     async def _list_prs(
         self,
@@ -105,7 +101,7 @@ class GitHubTool(Tool):
             metadata={"count": len(results)},
         )
 
-    async def _get_pr(self, repo: str, pr_number: int) -> ToolResult:
+    async def _get_pr(self, repo=None, pr_number=None, **kwargs) -> ToolResult:
         """Get a pull request."""
         pr = self.github_client.get_pull_request(repo, pr_number)
         files = self.github_client.get_pr_files(repo, pr_number)

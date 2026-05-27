@@ -503,186 +503,9 @@ class InteractiveCLI:
 
                 # Handle slash-prefixed commands ONLY
                 if user_input.startswith("/"):
-                    command = user_input.lower()
-                    if command in ("/exit", "/quit", "/q"):
-                        self.ui.save_history()
-                        session_id = getattr(self.nanocode, "_session_id", "unknown")
-                        print(flush=True)
-                        print(
-                            self.ui.color(
-                                "cyan",
-                                "░██████╗ ███████╗████████╗██████╗  ██████╗ ██████╗  █████╗ ██████╗ ██████╗ ",
-                            )
-                        )
-                        print(
-                            self.ui.color(
-                                "cyan",
-                                "██╔════╝ ██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██╔══██╗██╔══██╗██╔══██╗██╔══██╗",
-                            )
-                        )
-                        print(
-                            self.ui.color(
-                                "cyan",
-                                "██║  ███╗█████╗     ██║   ██████╔╝██║   ██║██████╔╝███████║██████╔╝███████║",
-                            )
-                        )
-                        print(
-                            self.ui.color(
-                                "cyan",
-                                "██║   ██║██╔══╝     ██║   ██╔══██╗██║   ██║██╔══██╗██╔══██║██╔══██╗██╔══██║",
-                            )
-                        )
-                        print(
-                            self.ui.color(
-                                "cyan",
-                                "╚██████╔╝███████╗   ██║   ██║  ██║╚██████╔╝██████╔╝██║  ██║██║  ██║██║  ██║",
-                            )
-                        )
-                        print(
-                            self.ui.color(
-                                "cyan",
-                                " ╚═════╝ ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝",
-                            )
-                        )
-                        print(flush=True)
-                        print(f"Session: {session_id}", flush=True)
-                        print(self.ui.color("green", "Goodbye!"), flush=True)
-                        break
-
-                    if command == "/help":
-                        self.ui.print_help()
+                    if await self._handle_slash_command(user_input):
                         continue
-
-                    if command == "/clear":
-                        subprocess.run(["clear"] if os.name == "posix" else ["cls"], shell=False)
-                        continue
-
-                    if command == "/history":
-                        self._print_history()
-                        continue
-
-                    if command == "/tools":
-                        self._print_tools()
-                        continue
-
-                    if command == "/provider":
-                        await self._provider_command()
-                        continue
-
-                    if command.startswith("/plan "):
-                        task = user_input[6:]
-                        await self._execute_task(task)
-                        continue
-
-                    if command.startswith("/resume "):
-                        checkpoint_id = user_input[8:]
-                        await self._resume_checkpoint(checkpoint_id)
-                        continue
-
-                    if command == "/checkpoint":
-                        self._list_checkpoints()
-                        continue
-
-                    if command.startswith("/revert ") and not command.startswith(
-                        "/resume "
-                    ):
-                        try:
-                            steps = int(user_input[7:].strip()) or 1
-                            await self._revert_messages(steps)
-                        except ValueError:
-                            self.ui.print_error("Usage: /revert [steps]")
-                        continue
-
-                    if command == "/forks":
-                        self._list_forks()
-                        continue
-
-                    if command == "/undo":
-                        await self._undo_operation()
-                        continue
-
-                    if command == "/redo":
-                        await self._redo_operation()
-                        continue
-
-                    if command.startswith("/fork"):
-                        parts = user_input.split()
-                        if len(parts) > 1:
-                            await self._fork_session(parts[1])
-                        else:
-                            await self._fork_session()
-                        continue
-
-                    if command.startswith("/save "):
-                        name = user_input[5:].strip()
-                        self._save_fork(name)
-                        continue
-
-                    if command.startswith("/load "):
-                        name = user_input[6:].strip()
-                        await self._load_fork(name)
-                        continue
-
-                    if command.startswith("/copy "):
-                        try:
-                            idx = int(user_input[6:].strip())
-                            self._copy_message(idx)
-                        except ValueError:
-                            self.ui.print_error("Usage: /copy [message_index]")
-                        continue
-
-                    if command == "/skills":
-                        self._list_skills()
-                        continue
-
-                    if command == "/snapshot":
-                        await self._create_snapshot()
-                        continue
-
-                    if command.startswith("/revert "):
-                        snapshot_hash = user_input[8:].strip()
-                        await self._revert_snapshot(snapshot_hash)
-                        continue
-
-                    if command == "/snapshots":
-                        await self._list_snapshots()
-                        continue
-
-                    if command == "/trace":
-                        self._print_trace()
-                        continue
-
-                    if command == "/debug":
-                        await self._handle_debug_command()
-                        continue
-
-                    if command == "/compact":
-                        await self._compact_context()
-                        continue
-
-                    if command == "/show_thinking":
-                        self.show_thinking = not self.show_thinking
-                        self.ui.print_info(
-                            f"Show thinking: {'enabled' if self.show_thinking else 'disabled'}"
-                        )
-                        continue
-
-                    if command == "/agents":
-                        self._list_agents()
-                        continue
-
-                    if command.startswith("/agent "):
-                        agent_name = user_input[8:].strip()
-                        await self._switch_agent(agent_name)
-                        continue
-
-                    # If it starts with "/" but doesn't match any known command, show error and stop processing
-                    cmd = find_command(user_input)
-                    if cmd is None:
-                        self.ui.print_error(
-                            f"Unknown command: {user_input}. Type /help for available commands."
-                        )
-                        continue
+                    break
                 else:
                     # Treat ALL non-slash-prefixed input as regular agent input
                     # Do NOT convert "help" to "/help" or treat any plain text as commands
@@ -719,6 +542,121 @@ class InteractiveCLI:
             except Exception as e:
                 self.last_error_trace = traceback.format_exc()
                 self.ui.print_error(str(e))
+
+    async def _cmd_exit(self) -> bool:
+        """Handle exit command. Returns False to stop the loop."""
+        self.ui.save_history()
+        session_id = getattr(self.nanocode, "_session_id", "unknown")
+        print(flush=True)
+        from rich.console import Console
+        c = Console()
+        c.print("[cyan]░██████╗ ███████╗████████╗██████╗  ██████╗ ██████╗  █████╗ ██████╗ ██████╗ [/cyan]")
+        c.print("[cyan]██╔════╝ ██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██╔══██╗██╔══██╗██╔══██╗██╔══██╗[/cyan]")
+        c.print("[cyan]██║  ███╗█████╗     ██║   ██████╔╝██║   ██║██████╔╝███████║██████╔╝███████║[/cyan]")
+        c.print("[cyan]██║   ██║██╔══╝     ██║   ██╔══██╗██║   ██║██╔══██╗██╔══██║██╔══██╗██╔══██║[/cyan]")
+        c.print("[cyan]╚██████╔╝███████╗   ██║   ██║  ██║╚██████╔╝██████╔╝██║  ██║██║  ██║██║  ██║[/cyan]")
+        c.print("[cyan] ╚═════╝ ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝[/cyan]")
+        print(flush=True)
+        print(f"Session: {session_id}", flush=True)
+        print(self.ui.color("green", "Goodbye!"), flush=True)
+        return False
+
+    def _cmd_show_thinking(self) -> bool:
+        """Toggle show_thinking."""
+        self.show_thinking = not self.show_thinking
+        self.ui.print_info(
+            f"Show thinking: {'enabled' if self.show_thinking else 'disabled'}"
+        )
+        return True
+
+    async def _cmd_revert(self, user_input: str) -> bool:
+        """Handle revert command."""
+        try:
+            steps = int(user_input[7:].strip()) or 1
+            await self._revert_messages(steps)
+        except ValueError:
+            self.ui.print_error("Usage: /revert [steps]")
+        return True
+
+    async def _cmd_fork(self, user_input: str) -> bool:
+        """Handle fork command."""
+        parts = user_input.split()
+        if len(parts) > 1:
+            await self._fork_session(parts[1])
+        else:
+            await self._fork_session()
+        return True
+
+    def _cmd_copy(self, user_input: str) -> bool:
+        """Handle copy command."""
+        try:
+            self._copy_message(int(user_input[6:].strip()))
+        except ValueError:
+            self.ui.print_error("Usage: /copy [message_index]")
+        return True
+
+    async def _run_cmd_handler(self, handler) -> bool:
+        """Run a command handler that may be sync or async."""
+        result = handler()
+        if hasattr(result, "__await__"):
+            return await result
+        return result
+
+    async def _handle_slash_command(self, user_input: str) -> bool:
+        """Handle a slash-prefixed command. Returns True to continue loop, False to exit."""
+        command = user_input.lower()
+        if command in ("/exit", "/quit", "/q"):
+            return await self._cmd_exit()
+
+        _exact = {
+            "/help": self.ui.print_help,
+            "/clear": lambda: subprocess.run(["clear"] if os.name == "posix" else ["cls"], shell=False),
+            "/history": self._print_history,
+            "/tools": self._print_tools,
+            "/checkpoint": self._list_checkpoints,
+            "/forks": self._list_forks,
+            "/skills": self._list_skills,
+            "/trace": self._print_trace,
+            "/undo": self._undo_operation,
+            "/redo": self._redo_operation,
+            "/provider": self._provider_command,
+            "/snapshot": self._create_snapshot,
+            "/snapshots": self._list_snapshots,
+            "/debug": self._handle_debug_command,
+            "/compact": self._compact_context,
+            "/agents": self._list_agents,
+        }
+        handler = _exact.get(command)
+        if handler:
+            await self._run_cmd_handler(handler)
+            return True
+
+        if command == "/show_thinking":
+            return self._cmd_show_thinking()
+
+        _prefix = (
+            ("/revert ", lambda: self._cmd_revert(user_input)),
+            ("/plan ", lambda: self._execute_task(user_input[6:])),
+            ("/resume ", lambda: self._resume_checkpoint(user_input[8:])),
+            ("/save ", lambda: self._save_fork(user_input[5:].strip())),
+            ("/load ", lambda: self._load_fork(user_input[6:].strip())),
+            ("/agent ", lambda: self._switch_agent(user_input[8:].strip())),
+            ("/fork", lambda: self._cmd_fork(user_input)),
+            ("/copy ", lambda: self._cmd_copy(user_input)),
+        )
+        for prefix, handler in _prefix:
+            if command.startswith(prefix):
+                result = handler()
+                if hasattr(result, "__await__"):
+                    return await result
+                return result
+
+        if find_command(user_input) is None:
+            self.ui.print_error(
+                f"Unknown command: {user_input}. Type /help for available commands."
+            )
+            return True
+        return True
 
     async def _process_input(self, user_input: str):
         """Process user input through the agent."""

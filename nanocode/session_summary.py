@@ -64,146 +64,46 @@ class SessionSummaryGenerator:
 
         return summary
 
+    def _parse_stat_line(self, line: str) -> tuple[str, int, int] | None:
+        """Parse a single --stat line. Returns (file_path, additions, deletions) or None."""
+        parts = line.split("|")
+        if len(parts) < 2:
+            return None
+        file_path = parts[0].strip()
+        stats = parts[-1].strip()
+        import re
+        additions = 0
+        deletions = 0
+        match = re.search(r"(\d+)\s+additions?", stats)
+        if match:
+            additions = int(match.group(1))
+        match = re.search(r"(\d+)\s+deletions?", stats)
+        if match:
+            deletions = int(match.group(1))
+        if not additions and not deletions:
+            plus_count = stats.count("+")
+            minus_count = stats.count("-")
+            if plus_count or minus_count:
+                additions = plus_count
+                deletions = minus_count
+        if additions or deletions:
+            return (file_path, additions, deletions)
+        return None
+
     async def _compute_diffs(self) -> list[FileChange]:
         """Compute file changes using git diff."""
         try:
-            result = subprocess.run(
-                ["git", "diff", "--stat"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                cwd=os.getcwd(),
-            )
-
+            result = subprocess.run(["git", "diff", "--stat"], capture_output=True, text=True, timeout=10, cwd=os.getcwd())
             if result.returncode != 0:
                 return []
-
             diffs = []
             for line in result.stdout.strip().split("\n"):
                 if not line.strip() or "files changed" in line:
                     continue
-
-                parts = line.split("|")
-                if len(parts) >= 2:
-                    file_path = parts[0].strip()
-                    stats = parts[-1].strip()
-
-                    additions = 0
-                    deletions = 0
-
-                    import re
-
-                    match = re.search(r"(\d+)\s+additions?", stats)
-                    if match:
-                        additions = int(match.group(1))
-                    match = re.search(r"(\d+)\s+deletions?", stats)
-                    if match:
-                        deletions = int(match.group(1))
-
-                    if not additions and not deletions:
-                        plus_count = stats.count("+")
-                        minus_count = stats.count("-")
-                        if plus_count or minus_count:
-                            additions = plus_count
-                            deletions = minus_count
-
-                    if additions or deletions:
-                        diffs.append(
-                            FileChange(
-                                file=file_path,
-                                additions=additions,
-                                deletions=deletions,
-                            )
-                        )
-
+                parsed = self._parse_stat_line(line)
+                if parsed:
+                    diffs.append(FileChange(file=parsed[0], additions=parsed[1], deletions=parsed[2]))
             return diffs
-
-        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
-            return []
-
-            diffs = []
-            for line in result.stdout.strip().split("\n"):
-                if not line.strip() or "files changed" in line:
-                    continue
-
-                parts = line.split("|")
-                if len(parts) >= 2:
-                    file_path = parts[0].strip()
-                    stats = parts[-1].strip()
-
-                    additions = 0
-                    deletions = 0
-
-                    import re
-
-                    match = re.search(r"(\d+)\s+additions?", stats)
-                    if match:
-                        additions = int(match.group(1))
-                    match = re.search(r"(\d+)\s+deletions?", stats)
-                    if match:
-                        deletions = int(match.group(1))
-
-                    if additions or deletions:
-                        diffs.append(
-                            FileChange(
-                                file=file_path,
-                                additions=additions,
-                                deletions=deletions,
-                            )
-                        )
-                    else:
-                        match = re.search(r"(\d+)\s+(\d+)", stats)
-                        if match:
-                            additions = int(match.group(1))
-                            deletions = int(match.group(2))
-                            diffs.append(
-                                FileChange(
-                                    file=file_path,
-                                    additions=additions,
-                                    deletions=deletions,
-                                )
-                            )
-
-            return diffs
-
-        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
-            return []
-
-            diffs = []
-            for line in result.stdout.strip().split("\n"):
-                parts = line.split("\t")
-                if len(parts) >= 2:
-                    file_path = parts[0].strip()
-                    stats = parts[-1].strip()
-
-                    additions = 0
-                    deletions = 0
-
-                    if "+" in stats:
-                        add_part = stats.split("+")[-1].split(",")[0]
-                        try:
-                            additions = int(add_part)
-                        except ValueError:
-                            pass
-
-                    if "-" in stats:
-                        del_part = stats.split("-")[-1].split(",")[0]
-                        try:
-                            deletions = int(del_part)
-                        except ValueError:
-                            pass
-
-                    if additions or deletions:
-                        diffs.append(
-                            FileChange(
-                                file=file_path,
-                                additions=additions,
-                                deletions=deletions,
-                            )
-                        )
-
-            return diffs
-
         except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
             return []
 

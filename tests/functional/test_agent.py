@@ -7,6 +7,7 @@ import pytest
 from nanocode.core import AutonomousAgent
 from nanocode.llm import Message
 from nanocode.llm.base import LLMResponse, ToolCall
+from nanocode.llm.events import EventType, StreamEvent, TextDeltaEvent, TextStartEvent, TextEndEvent
 from nanocode.state import AgentState, ExecutionPlan, TaskStep
 
 
@@ -81,7 +82,11 @@ class MockLLM:
         return LLMResponse(content=self.response_content, tool_calls=[])
 
     async def chat_stream(self, messages, tools=None, **kwargs):
-        yield self.response_content
+        yield StreamEvent(type=EventType.START)
+        yield TextStartEvent()
+        yield TextDeltaEvent(text=self.response_content)
+        yield TextEndEvent()
+        yield StreamEvent(type=EventType.FINISH)
 
 
 class MockToolExecutor:
@@ -160,15 +165,10 @@ class TestAutonomousAgentAsync:
     def agent_with_mock_llm(self):
         """Create agent with mock LLM."""
 
-        with patch("nanocode.core.OpenAILLM") as MockOpenAI:
-            mock_instance = MockLLM("Test response")
-            MockOpenAI.return_value = mock_instance
-            with patch("nanocode.core.AnthropicLLM") as MockAnthropic:
-                MockAnthropic.return_value = mock_instance
-                with patch("nanocode.core.OllamaLLM") as MockOllama:
-                    MockOllama.return_value = mock_instance
-                    agent = AutonomousAgent()
-                    yield agent
+        mock_instance = MockLLM("Test response")
+        with patch("nanocode.llm.create_llm", return_value=mock_instance):
+            agent = AutonomousAgent()
+            yield agent
 
     @pytest.mark.asyncio
     async def test_process_input(self, agent_with_mock_llm):

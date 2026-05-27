@@ -355,185 +355,47 @@ async def run_acp(agent):
     await server.start()
 
 
-async def main():
-    """Main entry point."""
-    args = parse_args()
-
-    if args.list_sessions:
-        from nanocode.session_manager import get_session_manager
-
-        mgr = get_session_manager()
-        sessions = mgr.list()
-        if not sessions:
-            print("No sessions found")
-            return
-        print("Sessions:")
-        for s in sessions:
-            print(
-                f"  {s.id}: {s.title} (updated: {s.updated_at.strftime('%Y-%m-%d %H:%M')})"
-            )
+async def _list_sessions():
+    """List all sessions and exit."""
+    from nanocode.session_manager import get_session_manager
+    mgr = get_session_manager()
+    sessions = mgr.list()
+    if not sessions:
+        print("No sessions found")
         return
-
-    if args.get_system_prompt:
-        # Build the actual system prompt with dynamic content
-        # Create config and agent - full initialization needed for registries
-        config = Config(args.config) if hasattr(args, 'config') and args.config else Config()
-        agent = AutonomousAgent(config, verbose=args.verbose if hasattr(args, 'verbose') else False)
-
-        # Build and print the system prompt (uses already-initialized registries)
-        prompt = agent._build_system_prompt()
-        print(prompt)
-        return
-
-    gui_mode = getattr(args, "gui", "cli")
+    print("Sessions:")
+    for s in sessions:
+        print(f"  {s.id}: {s.title} (updated: {s.updated_at.strftime('%Y-%m-%d %H:%M')})")
 
 
+async def _print_system_prompt(args):
+    """Build and print the system prompt, then exit."""
+    config = Config(args.config) if args.config else Config()
+    agent = AutonomousAgent(config, verbose=getattr(args, 'verbose', False))
+    print(agent._build_system_prompt())
 
-    if args.serve:
-        os.chdir(args.cwd)
-        config = Config(args.config)
-        if args.no_proxy:
-            config.set("proxy", None)
-        elif args.proxy:
-            config.set("proxy", args.proxy)
-        if args.user_agent:
-            config.set("user_agent", args.user_agent)
 
-        auth_username = None
-        if args.serve_auth:
-            if ":" in args.serve_auth:
-                auth_username, auth_password = args.serve_auth.split(":", 1)
-            else:
-                auth_username = args.serve_auth
-
-        agent = AutonomousAgent(
-            config,
-            session_id=args.resume,
-            verbose=args.verbose,
-            yolo=args.yolo,
-            drift_alert=args.drift_alert,
-            drift_intervene=args.drift_intervene,
-            auto_execute=args.auto_execute,
-        )
-        await agent.init_async()
-
-        if args.mdns:
-            try:
-                from nanocode.mdns import get_manager
-
-                mdns = get_manager()
-                await mdns.start()
-                mdns.publish(args.serve_port)
-                print(f"Published via mDNS on port {args.serve_port}")
-            except ImportError:
-                print("mDNS not available. Install: pip install zeroconf")
-
-        await run_server(
-            host=args.serve_host,
-            port=args.serve_port,
-            agent=agent,
-            auth_username=auth_username,
-            auth_password=auth_password,
-        )
-        return
-
-    if args.acp:
-        os.chdir(args.cwd)
-        config = Config(args.config)
-        if args.no_proxy:
-            config.set("proxy", None)
-        elif args.proxy:
-            config.set("proxy", args.proxy)
-        if args.user_agent:
-            config.set("user_agent", args.user_agent)
-        agent = AutonomousAgent(
-            config,
-            session_id=args.resume,
-            yolo=args.yolo,
-            drift_alert=args.drift_alert,
-            drift_intervene=args.drift_intervene,
-            auto_execute=args.auto_execute,
-        )
-        await agent.init_async()
-        await run_acp(agent)
-        return
-
-    if args.admin:
-        os.chdir(args.cwd)
-        config = Config(args.config)
-        if args.no_proxy:
-            config.set("proxy", None)
-        elif args.proxy:
-            config.set("proxy", args.proxy)
-        if args.user_agent:
-            config.set("user_agent", args.user_agent)
-        from nanocode.admin import start_admin_console
-
-        runner = await start_admin_console(
-            config=config,
-            host=args.admin_host,
-            port=args.admin_port,
-        )
-        try:
-            await asyncio.Event().wait()
-        except KeyboardInterrupt:
-            session_id = (
-                getattr(agent, "_session_id", "unknown") if agent else "unknown"
-            )
-            print()
-            c = Console()
-            c.print(
-                "[cyan]░██████╗ ███████╗████████╗██████╗  ██████╗ ██████╗  █████╗ ██████╗ ██████╗ [/cyan]"
-            )
-            c.print(
-                "[cyan]██╔════╝ ██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██╔══██╗██╔══██╗██╔══██╗██╔══██╗[/cyan]"
-            )
-            c.print(
-                "[cyan]██║  ███╗█████╗     ██║   ██████╔╝██║   ██║██████╔╝███████║██████╔╝███████║[/cyan]"
-            )
-            c.print(
-                "[cyan]██║   ██║██╔══╝     ██║   ██╔══██╗██║   ██║██╔══██╗██╔══██║██╔══██╗██╔══██║[/cyan]"
-            )
-            c.print(
-                "[cyan]╚██████╔╝███████╗   ██║   ██║  ██║╚██████╔╝██████╔╝██║  ██║██║  ██║██║  ██║[/cyan]"
-            )
-            c.print(
-                "[cyan] ╚═════╝ ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝[/cyan]"
-            )
-            print()
-            print(f"Session: {session_id}")
-        finally:
-            await runner.cleanup()
-        return
-
-    # Change working directory if specified
-    if args.working_directory:
-        os.chdir(args.working_directory)
-    
-    config = Config(args.config)
-
-    print(f"nanocode v{__version__}")
-
+def _apply_config_overrides(args, config):
+    """Apply CLI argument overrides to config."""
     if args.no_proxy:
         config.set("proxy", None)
     elif args.proxy:
         config.set("proxy", args.proxy)
     if args.user_agent:
         config.set("user_agent", args.user_agent)
-    if args.cache:
+    if getattr(args, "cache", False):
         config.set("cache.enabled", True)
-    if args.use_context_strategy:
+    if getattr(args, "use_context_strategy", None):
         config.set("context.strategy", args.use_context_strategy)
-
     if args.provider:
         config.set("llm.default_connector", args.provider)
     if args.model:
-        config.set(
-            f"llm.connectors.{args.provider or config.default_connector}.model",
-            args.model,
-        )
+        config.set(f"llm.connectors.{args.provider or config.default_connector}.model", args.model)
 
-    agent = AutonomousAgent(
+
+def _create_agent(args, config):
+    """Create an AutonomousAgent from parsed args and config."""
+    return AutonomousAgent(
         config,
         session_id=args.resume,
         verbose=args.verbose,
@@ -542,228 +404,258 @@ async def main():
         drift_intervene=args.drift_intervene,
         auto_execute=args.auto_execute,
     )
+
+
+async def _run_serve_mode(args):
+    """Start HTTP server mode."""
+    os.chdir(args.cwd)
+    config = Config(args.config)
+    _apply_config_overrides(args, config)
+
+    auth_username, auth_password = None, None
+    if args.serve_auth:
+        if ":" in args.serve_auth:
+            auth_username, auth_password = args.serve_auth.split(":", 1)
+        else:
+            auth_username = args.serve_auth
+
+    agent = _create_agent(args, config)
+    await agent.init_async()
+
+    if args.mdns:
+        try:
+            from nanocode.mdns import get_manager
+            mdns = get_manager()
+            await mdns.start()
+            mdns.publish(args.serve_port)
+            print(f"Published via mDNS on port {args.serve_port}")
+        except ImportError:
+            print("mDNS not available. Install: pip install zeroconf")
+
+    await run_server(host=args.serve_host, port=args.serve_port, agent=agent,
+                     auth_username=auth_username, auth_password=auth_password)
+
+
+async def _run_acp_mode(args):
+    """Start ACP server mode."""
+    os.chdir(args.cwd)
+    config = Config(args.config)
+    _apply_config_overrides(args, config)
+    agent = _create_agent(args, config)
+    await agent.init_async()
+    await run_acp(agent)
+
+
+async def _run_admin_mode(args):
+    """Start admin console mode."""
+    os.chdir(args.cwd)
+    config = Config(args.config)
+    _apply_config_overrides(args, config)
+    from nanocode.admin import start_admin_console
+    runner = await start_admin_console(config=config, host=args.admin_host, port=args.admin_port)
+    try:
+        await asyncio.Event().wait()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        await runner.cleanup()
+
+
+def _get_log_file_path(args):
+    """Determine log file path from args or default."""
+    if args.log_file:
+        return args.log_file
+    return os.path.join(
+        os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")),
+        "nanocode", "nanocode.log"
+    )
+
+
+def _configure_file_logging(log_file: str, gui_mode: str = None, debug_arg: str = None):
+    """Set up logging with file handler. Optionally add stream handler."""
+    handlers = [logging.FileHandler(log_file)]
+    if debug_arg and gui_mode != "textual":
+        handlers.append(logging.StreamHandler())
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=handlers,
+    )
+
+
+def _configure_filtered_logging(concerns: list[str], log_file: str, gui_mode: str = None, debug_arg: str = None):
+    """Configure logging filtering by concern names."""
+    _configure_file_logging(log_file, gui_mode, debug_arg)
+    if "all" not in concerns:
+        for name in logging.Logger.manager.loggerDict:
+            logger = logging.getLogger(name)
+            if not any(c in name for c in concerns):
+                logger.setLevel(logging.WARNING)
+
+
+def _setup_logging(args, gui_mode: str):
+    """Configure logging based on --debug, --log-file, and UI mode."""
+    import logging
+    log_file = _get_log_file_path(args)
+    debug_arg = args.debug
+    if debug_arg:
+        concerns = [c.strip().lower() for c in debug_arg.split(",")]
+        valid = {"agent", "tools", "cache", "context", "llm", "tui", "all"}
+        invalid = set(concerns) - valid
+        if invalid:
+            print(f"Warning: Unknown debug concerns: {invalid}. Valid options: agent, tools, cache, context, llm, tui, all")
+            concerns = [c for c in concerns if c in valid] or ["all"]
+        _configure_filtered_logging(concerns, log_file, gui_mode, debug_arg)
+    elif debug_arg or log_file or gui_mode == "textual":
+        _configure_file_logging(log_file, gui_mode)
+
+
+async def _read_input_source(args) -> str | None:
+    """Read content from the appropriate input source. Returns None if no source."""
+    import sys
+    if args.prompt:
+        return str(args.prompt)
+    if args.stdin:
+        content = sys.stdin.read()
+        if not content.strip():
+            print("No input from stdin", file=sys.stderr)
+        return content or None
+    if args.input_file:
+        input_path = Path(args.input_file)
+        if not input_path.exists():
+            print(f"Input file not found: {args.input_file}", file=sys.stderr)
+            return None
+        return input_path.read_text()
+    return None
+
+
+def _parse_prompts(content: str, separator: str) -> list[str]:
+    """Split content into prompts based on separator."""
+    if separator == "blank":
+        return [p.strip() for p in content.split("\n\n") if p.strip()]
+    elif separator == "---":
+        return [p.strip() for p in content.split("\n---\n") if p.strip()]
+    return content.split(separator)
+
+
+def _make_permission_callback(auto_ask_allow: bool, auto_ask_deny: bool):
+    """Create permission callback for non-interactive mode."""
+    if auto_ask_deny:
+        async def callback(request):
+            return PermissionReply(
+                request_id=request.id, reply=PermissionReplyType.REJECT,
+                message="Permission denied (auto-ask-deny mode)",
+            )
+    else:
+        async def callback(request):
+            return PermissionReply(
+                request_id=request.id, reply=PermissionReplyType.ALLOW,
+            )
+    return callback
+
+
+async def _process_batch_prompts(args, agent, prompts: list[str], show_thinking: bool, show_messages: bool):
+    """Process a batch of prompts and write output."""
+    results = []
+    output_file = args.output
+    for idx, prompt in enumerate(prompts):
+        if not prompt.strip():
+            continue
+        print(f"\n[{idx + 1}/{len(prompts)}] Processing...")
+        print(f"Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
+        try:
+            result = await asyncio.wait_for(
+                agent.process_input(prompt, show_thinking=show_thinking, show_messages=show_messages),
+                timeout=120.0,
+            )
+            if result:
+                results.append(result)
+            else:
+                print("Warning: agent returned empty result")
+        except asyncio.TimeoutError:
+            partial = getattr(agent, "state", {}).last_summary if hasattr(agent, "state") else None
+            results.append(f"Timeout - partial results may be available. Last summary: {partial}")
+        except Exception as err:
+            import traceback as tb
+            tb.print_exc()
+            results.append(f"Error: {str(err)}")
+
+    final_result = "\n\n---\n\n".join(results)
+    if output_file:
+        Path(output_file).write_text(final_result)
+        print(f"Result written to: {output_file}")
+    else:
+        print("\n" + "=" * 60)
+        print("AGENT RESPONSE(S):")
+        print("=" * 60)
+        print(final_result)
+
+
+async def _handle_early_exit(args) -> bool:
+    """Handle early-exit modes. Returns True if handled."""
+    if args.list_sessions:
+        await _list_sessions()
+        return True
+    if args.get_system_prompt:
+        await _print_system_prompt(args)
+        return True
+    if args.serve:
+        await _run_serve_mode(args)
+        return True
+    if args.acp:
+        await _run_acp_mode(args)
+        return True
+    if args.admin:
+        await _run_admin_mode(args)
+        return True
+    return False
+
+async def _run_non_interactive(args, agent, show_thinking, show_messages):
+    """Run in non-interactive (batch) mode."""
+    content = await _read_input_source(args)
+    if content is None:
+        return
+    sep = getattr(args, "separator", None) or "\n"
+    prompts = _parse_prompts(content, sep)
+    agent.permission_handler.set_callback(_make_permission_callback(getattr(args, "auto_ask_allow", False), getattr(args, "auto_ask_deny", False)))
+    await _process_batch_prompts(args, agent, prompts, show_thinking, show_messages)
+    if hasattr(agent, "save_session"):
+        agent.save_session()
+
+async def _run_interactive(args, agent, show_thinking, gui_mode, gui_show_thinking, show_messages):
+    if gui_mode == "cli":
+        await run_cli(agent, show_thinking=show_thinking, show_messages=show_messages, enable_spinner=not getattr(args, "no_spinner", False))
+    else:
+        await run_tui(agent, show_thinking=gui_show_thinking, show_messages=show_messages)
+
+async def main():
+    """Main entry point."""
+    args = parse_args()
+    if await _handle_early_exit(args):
+        return
+
+    gui_mode = getattr(args, "gui", "cli")
+    if args.working_directory:
+        os.chdir(args.working_directory)
+
+    config = Config(args.config)
+    print(f"nanocode v{__version__}")
+    _apply_config_overrides(args, config)
+    agent = _create_agent(args, config)
     await agent.init_async()
     atexit.register(lambda: _save_session_on_exit(agent))
 
-    show_thinking = getattr(
-        args, "thinking", False
-    )  # Default: disabled (use --thinking to enable)
+    show_thinking = getattr(args, "thinking", False)
     show_messages = getattr(args, "show_messages", False)
     gui_show_thinking = True if gui_mode == "textual" else show_thinking
+    _setup_logging(args, gui_mode)
 
-    import logging
-
-    log_file = getattr(args, "log_file", None)
-    debug_arg = getattr(args, "debug", None)
-
-    def _configure_debug_logging(concerns: list[str], gui_mode: str = None):
-        """Configure logging for specified concerns."""
-        valid_concerns = {"agent", "tools", "cache", "context", "llm", "tui", "all"}
-        if "all" in concerns:
-            level = logging.DEBUG
-        else:
-            level = logging.DEBUG
-
-        handlers = [
-            logging.FileHandler(log_file)
-            if log_file
-            else logging.FileHandler(
-                os.path.join(
-                    os.environ.get("XDG_STATE_HOME",
-                                 os.path.expanduser("~/.local/state")),
-                    "nanocode", "nanocode.log"
-                )
-            )
-        ]
-
-        # Only add StreamHandler when --debug is used AND NOT in TUI mode
-        # StreamHandler writes to stderr which causes TUI flicker
-        if debug_arg and gui_mode != "textual":
-            handlers.append(logging.StreamHandler())
-
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            handlers=handlers,
-        )
-
-        if "all" not in concerns:
-            for name in logging.Logger.manager.loggerDict:
-                logger = logging.getLogger(name)
-                if not any(c in name for c in concerns):
-                    logger.setLevel(logging.WARNING)
-
-    # Configure logging based on --debug and --log-file
-    should_debug = debug_arg or log_file or gui_mode == "textual"
-    if debug_arg:
-        concerns = [c.strip().lower() for c in debug_arg.split(",")]
-        invalid = set(concerns) - {
-            "agent",
-            "tools",
-            "cache",
-            "context",
-            "llm",
-            "tui",
-            "all",
-        }
-        if invalid:
-            print(
-                f"Warning: Unknown debug concerns: {invalid}. Valid options: agent, tools, cache, context, llm, tui, all"
-            )
-            concerns = [
-                c
-                for c in concerns
-                if c in {"agent", "tools", "cache", "context", "llm", "tui", "all"}
-            ]
-            if not concerns:
-                concerns = ["all"]
-        _configure_debug_logging(concerns, gui_mode)
-    elif log_file or gui_mode == "textual":
-        # In TUI mode, only use file handler to avoid stderr spam
-        handlers = [
-            logging.FileHandler(log_file)
-            if log_file
-            else logging.FileHandler(
-                os.path.join(
-                    os.environ.get("XDG_STATE_HOME",
-                                 os.path.expanduser("~/.local/state")),
-                    "nanocode", "nanocode.log"
-                )
-            )
-        ]
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            handlers=handlers,
-        )
-
-    # Non-interactive mode: read from stdin or file, process, and exit
     non_interactive = getattr(args, "non_interactive", False)
-    input_file = getattr(args, "input_file", None)
-    use_stdin = getattr(args, "stdin", False)
-    prompt_arg = getattr(args, "prompt", None)
-
-    # Single prompt mode or full batch non-interactive mode
-    if prompt_arg or non_interactive or input_file or use_stdin:
-        import sys
-
-        # Determine input source
-        if prompt_arg:
-            content = str(prompt_arg)
-        elif use_stdin:
-            content = sys.stdin.read()
-            if not content.strip():
-                print("No input from stdin", file=sys.stderr)
-                return
-        elif input_file:
-            input_path = Path(input_file)
-            if not input_path.exists():
-                print(f"Input file not found: {input_file}", file=sys.stderr)
-                return
-            content = input_path.read_text()
-        else:
-            print("Non-interactive mode requires --input-file, --stdin, or --prompt", file=sys.stderr)
-            return
-
-        # Parse prompts from content
-        sep = getattr(args, "separator", None) or "\n"
-        if sep == "blank":
-            prompts = [p.strip() for p in content.split("\n\n") if p.strip()]
-        elif sep == "---":
-            prompts = [p.strip() for p in content.split("\n---\n") if p.strip()]
-        else:
-            prompts = content.split(sep)
-
-        # Auto-allow all permissions in non-interactive mode
-        auto_ask_allow = getattr(args, "auto_ask_allow", False)
-        auto_ask_deny = getattr(args, "auto_ask_deny", False)
-
-        if auto_ask_allow:
-            async def auto_ask_permission(request):
-                return PermissionReply(
-                    request_id=request.id,
-                    reply=PermissionReplyType.ALLOW,
-                )
-        elif auto_ask_deny:
-            async def auto_ask_permission(request):
-                return PermissionReply(
-                    request_id=request.id,
-                    reply=PermissionReplyType.REJECT,
-                    message="Permission denied (auto-ask-deny mode)",
-                )
-        else:
-            async def auto_ask_permission(request):
-                return PermissionReply(
-                    request_id=request.id,
-                    reply=PermissionReplyType.ALLOW,
-                )
-
-        agent.permission_handler.set_callback(auto_ask_permission)
-
-        results = []
-        output_file = getattr(args, "output", None)
-
-        for idx, prompt in enumerate(prompts):
-            if not prompt.strip():
-                continue
-
-            print(f"\n[{idx + 1}/{len(prompts)}] Processing...")
-            import asyncio
-
-            print(f"Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
-
-            try:
-                # Add timeout to prevent hanging
-                result = await asyncio.wait_for(
-                    agent.process_input(
-                        prompt, show_thinking=show_thinking, show_messages=show_messages
-                    ),
-                    timeout=120.0  # 2 minute max per prompt
-                )
-                print(f"[MAIN] process_input returned: {type(result)}, len={len(result) if result else 0}")
-                if result:
-                    results.append(result)
-                else:
-                    print("Warning: agent returned empty result")
-            except asyncio.TimeoutError:
-                # Try to get partial result from agent state
-                partial = getattr(agent, "state", {}).last_summary if hasattr(agent, "state") else None
-                result = f"Timeout - partial results may be available. Last summary: {partial}"
-                results.append(result)
-                print(f"[MAIN] Timeout - partial: {result}")
-            except Exception as err:
-                import traceback as tb
-
-                tb.print_exc()
-                result = f"Error: {str(err)}"
-                results.append(result)
-
-        final_result = "\n\n---\n\n".join(results)
-
-        if output_file:
-            Path(output_file).write_text(final_result)
-            print(f"Result written to: {output_file}")
-        else:
-            print("\n" + "=" * 60)
-            print("AGENT RESPONSE(S):")
-            print("=" * 60)
-            print(final_result)
-
-        if hasattr(agent, "save_session"):
-            agent.save_session()
+    if args.prompt or non_interactive or args.input_file or args.stdin:
+        await _run_non_interactive(args, agent, show_thinking, show_messages)
         return
 
-    if gui_mode == "cli":
-        await run_cli(
-            agent,
-            show_thinking=show_thinking,
-            show_messages=show_messages,
-            enable_spinner=not getattr(args, "no_spinner", False),
-        )
-    else:
-        await run_tui(
-            agent, show_thinking=gui_show_thinking, show_messages=show_messages
-        )
+    await _run_interactive(args, agent, show_thinking, gui_mode, gui_show_thinking, show_messages)
 
 
 def _format_markdown(text: str) -> str:

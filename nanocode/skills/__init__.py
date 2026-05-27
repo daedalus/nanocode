@@ -122,108 +122,63 @@ class SkillsManager:
         self._url_cache: dict[str, str] = {}
         self._db_session = db_session
 
+    def _scan_skill_directory(self, scan_path: str, scanned_dirs: set, discovered: list):
+        """Scan a directory for skills and append to discovered list."""
+        if not os.path.isdir(scan_path) or scan_path in scanned_dirs:
+            return
+        scanned_dirs.add(scan_path)
+        for root, dirs, files in os.walk(scan_path):
+            if SKILL_FILE_NAME in files:
+                skill_path = os.path.join(root, SKILL_FILE_NAME)
+                try:
+                    skill = self._parse_skill_file(skill_path)
+                    if skill:
+                        discovered.append(skill)
+                except Exception:
+                    pass
+
     def discover_skills(self) -> list[Skill]:
         """Discover skills in the configured directories (opencode-inspired)."""
         discovered = []
-
-        # Get base directory and worktree (using base_dir as worktree for simplicity)
         directory = self.base_dir
         worktree = self.base_dir
-
-        # Get skill paths from config
         skill_paths = self.config.get("skills", {}).get("paths", [])
+        scanned_dirs: set[str] = set()
 
-        # Track directories we've already scanned to avoid duplicates
-        scanned_dirs = set()
-
-        # Separate DEFAULT_SKILL_DIRS into home paths and relative paths
         import pathlib
         home_dir = str(pathlib.Path.home())
-        home_paths = []  # Absolute paths that should be scanned from home
-        relative_paths = []  # Relative paths to scan in project dirs
+        home_paths = []
+        relative_paths = []
 
         for skill_dir in self.DEFAULT_SKILL_DIRS:
             expanded = expand_path(skill_dir)
             if os.path.isabs(expanded) and expanded.startswith(home_dir):
-                # Absolute path under home directory
                 home_paths.append(expanded)
             elif not os.path.isabs(skill_dir):
-                # Relative path - add to relative paths list
                 relative_paths.append(skill_dir)
             else:
-                # Other absolute paths
                 home_paths.append(expanded)
 
-        # 1. Scan home directory skill paths
         for ext_path in set(home_paths):
-            if os.path.isdir(ext_path) and ext_path not in scanned_dirs:
-                scanned_dirs.add(ext_path)
-                for root, dirs, files in os.walk(ext_path):
-                    if SKILL_FILE_NAME in files:
-                        skill_path = os.path.join(root, SKILL_FILE_NAME)
-                        try:
-                            skill = self._parse_skill_file(skill_path)
-                            if skill:
-                                discovered.append(skill)
-                        except Exception:
-                            pass
+            self._scan_skill_directory(ext_path, scanned_dirs, discovered)
 
-        # 2. Scan for skills in parent directories up to worktree
         current = directory
-        while current != worktree and current != os.path.dirname(current):  # Stop at filesystem root
+        while current != worktree and current != os.path.dirname(current):
             for skill_dir in relative_paths:
-                ext_path = os.path.join(current, skill_dir)
-                if os.path.isdir(ext_path) and ext_path not in scanned_dirs:
-                    scanned_dirs.add(ext_path)
-                    for root, dirs, files in os.walk(ext_path):
-                        if SKILL_FILE_NAME in files:
-                            skill_path = os.path.join(root, SKILL_FILE_NAME)
-                            try:
-                                skill = self._parse_skill_file(skill_path)
-                                if skill:
-                                    discovered.append(skill)
-                            except Exception:
-                                pass
+                self._scan_skill_directory(os.path.join(current, skill_dir), scanned_dirs, discovered)
             current = os.path.dirname(current)
-        
-        # 3. Scan relative paths in base directory
-        for skill_dir in relative_paths:
-            scan_path = os.path.join(directory, skill_dir)
-            if os.path.isdir(scan_path) and scan_path not in scanned_dirs:
-                scanned_dirs.add(scan_path)
-                for root, dirs, files in os.walk(scan_path):
-                    if SKILL_FILE_NAME in files:
-                        skill_path = os.path.join(root, SKILL_FILE_NAME)
-                        try:
-                            skill = self._parse_skill_file(skill_path)
-                            if skill:
-                                discovered.append(skill)
-                        except Exception:
-                            pass
 
-        # 4. Scan configured skill paths
+        for skill_dir in relative_paths:
+            self._scan_skill_directory(os.path.join(directory, skill_dir), scanned_dirs, discovered)
+
         for path_item in skill_paths:
-            # Expand ~ to home directory
             if path_item.startswith("~/"):
-                expanded_path = os.path.join(home_dir, path_item[2:])
+                expanded = os.path.join(home_dir, path_item[2:])
+            elif not os.path.isabs(path_item):
+                expanded = os.path.join(directory, path_item)
             else:
-                # Make relative paths absolute based on base directory
-                if not os.path.isabs(path_item):
-                    expanded_path = os.path.join(directory, path_item)
-                else:
-                    expanded_path = path_item
-            
-            if os.path.isdir(expanded_path) and expanded_path not in scanned_dirs:
-                scanned_dirs.add(expanded_path)
-                for root, dirs, files in os.walk(expanded_path):
-                    if SKILL_FILE_NAME in files:
-                        skill_path = os.path.join(root, SKILL_FILE_NAME)
-                        try:
-                            skill = self._parse_skill_file(skill_path)
-                            if skill:
-                                discovered.append(skill)
-                        except Exception:
-                            pass
+                expanded = path_item
+            self._scan_skill_directory(expanded, scanned_dirs, discovered)
 
         return discovered
 

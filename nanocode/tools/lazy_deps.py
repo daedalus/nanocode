@@ -225,53 +225,34 @@ def feature_missing(feature: str) -> tuple[str, ...]:
     return tuple(s for s in feature_specs(feature) if not _is_satisfied(s))
 
 
-def ensure(feature: str, *, prompt: bool = True) -> None:
-    if feature not in LAZY_DEPS:
-        raise FeatureUnavailable(
-            feature, (), f"feature {feature!r} not in LAZY_DEPS allowlist"
-        )
-
-    missing = feature_missing(feature)
-    if not missing:
-        return
-
+def _verify_spec_safety(feature: str, missing: tuple[str, ...]):
+    """Check that all missing specs are safe to install."""
     for spec in missing:
         if not _spec_is_safe(spec):
-            raise FeatureUnavailable(
-                feature, missing, f"refusing to install unsafe spec {spec!r}"
-            )
+            raise FeatureUnavailable(feature, missing, f"refusing to install unsafe spec {spec!r}")
 
+
+def _check_lazy_installs_allowed(feature: str, missing: tuple[str, ...]):
     if not _allow_lazy_installs():
-        raise FeatureUnavailable(
-            feature, missing,
-            "lazy installs disabled (security.allow_lazy_installs=false)"
-        )
+        raise FeatureUnavailable(feature, missing, "lazy installs disabled (security.allow_lazy_installs=false)")
 
-    if prompt and sys.stdin.isatty() and sys.stdout.isatty():
-        spec_list = ", ".join(missing)
-        try:
-            answer = input(
-                f"\nFeature {feature!r} requires: {spec_list}\n"
-                f"Install into the active venv now? [Y/n] "
-            ).strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            answer = "n"
-        if answer and answer not in {"y", "yes"}:
-            raise FeatureUnavailable(
-                feature, missing, "user declined install at prompt"
-            )
 
-    logger.info("Lazy-installing %s for feature %r", " ".join(missing), feature)
-    result = _venv_pip_install(missing)
-    if not result.success:
-        snippet = (result.stderr or result.stdout or "").strip()
-        if snippet:
-            snippet = snippet[-2000:]
-        raise FeatureUnavailable(
-            feature, missing,
-            f"pip install failed: {snippet or 'no error output'}"
-        )
+def _prompt_before_install(feature: str, missing: tuple[str, ...], prompt: bool):
+    """Prompt user before installing. Returns True if install should proceed."""
+    if not prompt or not sys.stdin.isatty() or not sys.stdout.isatty():
+        return True
+    spec_list = ", ".join(missing)
+    try:
+        answer = input(f"\nFeature {feature!r} requires: {spec_list}\nInstall into the active venv now? [Y/n] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        answer = "n"
+    if answer and answer not in {"y", "yes"}:
+        raise FeatureUnavailable(feature, missing, "user declined install at prompt")
+    return True
 
+
+def _clear_metadata_cache():
+    """Clear importlib metadata cache after install."""
     try:
         import importlib.metadata as _md
         if hasattr(_md, "_cache_clear"):
@@ -279,14 +260,27 @@ def ensure(feature: str, *, prompt: bool = True) -> None:
     except Exception:
         pass
 
+
+def ensure(feature: str, *, prompt: bool = True) -> None:
+    if feature not in LAZY_DEPS:
+        raise FeatureUnavailable(feature, (), f"feature {feature!r} not in LAZY_DEPS allowlist")
+    missing = feature_missing(feature)
+    if not missing:
+        return
+    _verify_spec_safety(feature, missing)
+    _check_lazy_installs_allowed(feature, missing)
+    _prompt_before_install(feature, missing, prompt)
+    logger.info("Lazy-installing %s for feature %r", " ".join(missing), feature)
+    result = _venv_pip_install(missing)
+    if not result.success:
+        snippet = (result.stderr or result.stdout or "").strip()
+        if snippet:
+            snippet = snippet[-2000:]
+        raise FeatureUnavailable(feature, missing, f"pip install failed: {snippet or 'no error output'}")
+    _clear_metadata_cache()
     still_missing = feature_missing(feature)
     if still_missing:
-        raise FeatureUnavailable(
-            feature, still_missing,
-            "install reported success but packages still not importable "
-            "(may require Python restart)"
-        )
-
+        raise FeatureUnavailable(feature, still_missing, "install reported success but packages still not importable (may require Python restart)")
     logger.info("Lazy install complete for feature %r", feature)
 
 

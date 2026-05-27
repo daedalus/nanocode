@@ -137,6 +137,45 @@ class PermissionHandler:
         )
         return action
 
+    async def _request_via_bus(self, agent: AgentInfo, tool_name: str, arguments: dict) -> bool:
+        """Try permission via event bus."""
+        from nanocode.agents.permission_bus import get_permission_bus
+        bus = get_permission_bus()
+        session_id = getattr(agent, "session_id", "default")
+        reply = await bus.request_permission(
+            session_id=session_id, tool_name=tool_name,
+            permission=tool_name, metadata=arguments,
+        )
+        if reply in ("allow", "always"):
+            return True
+        raise PermissionDeniedError(f"Permission denied for tool '{tool_name}'", agent.permission)
+
+    def _build_permission_request(self, agent: AgentInfo, tool_name: str, arguments: dict, action: PermissionAction) -> PermissionRequest:
+        """Build a PermissionRequest from agent/tool info."""
+        permission = "edit" if tool_name == "str_replace_editor" else tool_name
+        return PermissionRequest(
+            id=str(uuid.uuid4()),
+            agent_name=agent.name,
+            tool_name=tool_name,
+            arguments=arguments,
+            permission=permission,
+            pattern="*",
+            action=action,
+        )
+
+    async def _handle_callback_reply(self, reply, request: PermissionRequest, tool_name: str):
+        """Process the reply from a permission callback."""
+        if reply is None or reply is False:
+            return False
+        if isinstance(reply, bool):
+            return reply
+        if reply.reply == PermissionReplyType.REJECT:
+            raise PermissionRejectedError(reply.message or "Permission rejected by user")
+        if reply.reply == PermissionReplyType.ALWAYS:
+            actual = request.arguments.get("tool", request.permission) if request.permission == "doom_loop" else request.permission
+            self.add_approved_rule(PermissionRule(permission=actual, pattern=request.pattern, action=PermissionAction.ALLOW))
+        return reply.reply != PermissionReplyType.REJECT
+
     async def request_permission(
         self,
         agent: AgentInfo,
@@ -145,118 +184,28 @@ class PermissionHandler:
     ) -> bool:
         """Request permission to execute a tool."""
         action = self.check_permission(agent, tool_name, arguments)
-        logger.debug(
-            f"[{agent.name}] request_permission('{tool_name}') action={action.value}"
-        )
+        logger.debug(f"[{agent.name}] request_permission('{tool_name}') action={action.value}")
 
         if action == PermissionAction.ALLOW:
-            logger.debug(f"[{agent.name}] Permission ALLOWED for '{tool_name}'")
             return True
 
         if action == PermissionAction.DENY:
-            logger.warning(f"[{agent.name}] Permission DENIED for '{tool_name}'")
-            raise PermissionDeniedError(
-                f"Permission denied for tool '{tool_name}'", agent.permission
-            )
+            raise PermissionDeniedError(f"Permission denied for tool '{tool_name}'", agent.permission)
 
-        # Try to use permission bus (event-driven approach like OpenCode)
         if self._use_bus:
             try:
-                from nanocode.agents.permission_bus import get_permission_bus
-                bus = get_permission_bus()
-                session_id = getattr(agent, "session_id", "default")
-                
-                logger.info(f"[{agent.name}] Using permission bus for '{tool_name}'")
-                reply = await bus.request_permission(
-                    session_id=session_id,
-                    tool_name=tool_name,
-                    permission=tool_name,
-                    metadata=arguments,
-                )
-                
-                if reply in ("allow", "always"):
-                    logger.debug(f"[{agent.name}] Permission ALLOWED via bus for '{tool_name}'")
-                    return True
-                else:
-                    logger.warning(f"[{agent.name}] Permission DENIED via bus for '{tool_name}'")
-                    raise PermissionDeniedError(
-                        f"Permission denied for tool '{tool_name}'", agent.permission
-                    )
+                return await self._request_via_bus(agent, tool_name, arguments)
             except ImportError:
-                pass  # Fall back to callback approach
+                pass
 
         if self._callback is None:
-            # In TUI mode with no callback, auto-allow (permissions handled via UI)
-            logger.debug(
-                f"[{agent.name}] Permission ASK (no callback) -> allowing by default"
-            )
             return True
 
-        permission = tool_name
-        pattern = "*"
-
-        if tool_name == "str_replace_editor":
-            permission = "edit"
-
-        request = PermissionRequest(
-            id=str(uuid.uuid4()),
-            agent_name=agent.name,
-            tool_name=tool_name,
-            arguments=arguments,
-            permission=permission,
-            pattern=pattern,
-            action=action,
-        )
-
-        logger.info(
-            f"[{agent.name}] Requesting permission for '{tool_name}': {request}"
-        )
+        request = self._build_permission_request(agent, tool_name, arguments, action)
         self._pending[request.id] = request
-
         try:
             reply = await self._callback(request)
-
-            if reply is None or reply is False:
-                logger.warning(
-                    f"[{agent.name}] Permission callback returned {reply} for '{tool_name}'"
-                )
-                return False
-
-            # Handle boolean return (True = allow once)
-            if isinstance(reply, bool):
-                logger.debug(
-                    f"[{agent.name}] Permission callback returned bool={reply} for '{tool_name}'"
-                )
-                return reply
-
-            if reply.reply == PermissionReplyType.REJECT:
-                logger.warning(
-                    f"[{agent.name}] Permission REJECTED for '{tool_name}': {reply.message}"
-                )
-                raise PermissionRejectedError(
-                    reply.message or "Permission rejected by user"
-                )
-
-            if reply.reply == PermissionReplyType.ALWAYS:
-                logger.info(
-                    f"[{agent.name}] Permission ALWAYS ALLOWED for '{tool_name}' (pattern={pattern})"
-                )
-                # For doom_loop, store the actual tool name (not "doom_loop")
-                actual_permission = arguments.get("tool", permission) if permission == "doom_loop" else permission
-                self.add_approved_rule(
-                    PermissionRule(
-                        permission=actual_permission,
-                        pattern=pattern,
-                        action=PermissionAction.ALLOW,
-                    )
-                )
-
-            allowed = reply.reply != PermissionReplyType.REJECT
-            logger.info(
-                f"[{agent.name}] Permission result for '{tool_name}': {reply.reply.value} -> allowed={allowed}"
-            )
-            return allowed
-
+            return await self._handle_callback_reply(reply, request, tool_name)
         finally:
             self._pending.pop(request.id, None)
 
