@@ -13,6 +13,8 @@ Supports:
 
 import asyncio
 import json
+import logging
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -20,6 +22,17 @@ from datetime import datetime
 from typing import Any, Optional
 
 from nanocode.llm import Message as LLMMessage
+from nanocode.llm.base import Message
+from nanocode.llm.events import (
+    EventType,
+    FinishStepEvent,
+    ReasoningDeltaEvent,
+    StreamEvent,
+    TextDeltaEvent,
+    ToolCallEvent,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class HTTPError(Exception):
@@ -63,6 +76,40 @@ class ServerError(HTTPError):
 
     def __init__(self, message: str = "Internal server error"):
         super().__init__(message, 500)
+
+
+def _openai_message_to_internal(msg: dict) -> Message:
+    """Convert an OpenAI-format message dict to a Message object."""
+    role = msg.get("role", "user")
+    content = msg.get("content", "")
+    if isinstance(content, list):
+        text_parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text_parts.append(block.get("text", ""))
+        content = "".join(text_parts)
+    return Message(role=role, content=str(content))
+
+
+def _format_openai_chunk(
+    model: str,
+    content_delta: str = "",
+    finish_reason: str | None = None,
+) -> str:
+    """Format an SSE data chunk for OpenAI-compatible streaming."""
+    choice: dict = {"delta": {}, "index": 0}
+    if content_delta:
+        choice["delta"]["content"] = content_delta
+    if finish_reason:
+        choice["finish_reason"] = finish_reason
+    chunk = {
+        "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
+        "object": "chat.completion.chunk",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [choice],
+    }
+    return f"data: {json.dumps(chunk)}\n\n"
 
 
 @dataclass
@@ -174,9 +221,9 @@ class TextResponse(Response):
 
 
 class StreamResponse(Response):
-    """Streaming response."""
+    """Streaming response with SSE support."""
 
-    def __init__(self, status_code: int = 200, **kwargs):
+    def __init__(self, status_code: int = 200, event_stream=None, **kwargs):
         super().__init__(
             status_code=status_code,
             body=None,
@@ -187,6 +234,7 @@ class StreamResponse(Response):
                 **kwargs,
             },
         )
+        self.event_stream = event_stream
 
 
 class ServerSessionManager:
@@ -290,6 +338,90 @@ class AgentServer:
         self.router.add_route("GET", "/stats", self._get_stats)
 
         self.router.add_route("GET", "/openapi.json", self._openapi)
+
+        self.router.add_route("GET", "/v1/models", self._handle_v1_models)
+        self.router.add_route("POST", "/v1/chat/completions", self._handle_v1_chat_completions)
+
+    def _get_model_name(self) -> str:
+        if self.nanocode and hasattr(self.nanocode, "llm") and self.nanocode.llm:
+            return getattr(self.nanocode.llm, "model", "nanocode")
+        return "nanocode"
+
+    async def _handle_v1_models(self, request: Request) -> Response:
+        """GET /v1/models — return available models."""
+        self._require_auth(request)
+        model = self._get_model_name()
+        return JSONResponse({
+            "object": "list",
+            "data": [{
+                "id": model,
+                "object": "model",
+                "created": int(time.time()),
+                "owned_by": "nanocode",
+            }],
+        })
+
+    async def _handle_v1_chat_completions(self, request: Request) -> Response:
+        """POST /v1/chat/completions — OpenAI Chat Completions format."""
+        self._require_auth(request)
+        body = request.body or {}
+        messages = body.get("messages", [])
+        stream = body.get("stream", False)
+        model = body.get("model", self._get_model_name())
+
+        if not messages:
+            raise BadRequestError("messages required")
+
+        internal_messages = [_openai_message_to_internal(m) for m in messages]
+
+        if not self.nanocode or not hasattr(self.nanocode, "llm") or not self.nanocode.llm:
+            return JSONResponse({"error": "No LLM configured"}, status_code=500)
+
+        llm = self.nanocode.llm
+
+        if stream:
+            return await self._stream_chat_completions(llm, internal_messages, model)
+
+        try:
+            response = await llm.chat(internal_messages)
+            text = getattr(response, "content", "") or ""
+            finish = getattr(response, "finish_reason", "stop") or "stop"
+            return JSONResponse({
+                "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": model,
+                "choices": [{
+                    "index": 0,
+                    "message": {"role": "assistant", "content": text},
+                    "finish_reason": finish,
+                }],
+                "usage": {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                },
+            })
+        except Exception as e:
+            logger.exception("Chat completion failed")
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    async def _stream_chat_completions(self, llm, messages: list[Message], model: str) -> StreamResponse:
+        """Stream chat completions in OpenAI SSE format."""
+        async def event_stream():
+            try:
+                async for event in llm.chat_stream(messages):
+                    if isinstance(event, TextDeltaEvent):
+                        yield _format_openai_chunk(model, content_delta=event.text)
+                    elif isinstance(event, FinishStepEvent):
+                        yield _format_openai_chunk(model, finish_reason="stop")
+                yield "data: [DONE]\n\n"
+            except Exception as e:
+                logger.exception("Stream error")
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                yield "data: [DONE]\n\n"
+
+        return StreamResponse(event_stream=event_stream())
 
     async def _health(self, request: Request) -> Response:
         """Health check."""
@@ -708,6 +840,22 @@ class AgentServer:
         if response.body:
             writer.write(response.body.encode() if isinstance(response.body, str) else response.body)
 
+    async def _write_stream_response(
+        self, writer: asyncio.StreamWriter, response: StreamResponse
+    ):
+        """Write an SSE stream response."""
+        writer.write(f"HTTP/1.1 {response.status_code} OK\r\n".encode())
+        for key, value in response.headers.items():
+            writer.write(f"{key}: {value}\r\n".encode())
+        writer.write(b"\r\n")
+        await writer.drain()
+
+        if response.event_stream:
+            async for chunk in response.event_stream:
+                data = chunk.encode() if isinstance(chunk, str) else chunk
+                writer.write(data)
+                await writer.drain()
+
     async def _handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ):
@@ -726,8 +874,11 @@ class AgentServer:
             headers, content_length = await self._parse_http_headers(reader)
             body = await self._parse_http_body(reader, content_length)
             response = await self.handle_request(method, path, headers, body)
-            self._write_http_response(writer, response)
-            await writer.drain()
+            if isinstance(response, StreamResponse) and response.event_stream:
+                await self._write_stream_response(writer, response)
+            else:
+                self._write_http_response(writer, response)
+                await writer.drain()
         except Exception as e:
             print(f"Error handling client: {e}")
 
