@@ -1,11 +1,20 @@
 """Anthropic Claude LLM provider."""
 
+import json
 import os
 from collections.abc import AsyncIterator
 
-import httpx
+from nanocode.llm.base import LLMBase, LLMResponse, ToolCall
+from nanocode.llm.events import (
+    EventType,
+    FinishStepEvent,
+    ReasoningDeltaEvent,
+    StreamEvent,
+    TextDeltaEvent,
+    ToolCallEvent,
+)
 
-from nanocode.llm.base import LLMBase, LLMResponse, Message, ToolCall
+API_BASE = "https://api.anthropic.com/v1/messages"
 
 
 class AnthropicLLM(LLMBase):
@@ -14,84 +23,92 @@ class AnthropicLLM(LLMBase):
     def __init__(
         self,
         api_key: str = None,
-        model: str = "claude-3-5-sonnet-20241022",
+        model: str = "claude-sonnet-4-5",
         proxy: str = None,
         **kwargs,
     ):
         super().__init__(api_key, None, model, proxy=proxy, **kwargs)
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
+        self._transport = None
+
+    @property
+    def _get_transport(self):
+        if self._transport is None:
+            from nanocode.llm.transports import get_transport
+            self._transport = get_transport("anthropic_messages")
+        return self._transport
 
     async def chat(
         self, messages: list, tools: list[dict] = None, **kwargs
     ) -> LLMResponse:
         """Send a chat completion request."""
-        messages = self._normalize_messages(messages)
+        message_dicts = [
+            m.to_dict() if hasattr(m, "to_dict") else m
+            for m in self._normalize_messages(messages)
+        ]
 
-        headers = {
-            "x-api-key": self.api_key,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-        }
+        transport = self._get_transport
+        headers = transport.build_headers(self.api_key)
 
-        system_msg = None
-        formatted_messages = []
-        for msg in messages:
-            if msg.role == "system":
-                system_msg = msg.content
-            else:
-                formatted_messages.append({"role": msg.role, "content": msg.content})
+        base_url = kwargs.pop("base_url", API_BASE)
+        max_tokens = kwargs.pop("max_tokens", self.max_tokens)
+        if not max_tokens:
+            max_tokens = 4096
 
-        payload = {
-            "model": self.model,
-            "messages": formatted_messages,
+        payload = transport.build_kwargs(
+            model=self.model,
+            messages=message_dicts,
+            tools=tools,
+            max_tokens=max_tokens,
             **kwargs,
-        }
-        if system_msg:
-            payload["system"] = system_msg
-
-        if tools:
-            payload["tools"] = tools
+        )
 
         response = await self._client.post(
-            "https://api.anthropic.com/v1/messages",
+            base_url,
             json=payload,
             headers=headers,
         )
         response.raise_for_status()
         data = response.json()
 
-        tool_calls = []
-        if tc_data := data.get("tool_calls", []):
-            for tc in tc_data:
-                tool_calls.append(
-                    ToolCall(
-                        name=tc.get("name", ""),
-                        arguments=tc.get("input", {}),
-                        id=tc.get("id"),
-                    )
-                )
+        nr = transport.normalize_response(data)
 
-        content_parts = []
-        thinking = None
-        for block in data.get("content", []):
-            if block.get("type") == "text":
-                content_parts.append(block.get("text", ""))
-            elif block.get("type") == "tool_use":
+        tool_calls = []
+        if nr.tool_calls:
+            for tc in nr.tool_calls:
                 tool_calls.append(
                     ToolCall(
-                        name=block.get("name", ""),
-                        arguments=block.get("input", {}),
-                        id=block.get("id"),
+                        name=tc.name,
+                        arguments=json.loads(tc.arguments) if isinstance(tc.arguments, str) else tc.arguments,
+                        id=tc.id,
                     )
                 )
-            elif block.get("type") == "thinking":
-                thinking = block.get("thinking", "")
 
         return LLMResponse(
-            content="\n".join(content_parts),
+            content=nr.content or "",
             tool_calls=tool_calls,
-            finish_reason=data.get("stop_reason"),
-            thinking=thinking,
+            finish_reason=nr.finish_reason,
+            thinking=nr.reasoning,
+        )
+
+    async def chat_stream(
+        self, messages: list, tools: list[dict] = None, **kwargs
+    ):
+        """Stream events from Anthropic. Falls back to chat() collecting."""
+        resp = await self.chat(messages, tools, **kwargs)
+        yield StreamEvent(type=EventType.START)
+        if resp.thinking:
+            yield ReasoningDeltaEvent(id="reasoning_0", text=resp.thinking)
+        if resp.content:
+            yield TextDeltaEvent(text=resp.content)
+        for tc in resp.tool_calls:
+            yield ToolCallEvent(
+                tool_call_id=tc.id or "",
+                tool_name=tc.name,
+                input=tc.arguments,
+            )
+        yield FinishStepEvent(
+            finish_reason=resp.finish_reason or "",
         )
 
     def get_tool_schema(self) -> list[dict]:

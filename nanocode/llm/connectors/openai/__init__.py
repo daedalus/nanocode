@@ -6,18 +6,22 @@ Fully matches opencode architecture: LLM.stream() returns async generator of eve
 import json
 import logging
 import os
-from typing import AsyncGenerator, Optional, Dict, Any, List
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 
 from nanocode.llm.base import LLMBase, Message, ToolCall
-from nanocode.llm.router import OUTPUT_TOKEN_MAX
 from nanocode.llm.events import (
-    StreamEvent, EventType,
-    TextDeltaEvent, ToolCallEvent, FinishStepEvent,
-    ReasoningDeltaEvent, ReasoningStartEvent, ReasoningEndEvent,
+    EventType,
+    FinishStepEvent,
+    ReasoningDeltaEvent,
+    ReasoningEndEvent,
+    ReasoningStartEvent,
     StreamEvent,
+    TextDeltaEvent,
+    ToolCallEvent,
 )
+from nanocode.llm.router import OUTPUT_TOKEN_MAX
 
 logger = logging.getLogger("nanocode.openai")
 
@@ -45,31 +49,38 @@ class OpenAILLM(LLMBase):
             env_var = self.api_key[2:-1]
             self.api_key = os.getenv(env_var, self.api_key)
 
+        self._transport = None
+
+    @property
+    def _get_transport(self):
+        if self._transport is None:
+            from nanocode.llm.transports import get_transport
+            self._transport = get_transport("chat_completions")
+        return self._transport
+
     async def chat_stream(
         self, messages: list, tools: list[dict] = None, **kwargs
     ) -> AsyncGenerator[StreamEvent, None]:
         """Stream events (matches opencode's LLM.stream())."""
         messages = self._normalize_messages(messages)
+        message_dicts = [m.to_dict() for m in messages]
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
+        transport = self._get_transport
+        headers = transport.build_headers(self.api_key)
 
-        payload = {
-            "model": self.model,
-            "messages": [m.to_dict() for m in messages],
-            "stream": True,
-            **kwargs,
-        }
-
-        max_tokens = kwargs.get("max_tokens", self.max_tokens)
+        # Resolve max_tokens: kwargs > self.max_tokens > OUTPUT_TOKEN_MAX
+        max_tokens = kwargs.pop("max_tokens", self.max_tokens)
         if not max_tokens:
             max_tokens = OUTPUT_TOKEN_MAX
-        payload["max_tokens"] = max_tokens
 
-        if tools:
-            payload["tools"] = tools
+        payload = transport.build_kwargs(
+            model=self.model,
+            messages=message_dicts,
+            tools=tools,
+            max_tokens=max_tokens,
+            stream=True,
+            **kwargs,
+        )
 
         # Yield start event
         yield StreamEvent(type=EventType.START)
@@ -98,7 +109,6 @@ class OpenAILLM(LLMBase):
                     delta = choice.get("delta", {})
 
                     # Handle reasoning (for models that support it)
-                    # Note: API may return 'reasoning' (not 'reasoning')
                     reasoning = delta.get("reasoning", "") or delta.get("reasoning", "")
                     if reasoning:
                         yield ReasoningDeltaEvent(
@@ -109,7 +119,7 @@ class OpenAILLM(LLMBase):
                     # Handle text content
                     if "content" in delta:
                         content = delta["content"]
-                        if content:  # Only yield if non-empty
+                        if content:
                             logger.debug(f"Yielding TextDelta: {content[:50]}...")
                             yield TextDeltaEvent(text=content)
 
@@ -154,7 +164,7 @@ class OpenAILLM(LLMBase):
                     logger.debug(f"Failed to parse SSE line: {e}")
                     continue
 
-    def get_tool_schema(self) -> List[dict]:
+    def get_tool_schema(self) -> list[dict]:
         """Get OpenAI function calling format."""
         return []
 

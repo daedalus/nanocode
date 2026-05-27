@@ -532,32 +532,16 @@ class AutonomousAgent:
                 f"Model: {default_model} -> Provider: {provider_config.provider}, URL: {provider_config.base_url}"
             )
 
-            from nanocode.llm import OpenAILLM
-            from nanocode.llm.connectors.anthropic import AnthropicLLM
-            from nanocode.llm.connectors.ollama import OllamaLLM
+            from nanocode.llm import create_llm
 
-            if provider_config.provider == "anthropic":
-                self.llm = AnthropicLLM(
-                    api_key=provider_config.api_key,
-                    model=provider_config.model,
-                    user_agent=user_agent,
-                    proxy=proxy,
-                )
-            elif provider_config.provider == "ollama":
-                self.llm = OllamaLLM(
-                    base_url=provider_config.base_url,
-                    model=provider_config.model,
-                    user_agent=user_agent,
-                    proxy=proxy,
-                )
-            else:
-                self.llm = OpenAILLM(
-                    base_url=provider_config.base_url,
-                    api_key=provider_config.api_key or "dummy",
-                    model=provider_config.model,
-                    user_agent=user_agent,
-                    proxy=proxy,
-                )
+            self.llm = create_llm(
+                provider_config.provider,
+                base_url=provider_config.base_url,
+                api_key=provider_config.api_key or "dummy",
+                model=provider_config.model,
+                user_agent=user_agent,
+                proxy=proxy,
+            )
         else:
             connectors = self.config.connectors
             default = self.config.default_connector

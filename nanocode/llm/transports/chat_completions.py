@@ -168,6 +168,16 @@ class ChatCompletionsTransport(ProviderTransport):
                 else:
                     payload[k] = v
 
+        # Catch-all: pass through any params not explicitly handled
+        _HANDLED = {
+            "stream", "temperature", "max_tokens", "reasoning_config",
+            "provider_profile", "extra_body_additions", "request_overrides",
+            "session_id", "base_url", "supports_reasoning",
+        }
+        for k, v in params.items():
+            if k not in _HANDLED and k not in payload:
+                payload[k] = v
+
         return payload
 
     def normalize_response(

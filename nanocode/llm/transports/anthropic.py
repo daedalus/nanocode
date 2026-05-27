@@ -159,6 +159,12 @@ class AnthropicTransport(ProviderTransport):
         if temperature is not None:
             payload["temperature"] = temperature
 
+        # Catch-all: pass through any params not explicitly handled
+        _HANDLED = {"max_tokens", "temperature", "reasoning_config"}
+        for k, v in params.items():
+            if k not in _HANDLED and k not in payload:
+                payload[k] = v
+
         return payload
 
     def normalize_response(
