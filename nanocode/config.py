@@ -160,6 +160,16 @@ class Config:
         """Get base directory for the agent."""
         return self.get("base_dir", os.getcwd())
 
+    @property
+    def self_improvement(self) -> dict:
+        """Get self-improvement (background review) settings."""
+        return self.get("self_improvement", {})
+
+    @property
+    def curator(self) -> dict:
+        """Get curator settings."""
+        return self.get("curator", {})
+
 
 _config: Config | None = None
 

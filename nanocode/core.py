@@ -287,6 +287,7 @@ class AutonomousAgent:
         self._init_snapshot()
         self._init_drift_watchdog() if self.drift_mode != "off" else None
         self._init_cache()
+        self._init_review()
 
     def _init_session(self):
         """Initialize session management."""
@@ -334,6 +335,17 @@ class AutonomousAgent:
                 cache_logger.info(f"Prompt cache enabled: {self.prompt_cache.db_path}")
             except Exception as e:
                 cache_logger.warning(f"Failed to initialize prompt cache: {e}")
+
+    def _init_review(self):
+        """Initialize self-improvement review settings."""
+        review_cfg = self.config.get("self_improvement", {})
+        self._review_enabled = bool(review_cfg.get("enabled", True))
+        self._review_memory = bool(review_cfg.get("review_memory", True))
+        self._review_skills = bool(review_cfg.get("review_skills", True))
+        logger.info(
+            "Self-improvement review: enabled=%s, memory=%s, skills=%s",
+            self._review_enabled, self._review_memory, self._review_skills,
+        )
 
     def _init_agents(self):
         """Initialize agent system."""
@@ -1369,6 +1381,36 @@ Conversation:
         logger.debug(f"[{agent_name}] Finished handling {len(tool_calls)} tool call(s) in {time.monotonic() - start:.2f}s")
         return results
 
+    async def _spawn_background_review(self):
+        """Fire-and-forget background review of the just-completed turn.
+
+        Runs a lightweight LLM call that evaluates whether memory or
+        skill updates are warranted. The result is logged and optionally
+        surfaced to the user.
+        """
+        if not self._review_enabled:
+            return
+        if not self._review_memory and not self._review_skills:
+            return
+
+        from nanocode.agents.review import spawn_background_review
+
+        messages_snapshot = self.context_manager.prepare_messages()
+        if not messages_snapshot:
+            return
+
+        try:
+            summary = await spawn_background_review(
+                self,
+                messages_snapshot,
+                review_memory=self._review_memory,
+                review_skills=self._review_skills,
+            )
+            if summary:
+                logger.info("[background review] %s", summary)
+        except Exception as e:
+            logger.debug("Background review failed: %s", e)
+
     def _format_thinking(self, thinking: str) -> str:
         """Format thinking content for display."""
         lines = thinking.strip().split("\n")
@@ -2081,6 +2123,9 @@ Conversation:
                         tool_results_history.extend(more_results)
 
             self.state.state = AgentState.COMPLETE
+
+            # Fire background review (non-blocking)
+            asyncio.create_task(self._spawn_background_review())
 
             logger.debug(f"[{agent_name}] Returning augmented content: {augmented}")
             return augmented
