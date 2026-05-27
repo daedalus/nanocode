@@ -331,37 +331,31 @@ class DelegateTool(Tool):
     def set_delegate_depth(self, depth: int):
         self._delegate_depth = depth
 
-    async def execute(self, **kwargs) -> ToolResult:
+    def _normalize_role(self, role: str | None) -> str:
+        if role not in ("leaf", "orchestrator"):
+            logger.warning("Unknown delegate_task role '%s', coercing to 'leaf'", role)
+            return "leaf"
+        return role
+
+    def _resolve_model_overrides(self, model: str | None) -> dict:
+        if not model or "/" not in model:
+            return {"provider": None, "model": None, "base_url": None, "api_key": None}
+        return {
+            "provider": model.split("/")[0],
+            "model": model,
+            "base_url": None,
+            "api_key": None,
+        }
+
+    def _build_task_list(self, kwargs: dict) -> ToolResult | list:
         goal = kwargs.get("goal", "")
         context = kwargs.get("context")
         toolsets = kwargs.get("toolsets")
         tasks = kwargs.get("tasks")
-        model = kwargs.get("model")
-        role = kwargs.get("role", "leaf")
+        role = self._normalize_role(kwargs.get("role", "leaf"))
 
-        if role not in ("leaf", "orchestrator"):
-            role = "leaf"
-            logger.warning("Unknown delegate_task role, coercing to 'leaf'")
-
-        depth = self._delegate_depth
-        if depth >= MAX_DEPTH:
-            return ToolResult(
-                success=False,
-                content=None,
-                error=f"Delegation depth limit reached (depth={depth}, max={MAX_DEPTH}). "
-                f"Cannot spawn more child agents.",
-            )
-
-        override_provider = None
-        override_model = None
-        override_base_url = None
-        override_api_key = None
-        if model and "/" in model:
-            override_provider = model.split("/")[0]
-            override_model = model
-
-        task_list = []
         if tasks and isinstance(tasks, list):
+            task_list = []
             for i, t in enumerate(tasks):
                 if not isinstance(t, dict):
                     return ToolResult(
@@ -373,77 +367,103 @@ class DelegateTool(Tool):
                         success=False,
                         error=f"Task {i} is missing a 'goal'.",
                     )
+                t.setdefault("toolsets", toolsets)
                 task_list.append(t)
-        elif goal and isinstance(goal, str) and goal.strip():
-            task_list.append({
+            return task_list
+
+        if goal and isinstance(goal, str) and goal.strip():
+            return [{
                 "goal": goal,
                 "context": context,
                 "toolsets": toolsets,
                 "role": role,
-            })
-        else:
-            return ToolResult(
-                success=False,
-                error="Provide either 'goal' (single task) or 'tasks' (batch).",
-            )
+            }]
 
-        if not task_list:
-            return ToolResult(success=False, error="No tasks provided.")
+        return ToolResult(
+            success=False,
+            error="Provide either 'goal' (single task) or 'tasks' (batch).",
+        )
+
+    def _create_subagent(self, task: dict, override: dict, role: str, depth: int) -> Subagent:
+        return Subagent(
+            goal=task["goal"],
+            context=task.get("context"),
+            tools=task.get("toolsets"),
+            parent_config=self._parent_config,
+            parent_tool_registry=self._parent_tool_registry,
+            parent_llm=self._parent_llm,
+            override_provider=override.get("provider"),
+            override_model=override.get("model"),
+            override_base_url=override.get("base_url"),
+            override_api_key=override.get("api_key"),
+            max_iterations=self._parent_config.get("delegation.max_iterations", 25),
+            role=role,
+            depth=depth,
+        )
+
+    async def _run_single_subagent(self, goal_text: str, child: Subagent) -> dict:
+        try:
+            result = await child.run()
+            return {"goal": goal_text, "result": result, "success": True}
+        except Exception as e:
+            logger.error("Subagent failed: %s", e)
+            return {"goal": goal_text, "result": str(e), "success": False}
+
+    async def _run_batch_subagents(self, tasks_to_run: list) -> list[dict]:
+        async def _run_one(gt: str, ch: Subagent) -> dict:
+            try:
+                r = await ch.run()
+                return {"goal": gt, "result": r, "success": True}
+            except Exception as e:
+                return {"goal": gt, "result": str(e), "success": False}
+
+        batch_results = await asyncio.gather(
+            *[_run_one(g, c) for _, g, c in tasks_to_run],
+            return_exceptions=True,
+        )
 
         results = []
+        for i, br in enumerate(batch_results):
+            if isinstance(br, dict):
+                results.append(br)
+            elif isinstance(br, Exception):
+                results.append({
+                    "goal": tasks_to_run[i][1],
+                    "result": str(br),
+                    "success": False,
+                })
+        return results
+
+    async def execute(self, **kwargs) -> ToolResult:
+        role = self._normalize_role(kwargs.get("role", "leaf"))
+        depth = self._delegate_depth
+
+        if depth >= MAX_DEPTH:
+            return ToolResult(
+                success=False,
+                error=f"Delegation depth limit reached (depth={depth}, max={MAX_DEPTH}).",
+            )
+
+        override = self._resolve_model_overrides(kwargs.get("model"))
+        task_list = self._build_task_list(kwargs)
+        if isinstance(task_list, ToolResult):
+            return task_list
+
         logger.info(
             "DelegateTask: spawning %d subagent(s) (depth=%d, role=%s)",
             len(task_list), depth, role,
         )
 
         tasks_to_run = []
-        for i, t in enumerate(task_list):
+        for t in task_list:
             child_role = t.get("role", role)
-            child = Subagent(
-                goal=t["goal"],
-                context=t.get("context"),
-                tools=t.get("toolsets") or toolsets,
-                parent_config=self._parent_config,
-                parent_tool_registry=self._parent_tool_registry,
-                parent_llm=self._parent_llm,
-                override_provider=override_provider,
-                override_model=override_model,
-                override_base_url=override_base_url,
-                override_api_key=override_api_key,
-                max_iterations=self._parent_config.get("delegation.max_iterations", 25),
-                role=child_role,
-                depth=depth + 1,
-            )
-            tasks_to_run.append((i, t["goal"], child))
+            child = self._create_subagent(t, override, child_role, depth + 1)
+            tasks_to_run.append((t["goal"], child))
 
         if len(tasks_to_run) == 1:
-            _, goal_text, child = tasks_to_run[0]
-            try:
-                result = await child.run()
-                results.append({"goal": goal_text, "result": result, "success": True})
-            except Exception as e:
-                logger.error("Subagent failed: %s", e)
-                results.append({"goal": goal_text, "result": str(e), "success": False})
+            results = [await self._run_single_subagent(tasks_to_run[0][0], tasks_to_run[0][1])]
         else:
-            async def _run_one(idx, gt, ch):
-                try:
-                    r = await ch.run()
-                    return {"goal": gt, "result": r, "success": True}
-                except Exception as e:
-                    return {"goal": gt, "result": str(e), "success": False}
-            batch_results = await asyncio.gather(
-                *[_run_one(i, g, c) for i, g, c in tasks_to_run],
-                return_exceptions=True,
-            )
-            for i, br in enumerate(batch_results):
-                if isinstance(br, dict):
-                    results.append(br)
-                elif isinstance(br, Exception):
-                    results.append({
-                        "goal": tasks_to_run[i][1],
-                        "result": str(br),
-                        "success": False,
-                    })
+            results = await self._run_batch_subagents(tasks_to_run)
 
         return ToolResult(
             success=True,
