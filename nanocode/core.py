@@ -486,72 +486,47 @@ class AutonomousAgent:
             return max(info.max_output_tokens, OUTPUT_TOKEN_MAX)
         return None
 
-    def _init_llm_from_connector(self, default_connector: str, default_model: str, user_agent: str, proxy: str | None, registry):
-        """Initialize LLM from connector endpoint config."""
-        provider_config = self._find_endpoint_config(default_connector, default_model)
-        if provider_config:
-            model = provider_config.pop("model", default_model)
-            explicit_max_tokens = provider_config.pop("max_tokens", None)
-            logger.info(f"Using default_connector: {default_connector}, model: {model}")
-            logger.info(f"URL: {provider_config.get('base_url')}")
-
-            explicit_max_tokens = self._resolve_max_tokens(registry, model, default_connector, explicit_max_tokens)
-            from nanocode.llm import create_llm
-
-            self.llm = create_llm(
-                default_connector,
-                model=model,
-                user_agent=user_agent,
-                proxy=proxy,
-                debug=self.debug,
-                max_tokens=explicit_max_tokens,
-                **provider_config,
-            )
-            return True
-        logger.warning(f"Connector {default_connector} has no endpoint config")
-        return False
-
     def _init_llm(self):
-        """Initialize LLM provider."""
+        """Initialize LLM provider from config + profiles.
+
+        Resolution order:
+          1. Connector endpoint config (self.config.connectors) for overrides
+          2. Provider profile (nanocode/llm/profiles/) for defaults
+          3. create_llm() backward-compat explicit provider mapping
+        """
         default_model = self.config.get("llm.default_model")
         default_connector = self.config.default_connector
         user_agent = self.config.get("llm.user_agent", "nanocode/1.0")
         proxy = self.config.proxy
-
-        registry = self._load_registry()
 
         if not default_connector:
             raise ValueError("No default_connector configured. Set llm.default_connector in config.yaml")
         if not default_model:
             raise ValueError("No default_model configured. Set llm.default_model in config.yaml")
 
-        # Try connector endpoint config first
-        if default_connector in self.config.connectors:
-            if self._init_llm_from_connector(default_connector, default_model, user_agent, proxy, registry):
-                return
-        else:
-            logger.warning(f"Connector {default_connector} not in connectors: {list(self.config.connectors.keys())}")
-
-        # Fallback: use router from registry
-        from nanocode.llm.router import get_router
-
-        connectors = self.config.get("llm.connectors", {})
-        router = get_router()
-        for provider, config in connectors.items():
-            router.add_explicit_provider(provider, config)
-
-        provider_config = router.get_provider_config(default_model)
-        logger.info(f"Model: {default_model} -> Provider: {provider_config.provider}, URL: {provider_config.base_url}")
-
+        registry = self._load_registry()
         from nanocode.llm import create_llm
 
+        provider_kwargs = {}
+
+        endpoint_config = self._find_endpoint_config(default_connector, default_model)
+        if endpoint_config:
+            logger.info(f"Using connector: {default_connector}, model: {default_model}")
+            logger.info(f"URL: {endpoint_config.get('base_url')}")
+            max_tokens = endpoint_config.pop("max_tokens", None)
+            endpoint_config.pop("model", None)
+            provider_kwargs.update(endpoint_config)
+            max_tokens = self._resolve_max_tokens(registry, default_model, default_connector, max_tokens)
+            if max_tokens is not None:
+                provider_kwargs["max_tokens"] = max_tokens
+
         self.llm = create_llm(
-            provider_config.provider,
-            base_url=provider_config.base_url,
-            api_key=provider_config.api_key or "dummy",
-            model=provider_config.model,
+            default_connector,
+            model=default_model,
             user_agent=user_agent,
             proxy=proxy,
+            debug=self.debug,
+            **provider_kwargs,
         )
 
     def _init_pipeline(self):
@@ -805,7 +780,7 @@ class AutonomousAgent:
 
     def _init_mcp(self):
         """Initialize MCP connections."""
-        self.mcp_manager = MCPManager()
+        self.mcp_manager = MCPManager(call_llm=self._mcp_sampling_call_llm)
         self._mcp_available = {}
 
         mcp_servers = self.config.mcp_servers
@@ -813,6 +788,24 @@ class AutonomousAgent:
             self._mcp_available[name] = server_config.get("enabled", True)
             if self._mcp_available[name]:
                 self.mcp_manager.add_server(name, server_config)
+
+    async def _mcp_sampling_call_llm(
+        self,
+        messages: list,
+        system_prompt: str | None = None,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        tools: list[dict] | None = None,
+    ):
+        """Call the LLM for MCP sampling requests."""
+        if system_prompt:
+            messages = [{"role": "system", "content": system_prompt}, *messages]
+        kwargs = {}
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        return await self.llm.chat(messages, tools=tools, **kwargs)
 
     def _init_modified_files(self):
         """Initialize modified files tracker."""
