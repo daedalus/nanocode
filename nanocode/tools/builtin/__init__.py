@@ -761,6 +761,8 @@ class EditTool(Tool):
             if replaceAll:
                 if occurrence_count > 0:
                     new_content = content.replace(oldString, newString)
+                    from nanocode.tools.backup import backup_existing
+                    backup_existing(filePath)
                     def write_file():
                         with open(filePath, "w", encoding="utf-8") as f:
                             f.write(new_content)
@@ -785,6 +787,8 @@ class EditTool(Tool):
 
             if result.get("ok"):
                 new_content = result["new_content"]
+                from nanocode.tools.backup import backup_existing
+                backup_existing(filePath)
                 def write_file():
                     with open(filePath, "w", encoding="utf-8") as f:
                         f.write(new_content)
@@ -1126,6 +1130,10 @@ class WriteFileTool(Tool):
                         content=None,
                         error=f"File not unlocked for write. Use read tool first: {path}",
                     )
+
+            # Pre-write backup
+            from nanocode.tools.backup import backup_existing
+            backup_existing(file_path)
 
             # Write the file
             atomic_write(file_path, content)
@@ -2317,10 +2325,11 @@ class QuestionTool(Tool):
 def create_builtin_tools(
     config: dict = None, file_tracker=None, lsp_manager=None, fs_router=None
 ) -> list[Tool]:
-    from nanocode.tools.builtin.exa_search import ExaFetchTool, ExaSearchTool
-    from nanocode.tools.builtin.free_search import FreeExaSearchTool, OpenWebSearchTool
-    from nanocode.tools.builtin.edit_symbol import EditSymbolTool
     from nanocode.codebase_index.tool import SearchCodebaseTool
+    from nanocode.tools.builtin.edit_symbol import EditSymbolTool
+    from nanocode.tools.builtin.exa_search import ExaFetchTool, ExaSearchTool
+    from nanocode.tools.builtin.find_usages import FindUsagesTool
+    from nanocode.tools.builtin.free_search import FreeExaSearchTool, OpenWebSearchTool
 
     exa_config = config.get("exa", {}) if config else {}
     
@@ -2368,6 +2377,7 @@ def create_builtin_tools(
         DiffTool(),
         # Aura-IDE ported tools
         EditSymbolTool(),
+        FindUsagesTool(),
         SearchCodebaseTool(),
     ]
     return tools

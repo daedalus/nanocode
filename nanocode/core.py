@@ -762,6 +762,13 @@ class AutonomousAgent:
                 prompt += f"\n\n# From {f.name}\n"
                 prompt += f.read_text()
 
+        # Compose negative-prompting blocks
+        try:
+            from nanocode.prompts.blocks import compose_negative_blocks
+            prompt += "\n\n" + compose_negative_blocks()
+        except Exception:
+            pass
+
         # Check for AGENTS.md in cwd or parent
         for agents_file in [Path(cwd) / "AGENTS.md", Path(cwd).parent / "AGENTS.md"]:
             if agents_file.exists():
