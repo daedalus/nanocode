@@ -218,13 +218,12 @@ class TestEditTool:
         assert result.success is True
         assert "filePath" in result.metadata
         assert "replacements" in result.metadata
-        assert "replaceAll" in result.metadata
-        assert result.metadata["replaceAll"] is False
+        assert result.metadata["replacements"] == 1
 
     def test_tool_properties(self, tool):
         """Test tool has correct name and description."""
         assert tool.name == "edit"
-        assert "exact text replacement" in tool.description.lower()
+        assert "4-tier matching" in tool.description or "exact text replacement" in tool.description.lower()
 
     def test_tool_schema(self, tool):
         """Test tool schema is valid."""

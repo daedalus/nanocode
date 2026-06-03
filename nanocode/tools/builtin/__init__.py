@@ -685,7 +685,7 @@ class SedTool(Tool):
 
 
 class EditTool(Tool):
-    """Edit file with exact text replacement."""
+    """Edit file with 4-tier matching (exact, line, fuzzy, nearest)."""
 
     def __init__(self, fs_router=None):
         parameters = {
@@ -697,7 +697,7 @@ class EditTool(Tool):
                 },
                 "oldString": {
                     "type": "string",
-                    "description": "Exact text to replace"
+                    "description": "Text to replace (supports fuzzy matching as fallback)"
                 },
                 "newString": {
                     "type": "string",
@@ -713,13 +713,13 @@ class EditTool(Tool):
         }
         super().__init__(
             name="edit",
-            description="Edit file with exact text replacement",
+            description="Edit file with exact text replacement. Uses 4-tier matching: exact -> line-by-line -> fuzzy -> nearest candidates",
             parameters=parameters
         )
         self.fs_router = fs_router
 
     async def execute(self, **kwargs) -> ToolResult:
-        """Execute the edit tool with given arguments."""
+        """Execute the edit tool with 4-tier matching."""
         filePath = kwargs.get("filePath")
         oldString = kwargs.get("oldString")
         newString = kwargs.get("newString")
@@ -756,37 +756,66 @@ class EditTool(Tool):
 
             content = await loop.run_in_executor(None, read_file)
 
+            # Try exact match first (fast path, backward compatible)
             occurrence_count = content.count(oldString)
-            if occurrence_count ==0:
-                return ToolResult.err(f"oldString not found in file: {oldString}")
+            if replaceAll:
+                if occurrence_count > 0:
+                    new_content = content.replace(oldString, newString)
+                    def write_file():
+                        with open(filePath, "w", encoding="utf-8") as f:
+                            f.write(new_content)
+                    await loop.run_in_executor(None, write_file)
+                    return ToolResult.ok(
+                        content=f"Successfully edited {filePath}. Replaced {occurrence_count} occurrence(s) (replaceAll).",
+                        metadata={"filePath": filePath, "replacements": occurrence_count, "replaceAll": True}
+                    )
+                else:
+                    return ToolResult.err(f"oldString not found in file: {oldString}")
 
-            if not replaceAll and occurrence_count > 1:
+            # If multiple exact matches, ask user to use replaceAll (backward compat)
+            if occurrence_count > 1:
                 return ToolResult.err(
                     f"Found {occurrence_count} matches for oldString. "
                     "Set replaceAll=True to replace all occurrences."
                 )
 
-            if replaceAll:
-                new_content = content.replace(oldString, newString)
-                replacements = occurrence_count
-            else:
-                new_content = content.replace(oldString, newString, 1)
-                replacements = 1
+            # Single replacement: use 4-tier matching
+            from nanocode.tools.builtin.edit import propose_edit
+            result = propose_edit(content, oldString, newString)
 
-            def write_file():
-                with open(filePath, "w", encoding="utf-8") as f:
-                    f.write(new_content)
+            if result.get("ok"):
+                new_content = result["new_content"]
+                def write_file():
+                    with open(filePath, "w", encoding="utf-8") as f:
+                        f.write(new_content)
+                await loop.run_in_executor(None, write_file)
 
-            await loop.run_in_executor(None, write_file)
+                match_tier = result.get("match_tier", "exact")
+                extra = ""
+                if result.get("sanitized"):
+                    extra = " (fences auto-stripped)"
+                if result.get("fuzzy_ratio"):
+                    extra = f" (ratio: {result['fuzzy_ratio']})"
 
-            return ToolResult.ok(
-                content=f"Successfully edited {filePath}. Replaced {replacements} occurrence(s).",
-                metadata={
-                    "filePath": filePath,
-                    "replacements": replacements,
-                    "replaceAll": replaceAll
-                }
-            )
+                return ToolResult.ok(
+                    content=f"Successfully edited {filePath} (match: {match_tier}{extra}).",
+                    metadata={
+                        "filePath": filePath,
+                        "match_tier": match_tier,
+                        "replacements": 1,
+                    }
+                )
+
+            # All tiers failed - return helpful error
+            error = result.get("error", "oldString not found")
+            nearest = result.get("nearest_candidates", [])
+            if nearest:
+                error += "\n\nNearest matching blocks:\n"
+                for nc in nearest:
+                    lines_preview = nc.get("text", "")[:200]
+                    error += f"  Lines {nc['start_line']}-{nc['end_line']}:\n    {lines_preview}\n"
+
+            return ToolResult.err(error)
 
         except UnicodeDecodeError:
             return ToolResult.err("File encoding not supported. Only UTF-8 is supported.")
@@ -2290,6 +2319,8 @@ def create_builtin_tools(
 ) -> list[Tool]:
     from nanocode.tools.builtin.exa_search import ExaFetchTool, ExaSearchTool
     from nanocode.tools.builtin.free_search import FreeExaSearchTool, OpenWebSearchTool
+    from nanocode.tools.builtin.edit_symbol import EditSymbolTool
+    from nanocode.codebase_index.tool import SearchCodebaseTool
 
     exa_config = config.get("exa", {}) if config else {}
     
@@ -2335,6 +2366,9 @@ def create_builtin_tools(
         # Text tools
         SedTool(),
         DiffTool(),
+        # Aura-IDE ported tools
+        EditSymbolTool(),
+        SearchCodebaseTool(),
     ]
     return tools
 
