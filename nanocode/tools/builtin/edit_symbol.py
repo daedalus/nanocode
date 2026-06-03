@@ -33,60 +33,44 @@ def _collect_available_symbols(tree: ast.AST) -> dict[str, list[str]]:
     return available
 
 
-def find_symbol_range(
-    source: str,
-    symbol_type: str,
-    symbol_name: str,
-    class_name: str | None = None,
-    filename: str = "<unknown>",
+def _symbol_start_line(node: ast.AST) -> int:
+    """Return 0-indexed start line accounting for decorators."""
+    start = node.lineno - 1
+    if hasattr(node, "decorator_list") and node.decorator_list:
+        start = node.decorator_list[0].lineno - 1
+    return start
+
+
+def _symbol_end_line(node: ast.AST, start_line: int) -> int:
+    """Return exclusive end line with fallback."""
+    return node.end_lineno or (start_line + 1)
+
+
+def _find_method(
+    tree: ast.Module, class_name: str, symbol_name: str, warning: str | None,
+    available: dict[str, list[str]]
 ) -> tuple[int, int, dict]:
-    """Locate a Python symbol in source and return its 0-indexed line range.
-
-    Args:
-        source: The full file content as a string.
-        symbol_type: "function", "class", or "method".
-            If "function" and class_name is provided, treated as "method".
-        symbol_name: The name of the symbol to locate.
-        class_name: Required when symbol_type is "method".
-
-    Returns:
-        (start_line, end_line, info_dict) where start_line and end_line
-        are 0-indexed (exclusive end).
-        If not found, start_line=-1, end_line=-1.
-    """
-    tree = parse_python_ast(source, filename=filename)
-    warning = None
-
-    effective_type = symbol_type
-    if symbol_type == "function" and class_name:
-        effective_type = "method"
-
-    available = _collect_available_symbols(tree)
-
-    if effective_type == "method":
-        if not class_name:
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == symbol_name:
+                    start = _symbol_start_line(child)
+                    end = _symbol_end_line(child, start)
+                    return (start, end, {"warning": warning})
             return (-1, -1, {
-                "error": "class_name is required when symbol_type is 'method'",
+                "error": f"Method '{symbol_name}' not found in class '{class_name}'",
                 "available_symbols": available,
             })
-        for node in ast.iter_child_nodes(tree):
-            if isinstance(node, ast.ClassDef) and node.name == class_name:
-                for child in ast.iter_child_nodes(node):
-                    if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == symbol_name:
-                        start = child.lineno - 1
-                        if hasattr(child, "decorator_list") and child.decorator_list:
-                            start = child.decorator_list[0].lineno - 1
-                        end = child.end_lineno or (start + 1)
-                        return (start, end, {"warning": warning})
-                return (-1, -1, {
-                    "error": f"Method '{symbol_name}' not found in class '{class_name}'",
-                    "available_symbols": available,
-                })
-        return (-1, -1, {
-            "error": f"Class '{class_name}' not found",
-            "available_symbols": available,
-        })
+    return (-1, -1, {
+        "error": f"Class '{class_name}' not found",
+        "available_symbols": available,
+    })
 
+
+def _find_top_level_symbol(
+    tree: ast.Module, effective_type: str, symbol_name: str, warning: str | None,
+    available: dict[str, list[str]]
+) -> tuple[int, int, dict]:
     found_nodes: list[ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef] = []
     for node in ast.iter_child_nodes(tree):
         if effective_type == "function" and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -100,20 +84,90 @@ def find_symbol_range(
         if len(found_nodes) > 1:
             warning = f"Multiple symbols named '{symbol_name}' found; using first occurrence"
         found = found_nodes[0]
-        start = found.lineno - 1
-        if hasattr(found, "decorator_list") and found.decorator_list:
-            start = found.decorator_list[0].lineno - 1
-        end = found.end_lineno or (start + 1)
+        start = _symbol_start_line(found)
+        end = _symbol_end_line(found, start)
         return (start, end, {"warning": warning})
 
     return (-1, -1, {
         "error": (
-            f"Symbol '{symbol_name}' of type '{symbol_type}' not found. "
+            f"Symbol '{symbol_name}' of type '{effective_type}' not found. "
             f"Available top-level functions: {available['functions']}. "
             f"Available classes: {available['classes']}."
         ),
         "available_symbols": available,
     })
+
+
+def find_symbol_range(
+    source: str,
+    symbol_type: str,
+    symbol_name: str,
+    class_name: str | None = None,
+    filename: str = "<unknown>",
+) -> tuple[int, int, dict]:
+    """Locate a Python symbol in source and return its 0-indexed line range."""
+    tree = parse_python_ast(source, filename=filename)
+    warning: str | None = None
+
+    effective_type = symbol_type
+    if symbol_type == "function" and class_name:
+        effective_type = "method"
+
+    available = _collect_available_symbols(tree)
+
+    if effective_type == "method":
+        if not class_name:
+            return (-1, -1, {
+                "error": "class_name is required when symbol_type is 'method'",
+                "available_symbols": available,
+            })
+        return _find_method(tree, class_name, symbol_name, warning, available)
+
+    return _find_top_level_symbol(tree, effective_type, symbol_name, warning, available)
+
+
+def _validate_python_file(file_path: Path) -> dict | None:
+    """Validate file_path is an existing .py file. Returns error dict or None."""
+    if not file_path.exists():
+        return {
+            "ok": False, "error": f"file not found: {file_path}",
+            "old_content": "", "new_content": "",
+        }
+    if not file_path.is_file():
+        return {
+            "ok": False, "error": f"not a regular file: {file_path}",
+            "old_content": "", "new_content": "",
+        }
+    if file_path.suffix != ".py":
+        return {
+            "ok": False,
+            "error": "edit_symbol only supports Python (.py) files. Use edit for other languages.",
+            "old_content": "", "new_content": "",
+        }
+    return None
+
+
+def _auto_indent_definition(orig_block: str, new_definition: str) -> str:
+    """Indent new_definition to match the original block's indentation."""
+    first_orig_line = orig_block.split("\n", 1)[0]
+    orig_indent = first_orig_line[: len(first_orig_line) - len(first_orig_line.lstrip())]
+    if orig_indent:
+        first_new_line = new_definition.split("\n", 1)[0]
+        if not first_new_line.startswith(orig_indent):
+            new_definition = "\n".join(
+                (orig_indent + line) if line else ""
+                for line in new_definition.split("\n")
+            )
+    return new_definition
+
+
+def _normalize_trailing_newline(orig_block: str, new_definition: str) -> str:
+    """Match trailing newline of the original block."""
+    if orig_block.endswith("\n") and not new_definition.endswith("\n"):
+        return new_definition + "\n"
+    if not orig_block.endswith("\n") and new_definition.endswith("\n"):
+        return new_definition.rstrip("\n")
+    return new_definition
 
 
 def propose_edit_symbol(
@@ -123,52 +177,19 @@ def propose_edit_symbol(
     new_definition: str,
     class_name: str | None = None,
 ) -> dict:
-    """Replace a named Python symbol (function, class, or method) using AST.
-
-    Args:
-        file_path: Path to the .py file.
-        symbol_type: "function", "class", or "method".
-        symbol_name: Name of the symbol to replace.
-        new_definition: The complete new definition.
-        class_name: Required when symbol_type is "method".
-
-    Returns:
-        Dict with ok, new_content, old_content, match_tier etc.
-    """
-    # Validation
-    if not file_path.exists():
-        return {
-            "ok": False,
-            "error": f"file not found: {file_path}",
-            "old_content": "",
-            "new_content": "",
-        }
-    if not file_path.is_file():
-        return {
-            "ok": False,
-            "error": f"not a regular file: {file_path}",
-            "old_content": "",
-            "new_content": "",
-        }
-    if file_path.suffix != ".py":
-        return {
-            "ok": False,
-            "error": "edit_symbol only supports Python (.py) files. Use edit for other languages.",
-            "old_content": "",
-            "new_content": "",
-        }
+    """Replace a named Python symbol (function, class, or method) using AST."""
+    error = _validate_python_file(file_path)
+    if error:
+        return error
 
     try:
         original = file_path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return {
-            "ok": False,
-            "error": "file is not valid UTF-8 text",
-            "old_content": "",
-            "new_content": "",
+            "ok": False, "error": "file is not valid UTF-8 text",
+            "old_content": "", "new_content": "",
         }
 
-    # Parse and locate symbol
     try:
         start_line, end_line, info = find_symbol_range(
             original, symbol_type, symbol_name, class_name, filename=str(file_path)
@@ -177,57 +198,35 @@ def propose_edit_symbol(
         return {
             "ok": False,
             "error": f"Syntax error in file: {exc}",
-            "old_content": original,
-            "new_content": "",
+            "old_content": original, "new_content": "",
         }
 
     if start_line == -1:
         return {
             "ok": False,
             "error": info.get("error", f"Symbol '{symbol_name}' not found"),
-            "old_content": original,
-            "new_content": "",
+            "old_content": original, "new_content": "",
             "available_symbols": info.get("available_symbols", {}),
         }
 
-    # Compute replacement
     lines_with_nl = original.splitlines(keepends=True)
     orig_block = "".join(lines_with_nl[start_line:end_line])
-
-    # Auto-indent new_definition to match original indentation
-    first_orig_line = orig_block.split("\n", 1)[0]
-    orig_indent = first_orig_line[: len(first_orig_line) - len(first_orig_line.lstrip())]
-    if orig_indent:
-        first_new_line = new_definition.split("\n", 1)[0]
-        if not first_new_line.startswith(orig_indent):
-            indented = "\n".join(
-                (orig_indent + line) if line else ""
-                for line in new_definition.split("\n")
-            )
-            new_definition = indented
-
-    # Normalise trailing newline
-    orig_ends_with_nl = orig_block.endswith("\n")
-    if orig_ends_with_nl and not new_definition.endswith("\n"):
-        new_definition = new_definition + "\n"
-    elif not orig_ends_with_nl and new_definition.endswith("\n"):
-        new_definition = new_definition.rstrip("\n")
+    new_definition = _auto_indent_definition(orig_block, new_definition)
+    new_definition = _normalize_trailing_newline(orig_block, new_definition)
 
     from nanocode.tools.builtin.edit import replace_line_range
     new_content = replace_line_range(original, lines_with_nl, start_line, end_line, new_definition)
 
-    # Validate replacement produces valid Python
     try:
         parse_python_ast(new_content, filename=str(file_path))
     except SyntaxError as exc:
         return {
             "ok": False,
             "error": f"Proposed replacement makes the file invalid: {exc}",
-            "old_content": original,
-            "new_content": "",
+            "old_content": original, "new_content": "",
         }
 
-    result = {
+    result: dict = {
         "ok": True,
         "old_content": original,
         "new_content": new_content,
