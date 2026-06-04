@@ -71,7 +71,10 @@ class OpenAILLM(LLMBase):
         import json
         try:
             event = json.loads(data)
-            choice = event.get("choices", [{}])[0]
+            choices = event.get("choices")
+            if not choices:
+                return
+            choice = choices[0]
             delta = choice.get("delta", {})
 
             reasoning = delta.get("reasoning", "") or delta.get("reasoning", "")
