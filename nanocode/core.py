@@ -118,9 +118,12 @@ def _load_system_prompt_template() -> str:
 SYSTEM_PROMPT_TEMPLATE = _load_system_prompt_template()
 
 logger = logging.getLogger("nanocode.agent")
-logger = logging.getLogger("nanocode.agent")
 tool_logger = logging.getLogger("nanocode.tools")
 cache_logger = logging.getLogger("nanocode.cache")
+
+# Trace logger that writes to stderr (bypasses _capture_io root logger override)
+import sys as _sys
+_trace = lambda msg: _sys.__stderr__.write(f"[TRACE] {msg}\n") or _sys.__stderr__.flush()
 
 
 class SessionLoggerAdapter(logging.LoggerAdapter):
@@ -1548,7 +1551,9 @@ Conversation:
 
     async def _make_first_llm_request(self, messages: list, tools: list, user_input: str, agent_name: str):
         """Make first LLM request or return cached response."""
+        _trace("_make_first_llm_request START")
         cached_response = self._check_cache(messages, tools)
+        _trace(f"  cache_check: {'HIT' if cached_response else 'MISS'}")
         logger.debug(f"[DEBUG] User input: '{user_input}'")
         logger.debug(f"[DEBUG] Context messages before LLM: {len(messages)}")
         if cached_response:
@@ -1560,15 +1565,18 @@ Conversation:
             return cached_response
 
         session_id = getattr(self.context_manager, "session_id", "default")
+        _trace(f"  calling pipeline.process_stream (session={session_id}, n_messages={len(messages)})")
         message = await self.pipeline.process_stream(
             session_id=session_id,
             messages=messages,
             tools=tools,
             on_token=self._on_token,
         )
+        _trace(f"  pipeline returned, message has {len(message.parts)} parts")
         self._last_message = message
         self._put_cache(messages, tools, message)
         response = self.pipeline.to_llm_response(message)
+        _trace(f"  LLM response: has_tool_calls={response.has_tool_calls}, content_len={len(response.content or '')}")
         logger.info(f"[{agent_name}] LLM response received")
         logger.info(f"[{agent_name}] Thinking: {response.thinking[:100] if response.thinking else 'None'}...")
         return response
@@ -1877,13 +1885,17 @@ Conversation:
             self._all_thinking = []
 
             logger.debug(f"[{agent_name}] Sending request to LLM...")
+            _trace("_process_input_impl: calling _make_first_llm_request")
             response = await self._make_first_llm_request(messages, tools, user_input, agent_name)
+            _trace(f"_process_input_impl: got response, has_tool_calls={response.has_tool_calls}, content={response.content[:80] if response.content else 'empty'!r}")
             self._display_llm_response(response, show_messages, show_thinking)
 
             if response.has_tool_calls:
+                _trace(f"_process_input_impl: handling tool calls: {[tc.name for tc in response.tool_calls]}")
                 content, tool_results_history = await self._handle_tool_call_response_flow(
                     response, tools, show_thinking, agent_name
                 )
+                _trace(f"_process_input_impl: tool flow done, content empty={not content}, n_tool_results={len(tool_results_history)}")
             else:
                 content = response.content
 
@@ -1902,6 +1914,7 @@ Conversation:
 
             augmented = self._build_augmented_content(content, response, tool_results_history, show_messages)
             augmented = await self._handle_pending_todos_flow(augmented, tools, agent_name)
+            _trace(f"_process_input_impl: augmented len={len(augmented)}, content empty={not content}, tool_results={len(tool_results_history)}")
 
             self.state.state = AgentState.COMPLETE
             asyncio.create_task(self._spawn_background_review())
