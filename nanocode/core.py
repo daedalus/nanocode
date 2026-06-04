@@ -514,11 +514,13 @@ class AutonomousAgent:
             logger.info(f"Using connector: {default_connector}, model: {default_model}")
             logger.info(f"URL: {endpoint_config.get('base_url')}")
             max_tokens = endpoint_config.pop("max_tokens", None)
-            endpoint_config.pop("model", None)
+            endpoint_model = endpoint_config.pop("model", None)
             provider_kwargs.update(endpoint_config)
             max_tokens = self._resolve_max_tokens(registry, default_model, default_connector, max_tokens)
             if max_tokens is not None:
                 provider_kwargs["max_tokens"] = max_tokens
+            if endpoint_model:
+                default_model = endpoint_model
 
         self.llm = create_llm(
             default_connector,

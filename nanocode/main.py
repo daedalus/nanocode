@@ -4,6 +4,7 @@
 import argparse
 import asyncio
 import atexit
+import logging
 import os
 from pathlib import Path
 
@@ -473,6 +474,9 @@ def _get_log_file_path(args):
 
 def _configure_file_logging(log_file: str, gui_mode: str = None, debug_arg: str = None):
     """Set up logging with file handler. Optionally add stream handler."""
+    log_dir = os.path.dirname(log_file)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
     handlers = [logging.FileHandler(log_file)]
     if debug_arg and gui_mode != "textual":
         handlers.append(logging.StreamHandler())
@@ -495,7 +499,6 @@ def _configure_filtered_logging(concerns: list[str], log_file: str, gui_mode: st
 
 def _setup_logging(args, gui_mode: str):
     """Configure logging based on --debug, --log-file, and UI mode."""
-    import logging
     log_file = _get_log_file_path(args)
     debug_arg = args.debug
     if debug_arg:

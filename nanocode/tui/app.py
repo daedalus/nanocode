@@ -2117,13 +2117,13 @@ Footer {
         }
         return icons.get(tool_name, "⚙")
 
-    def action_submit(self):
+    async def action_submit(self):
         """Handle send action."""
         input_widget = self.query_one("#input", Input)
         text = input_widget.value.strip()
         if text:
             input_widget.value = ""
-            self._process_input(text)
+            await self._process_input(text)
 
     def action_interrupt(self):
         """Handle interrupt (Ctrl+C)."""
@@ -2300,7 +2300,7 @@ Footer {
         """Handle input changes."""
         pass
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle input submission."""
         text = event.value.strip()
         if text:
@@ -2308,7 +2308,7 @@ Footer {
             self._history_index = len(self._input_history)
             self._save_input_history()
             event.input.value = ""
-            self._process_input(text)
+            await self._process_input(text)
 
     def _history_up(self):
         """Navigate history up (previous command)."""
@@ -2330,7 +2330,6 @@ Footer {
             input_widget.value = ""
             input_widget.cursor_position = 0
 
-    @work(exclusive=True)
     async def _setup_processing_state(self, text: str):
         """Set up processing state before agent call."""
         self._processing = True
@@ -2552,7 +2551,6 @@ Footer {
                 parts.append(f"{mins}m {secs:.0f}s")
         self._print_line(f"│ {' | '.join(parts)}", Style.TEXT_DIM)
 
-    @work(exclusive=True)
     async def _process_input(self, text: str):
         _tui_logger.debug(f"Processing input: {text[:50]!r}")
 
