@@ -132,6 +132,12 @@ class OpenAILLM(LLMBase):
         accumulated_tool_calls = {}
 
         async with self._client.stream("POST", f"{self.base_url}/chat/completions", json=payload, headers=headers) as response:
+            if response.status_code != 200:
+                error_body = await response.aread()
+                logger.error(f"LLM API error {response.status_code}: {error_body.decode()}")
+                raise RuntimeError(
+                    f"LLM API returned {response.status_code}: {error_body.decode()}"
+                )
             async for line in response.aiter_lines():
                 async for event in self._handle_stream_line(line, accumulated_tool_calls):
                     yield event

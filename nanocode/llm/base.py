@@ -121,11 +121,13 @@ class LLMResponse:
         tool_calls: list[ToolCall] = None,
         finish_reason: str = None,
         thinking: str = None,
+        error: str = None,
     ):
         self.content = content
         self.tool_calls = tool_calls or []
         self.finish_reason = finish_reason
         self.thinking = thinking
+        self.error = error
 
     @property
     def has_tool_calls(self) -> bool:
@@ -158,6 +160,13 @@ class LLMBase(ABC):
         self.user_agent = user_agent or "nanocode/1.0"
         self.debug = debug
         self.proxy = proxy
+
+        if proxy and isinstance(proxy, str) and "172.0.0.1" in proxy:
+            logger.warning(
+                "Proxy '%s' contains '172.0.0.1' — possible typo for '127.0.0.1' (localhost). "
+                "Use --proxy http://127.0.0.1:8118 to fix.",
+                proxy,
+            )
 
         # Create persistent client with connection pooling
         self._client = httpx.AsyncClient(

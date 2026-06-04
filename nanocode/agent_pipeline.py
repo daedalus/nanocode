@@ -208,10 +208,18 @@ class AgentPipeline:
         content = self.get_text_content(message)
         thinking = "\n\n".join(self.get_all_thinking(message))
         tool_calls = self.get_tool_calls(message)
-        
+
+        error = getattr(message, "error", None)
+        error_str = None
+        if error and isinstance(error, dict):
+            error_str = error.get("message", str(error))
+        elif error:
+            error_str = str(error)
+
         return LLMResponse(
             content=content,
             tool_calls=tool_calls,
             thinking=thinking,
             finish_reason=getattr(message, "finish", "stop"),
+            error=error_str,
         )

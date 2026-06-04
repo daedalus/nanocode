@@ -1584,7 +1584,11 @@ Conversation:
         self._last_message = message
         self._put_cache(messages, tools, message)
         response = self.pipeline.to_llm_response(message)
-        _trace(f"  LLM response: has_tool_calls={response.has_tool_calls}, content_len={len(response.content or '')}")
+        _trace(f"  LLM response: has_tool_calls={response.has_tool_calls}, content_len={len(response.content or '')}, error={response.error!r}")
+        if response.error:
+            err_msg = f"LLM API error: {response.error}"
+            logger.error(f"[{agent_name}] {err_msg}")
+            raise RuntimeError(err_msg)
         logger.info(f"[{agent_name}] LLM response received")
         logger.info(f"[{agent_name}] Thinking: {response.thinking[:100] if response.thinking else 'None'}...")
         return response
@@ -1975,7 +1979,11 @@ Conversation:
         )
         
         # Convert Message to LLMResponse for backward compatibility
-        return self.pipeline.to_llm_response(message)
+        response = self.pipeline.to_llm_response(message)
+        if response.error:
+            logger.error(f"LLM pipeline error in _chat_with_pipeline: {response.error}")
+            raise RuntimeError(f"LLM API error: {response.error}")
+        return response
 
     async def execute_task(self, task: str) -> dict:
         """Execute a long-horizon task with planning."""

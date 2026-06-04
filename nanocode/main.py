@@ -376,12 +376,34 @@ async def _print_system_prompt(args):
     print(agent._build_system_prompt())
 
 
+def _validate_proxy_url(proxy: str) -> str:
+    """Validate proxy URL and warn about common typos."""
+    from urllib.parse import urlparse
+    parsed = urlparse(proxy)
+    if not parsed.scheme:
+        return f"http://{proxy}"
+    host = parsed.hostname
+    if host == "172.0.0.1":
+        import warnings
+        warnings.warn(
+            "Proxy host '172.0.0.1' looks like a typo for '127.0.0.1' (localhost). "
+            f"Using '{proxy}' as-is, but verify this is correct."
+        )
+    if host and not host.replace(".", "").isdigit():
+        # Not an IP — could be a hostname like proxy.local
+        pass
+    return proxy
+
+
 def _apply_config_overrides(args, config):
     """Apply CLI argument overrides to config."""
     if args.no_proxy:
         config.set("proxy", None)
     elif args.proxy:
-        config.set("proxy", args.proxy)
+        validated = _validate_proxy_url(args.proxy)
+        if validated != args.proxy:
+            logger.warning(f"Proxy URL adjusted: '{args.proxy}' → '{validated}'")
+        config.set("proxy", validated)
     if args.user_agent:
         config.set("user_agent", args.user_agent)
     if getattr(args, "cache", False):
