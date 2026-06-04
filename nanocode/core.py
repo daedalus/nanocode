@@ -122,9 +122,16 @@ tool_logger = logging.getLogger("nanocode.tools")
 cache_logger = logging.getLogger("nanocode.cache")
 
 # Trace logger that writes to a file (bypasses all capture/redirect)
-import sys as _sys
-_trace_fh = open("/tmp/nanocode_trace.log", "a")
-_trace = lambda msg: _trace_fh.write(f"[TRACE] {msg}\n") or _trace_fh.flush()
+import os as _trace_os
+_TRACE_PATH = "/tmp/nanocode_trace.log"
+def _trace(msg):
+    try:
+        with open(_TRACE_PATH, "a") as _f:
+            _f.write(f"[TRACE] {msg}\n")
+    except Exception:
+        pass
+
+_trace(f"core.py loaded, pid={_trace_os.getpid()}")
 
 
 class SessionLoggerAdapter(logging.LoggerAdapter):
