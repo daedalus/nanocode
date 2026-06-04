@@ -244,3 +244,56 @@ class TestMessageParts:
         assert part.tool == "bash"
         assert part.state["status"] == "pending"
         assert part.type == PartType.TOOL
+
+
+class TestPipelineModule:
+    """Tests for nanocode/pipeline.py module."""
+
+    def test_create_pipeline(self):
+        """Test create_pipeline returns an AgentPipeline."""
+        from nanocode.pipeline import create_pipeline
+        from unittest.mock import MagicMock
+
+        mock_llm = MagicMock()
+        pipeline = create_pipeline(mock_llm)
+        from nanocode.pipeline import AgentPipeline
+
+        assert isinstance(pipeline, AgentPipeline)
+
+    def test_pipeline_init(self):
+        """Test AgentPipeline initialization."""
+        from nanocode.pipeline import AgentPipeline
+        from unittest.mock import MagicMock
+
+        mock_llm = MagicMock()
+        mock_processor = MagicMock()
+        pipeline = AgentPipeline(llm=mock_llm, processor=mock_processor)
+        assert pipeline.llm is mock_llm
+        assert pipeline.processor is mock_processor
+
+    @pytest.mark.asyncio
+    async def test_pipeline_run(self):
+        """Test AgentPipeline.run calls chat_stream and processes events."""
+        from nanocode.pipeline import AgentPipeline
+        from unittest.mock import AsyncMock, MagicMock
+
+        async def empty_stream(*args, **kwargs):
+            """Async generator that yields nothing."""
+            return
+            yield  # pragma: no cover
+
+        mock_llm = MagicMock()
+        mock_llm.chat_stream = empty_stream
+
+        mock_processor = MagicMock()
+        mock_processor._handle_event = AsyncMock()
+
+        pipeline = AgentPipeline(llm=mock_llm, processor=mock_processor)
+        msg = await pipeline.run(
+            session_id="test-session",
+            user_input="hello",
+            tools=[],
+        )
+        assert msg.role == "assistant"
+        assert msg.session_id == "test-session"
+        assert msg.time_completed is not None

@@ -4,10 +4,6 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from nanocode.messaging.slack import SlackPlatform, create_slack_platform
-from nanocode.messaging.telegram import TelegramPlatform, create_telegram_platform
-from nanocode.messaging.whatsapp import WhatsAppPlatform, create_whatsapp_platform
-
 
 @dataclass
 class Message:
@@ -107,6 +103,11 @@ class MessagingManager:
         """Stop all registered platforms."""
         for platform in self.platforms.values():
             await platform.stop()
+
+
+from nanocode.messaging.slack import SlackPlatform, create_slack_platform  # noqa: E402
+from nanocode.messaging.telegram import TelegramPlatform, create_telegram_platform  # noqa: E402
+from nanocode.messaging.whatsapp import WhatsAppPlatform, create_whatsapp_platform  # noqa: E402
 
 
 __all__ = [

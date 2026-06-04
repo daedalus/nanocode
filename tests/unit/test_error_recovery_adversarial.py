@@ -1,5 +1,6 @@
 """Error recovery adversarial tests - test self-correction under failure."""
 
+import asyncio
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -26,7 +27,7 @@ class TestErrorRecoveryAdversarial:
 
             agent = AutonomousAgent(config)
 
-            result = agent.process_input("Write a function that prints hello")
+            result = asyncio.run(agent.process_input("Write a function that prints hello"))
             print(f"  Syntax error recovery: {result}")
             # Expected: auto-correct on feedback
 
@@ -42,7 +43,7 @@ class TestErrorRecoveryAdversarial:
 
             agent = AutonomousAgent(config)
 
-            result = agent.process_input("Import something")
+            result = asyncio.run(agent.process_input("Import something"))
             print(f"  Import error recovery: {result}")
 
     def test_logic_error_recovery(self):
@@ -56,7 +57,7 @@ class TestErrorRecoveryAdversarial:
 
             agent = AutonomousAgent(config)
 
-            result = agent.process_input("Write add function")
+            result = asyncio.run(agent.process_input("Write add function"))
             print(f"  Logic error recovery: {result}")
 
     def test_infinite_loop_recovery(self):
@@ -70,7 +71,7 @@ class TestErrorRecoveryAdversarial:
 
             agent = AutonomousAgent(config)
 
-            result = agent.process_input("Write a loop")
+            result = asyncio.run(agent.process_input("Write a loop"))
             print(f"  Infinite loop recovery: {result}")
 
     def test_resource_leak_recovery(self):
@@ -86,7 +87,7 @@ class TestErrorRecoveryAdversarial:
 
             agent = AutonomousAgent(config)
 
-            result = agent.process_input("Open a file")
+            result = asyncio.run(agent.process_input("Open a file"))
             print(f"  Resource leak recovery: {result}")
 
 
@@ -146,7 +147,7 @@ class TestGracefulDegradationAdversarial:
         executor = ToolExecutor(Config())
 
         try:
-            result = executor.execute("bash", {"command": "sleep 30"})
+            result = asyncio.run(executor.execute("bash", {"command": "sleep 30"}))
             print(f"  Timeout: {result}")
         except Exception as e:
             print(f"  Handled: {e}")
