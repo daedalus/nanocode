@@ -28,6 +28,15 @@ from nanocode.tools import ToolCall
 
 logger = logging.getLogger("nanocode.agent_pipeline")
 
+# Trace to file (bypasses root logger override)
+_TRACE_PATH = "/tmp/nanocode_trace.log"
+def _trace(msg):
+    try:
+        with open(_TRACE_PATH, "a") as f:
+            f.write(f"[TRACE-PIPELINE] {msg}\n")
+    except Exception:
+        pass
+
 
 class AgentPipeline:
     """Opencode-matching LLM → Agent pipeline.
@@ -109,6 +118,9 @@ class AgentPipeline:
                     break
 
         except Exception as e:
+            _trace(f"STREAM EXCEPTION: {type(e).__name__}: {e}")
+            import traceback
+            _trace(f"STREAM TRACEBACK: {traceback.format_exc()}")
             logger.error(f"Stream processing failed: {e}")
             assistant_msg.error = {"name": "StreamError", "message": str(e)}
             return assistant_msg
