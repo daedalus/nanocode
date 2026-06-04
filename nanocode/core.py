@@ -121,9 +121,10 @@ logger = logging.getLogger("nanocode.agent")
 tool_logger = logging.getLogger("nanocode.tools")
 cache_logger = logging.getLogger("nanocode.cache")
 
-# Trace logger that writes to stderr (bypasses _capture_io root logger override)
+# Trace logger that writes to a file (bypasses all capture/redirect)
 import sys as _sys
-_trace = lambda msg: _sys.__stderr__.write(f"[TRACE] {msg}\n") or _sys.__stderr__.flush()
+_trace_fh = open("/tmp/nanocode_trace.log", "a")
+_trace = lambda msg: _trace_fh.write(f"[TRACE] {msg}\n") or _trace_fh.flush()
 
 
 class SessionLoggerAdapter(logging.LoggerAdapter):
@@ -1869,7 +1870,9 @@ Conversation:
         on_tool_complete: callable = None,
     ) -> str:
         """Process a user input through the agent."""
+        _trace("_process_input_impl ENTERED")
         agent_name = self._setup_processing(user_input, on_token, on_tool_start, on_tool_complete)
+        _trace(f"_process_input_impl agent_name={agent_name}")
         tool_results_history = []
         _start_time = time.monotonic()
 
