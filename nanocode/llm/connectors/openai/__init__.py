@@ -77,12 +77,13 @@ class OpenAILLM(LLMBase):
             choice = choices[0]
             delta = choice.get("delta", {})
 
-            reasoning = delta.get("reasoning", "") or delta.get("reasoning", "")
+            reasoning = delta.get("reasoning") or delta.get("reasoning_content") or ""
             if reasoning:
                 yield ReasoningDeltaEvent(id="reasoning_0", text=reasoning)
 
-            if "content" in delta and delta["content"]:
-                yield TextDeltaEvent(text=delta["content"])
+            content = delta.get("content")
+            if content:
+                yield TextDeltaEvent(text=content)
 
             if "tool_calls" in delta:
                 for tc in delta["tool_calls"]:
