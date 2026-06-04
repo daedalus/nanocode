@@ -1624,7 +1624,7 @@ Conversation:
         """Run a single tool-call iteration. Returns next final_response."""
         is_last_step = iteration >= max_agent_steps
 
-        if hasattr(self, "snapshot_manager") and self.snapshot_manager.enabled:
+        if hasattr(self, "snapshot_manager") and getattr(self.snapshot_manager, "enabled", True):
             try:
                 last_snapshot_hash = await self.snapshot_manager.track()
                 if last_snapshot_hash and self.debug:
