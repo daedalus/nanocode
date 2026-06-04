@@ -1786,6 +1786,7 @@ Footer {
             return
 
         output_area = self.query_one("#output-area", RichLog)
+        _tui_logger.debug(f"_update_stream_display: writing {len(self._stream_buffer)} chars")
         # Remove the timer so it can be rescheduled
         if hasattr(self, "_stream_timer") and self._stream_timer:
             self._stream_timer.stop()
@@ -2408,18 +2409,22 @@ Footer {
                 self.push_screen(TracebackScreen("Timeout Error", traceback.format_exc()))
                 result = None
             except Exception as e:
+                import traceback
                 _tui_logger.debug(f"EXCEPTION in process_input: {e}")
+                _tui_logger.debug(f"TRACEBACK: {traceback.format_exc()}")
                 self._print_line(f"Error: {e}", Style.TEXT_DANGER)
                 result = None
         finally:
             self._capture_io_restore(stdout_capture, stderr_capture, root_logger, old_level, datetime_mod)
 
         self.agent.debug = original_debug
+        _tui_logger.debug(f"_call_agent_process returning: result_type={type(result).__name__}, result_none={result is None}, result_len={len(result) if result else 0}, result_preview={result[:100] if result else ''!r}")
         return result
 
     def _on_token(self, token: str):
         self._was_streamed = True
         self._stream_buffer += token
+        _tui_logger.debug(f"_on_token: {token[:80]!r}")
         if self._stream_timer is None:
             self._stream_timer = self.set_interval(0.1, self._update_stream_display)
 
@@ -2506,15 +2511,18 @@ Footer {
             self._print_line(f"~ {tool_call.icon} {tool_call.title} {tool_call.description} {status}", Style.TOOL_MESSAGE)
 
     def _display_thinking(self, result):
+        _tui_logger.debug(f"_display_thinking: show_thinking={self.show_thinking}, has_all_thinking={hasattr(self.agent, '_all_thinking')}")
         if not (self.show_thinking and hasattr(self.agent, "_all_thinking")):
             return
         all_thinking = getattr(self.agent, "_all_thinking", [])
+        _tui_logger.debug(f"_display_thinking: {len(all_thinking)} thinking items")
         for thinking in all_thinking:
             if thinking and thinking not in (result or ""):
                 self._print_line(f"| Thinking: {thinking}", Style.THINKING)
                 self._print_empty()
 
     def _display_response(self, result):
+        _tui_logger.debug(f"_display_response: _was_streamed={getattr(self, '_was_streamed', False)}, result={type(result).__name__}, len={len(result) if result else 0}")
         if not getattr(self, '_was_streamed', False) and result and len(result) > 0:
             _tui_logger.debug(f"Displaying result: len={len(result)}")
             try:
@@ -2558,6 +2566,7 @@ Footer {
 
         try:
             result = await self._call_agent_process(text)
+            _tui_logger.debug(f"_process_input: result_type={type(result).__name__}, result_len={len(result) if result else 0}")
 
             self._display_tool_results()
             self._display_thinking(result)
@@ -2603,6 +2612,7 @@ Footer {
         except Exception as e:
             _tui_logger.debug(f"Spinner cleanup error: {e}")
 
+        _tui_logger.debug(f"_was_streamed={getattr(self, '_was_streamed', False)}, _stream_buffer_len={len(getattr(self, '_stream_buffer', ''))}")
         if hasattr(self, "_stream_timer") and self._stream_timer:
             _tui_logger.debug("Stopping stream timer")
             self._stream_timer.stop()
