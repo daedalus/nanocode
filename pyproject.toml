@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
-    {name = "Daniel Clavijo", email = "dclavijo@email.com"}
+    {name = "Darío Clavijo", email = "dclavijo@email.com"}
 ]
 dependencies = [
     "httpx>=0.27.0",
