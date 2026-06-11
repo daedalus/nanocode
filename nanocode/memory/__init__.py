@@ -2,6 +2,14 @@
 
 from .indexer import MemoryIndexer
 from .reconciler import MemoryReconciler
-from .search import MemorySearch
+from .search import MemorySearch, SearchResult
+from .project_memory import ProjectMemory, MemoryEntry
 
-__all__ = ["MemoryIndexer", "MemoryReconciler", "MemorySearch"]
+__all__ = [
+    "MemoryIndexer",
+    "MemoryReconciler",
+    "MemorySearch",
+    "SearchResult",
+    "ProjectMemory",
+    "MemoryEntry",
+]
