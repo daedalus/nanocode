@@ -10,6 +10,11 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from nanocode.hooks import HookAction, HookEvent, HookManager, HookResult
+from nanocode.tools.parallel import (
+    ToolParallelismManager,
+    ToolAccessMode,
+    get_parallelism_manager,
+)
 
 logger = logging.getLogger("nanocode.tools")
 
@@ -331,11 +336,21 @@ class ToolRegistry:
 class ToolExecutor:
     """Executes tools with proper error handling and result formatting."""
 
-    def __init__(self, registry: ToolRegistry, hook_manager: HookManager | None = None):
+    def __init__(
+        self,
+        registry: ToolRegistry,
+        hook_manager: HookManager | None = None,
+        parallel: bool = True,
+    ):
         self.registry = registry
         self.hook_manager = hook_manager
         self.execution_history: list[dict] = []
-        logger.debug("ToolExecutor initialized")
+        self._parallel_enabled = parallel
+        self._parallelism_manager = None
+        if parallel:
+            from nanocode.tools.parallel import get_parallelism_manager
+            self._parallelism_manager = get_parallelism_manager()
+        logger.debug(f"ToolExecutor initialized (parallel={parallel})")
 
     async def _run_pre_tool_hooks(
         self, tool_name: str, arguments: dict, session_id: str | None, agent_name: str | None
@@ -456,12 +471,32 @@ class ToolExecutor:
         return result_obj
 
     async def execute_multiple(
-        self, tool_calls: list[tuple[str, dict]]
+        self,
+        tool_calls: list[tuple[str, dict]],
+        session_id: str | None = None,
+        agent_name: str | None = None,
     ) -> list[ToolResult]:
-        """Execute multiple tools in parallel."""
+        """Execute multiple tools with parallel read-only, sequential writes.
+
+        Args:
+            tool_calls: List of (tool_name, arguments) tuples
+            session_id: Optional session ID
+            agent_name: Optional agent name
+
+        Returns:
+            List of ToolResult objects in order of input tool_calls
+        """
         logger.debug(f"execute_multiple: {len(tool_calls)} tools")
-        tasks = [self.execute(name, args) for name, args in tool_calls]
-        return await asyncio.gather(*tasks)
+
+        if not self._parallel_enabled or not self._parallelism_manager:
+            # Fallback: execute all in parallel (original behavior)
+            tasks = [self.execute(name, args, session_id, agent_name) for name, args in tool_calls]
+            return await asyncio.gather(*tasks)
+
+        # Use parallelism manager for smart execution
+        return await self._parallelism_manager.execute_parallel(
+            self, tool_calls, session_id, agent_name
+        )
 
     def format_result(self, result: ToolResult) -> str:
         """Format tool result for LLM consumption."""
