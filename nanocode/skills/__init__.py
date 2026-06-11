@@ -71,6 +71,9 @@ class Skill:
     description: str
     content: str
     location: str
+    version: str | None = None
+    author: str | None = None
+    tags: list[str] | None = None
 
 
 class SkillError(Exception):
@@ -122,6 +125,35 @@ class SkillsManager:
         self._url_cache: dict[str, str] = {}
         self._db_session = db_session
 
+    def validate_skill(self, skill: Skill) -> tuple[bool, str | None]:
+        """Validate a skill's structure and content.
+        
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if not skill.name:
+            return False, "Skill name is required"
+        
+        if len(skill.name) < 2:
+            return False, "Skill name must be at least 2 characters"
+        
+        if not skill.description:
+            return False, "Skill description is required"
+        
+        if len(skill.description) < 10:
+            return False, "Skill description must be at least 10 characters"
+        
+        if not skill.content:
+            return False, "Skill content is required"
+        
+        # Check for required sections in content
+        content_lower = skill.content.lower()
+        if "## usage" not in content_lower and "# usage" not in content_lower:
+            # Warn but don't fail - usage section is recommended
+            pass
+        
+        return True, None
+
     def _scan_skill_directory(self, scan_path: str, scanned_dirs: set, discovered: list):
         """Scan a directory for skills and append to discovered list."""
         if not os.path.isdir(scan_path) or scan_path in scanned_dirs:
@@ -133,7 +165,11 @@ class SkillsManager:
                 try:
                     skill = self._parse_skill_file(skill_path)
                     if skill:
-                        discovered.append(skill)
+                        is_valid, error = self.validate_skill(skill)
+                        if is_valid:
+                            discovered.append(skill)
+                        else:
+                            logger.debug(f"Invalid skill at {skill_path}: {error}")
                 except Exception:
                     pass
 
@@ -183,7 +219,7 @@ class SkillsManager:
         return discovered
 
     def _parse_skill_file(self, path: str) -> Skill | None:
-        """Parse a skill.md file."""
+        """Parse a skill.md file with full metadata extraction."""
         try:
             with open(path) as f:
                 content = f.read()
@@ -195,6 +231,13 @@ class SkillsManager:
 
             name = metadata.get("name", "")
             description = metadata.get("description", "")
+            version = metadata.get("version", None)
+            author = metadata.get("author", None)
+            tags = metadata.get("tags", None)
+            
+            # Handle tags as comma-separated string
+            if isinstance(tags, str):
+                tags = [t.strip() for t in tags.split(",") if t.strip()]
 
             if not name:
                 name = os.path.basename(os.path.dirname(path))
@@ -208,6 +251,9 @@ class SkillsManager:
                 description=description,
                 content=body,
                 location=path,
+                version=version,
+                author=author,
+                tags=tags,
             )
         except Exception:
             return None
@@ -327,6 +373,78 @@ class SkillsManager:
     def get_cached_skill_path(self, name: str) -> str | None:
         """Get path to cached skill file."""
         return self._url_cache.get(name)
+
+    def get_cached_skill_version(self, name: str) -> str | None:
+        """Get version of cached skill."""
+        cached_path = self.get_cached_skill_path(name)
+        if cached_path and os.path.exists(cached_path):
+            try:
+                with open(cached_path) as f:
+                    content = f.read()
+                metadata, _ = frontmatter.parse(content)
+                return metadata.get("version")
+            except Exception:
+                pass
+        return None
+
+    async def check_for_updates(self, urls: list[str] = None) -> list[dict]:
+        """Check for skill updates by comparing versions.
+        
+        Returns list of skills with available updates.
+        """
+        updates = []
+        urls = urls or self.config.get("skills.urls", [])
+        
+        for url in urls:
+            try:
+                if "{skill}" in url:
+                    continue
+                    
+                index_url = url.rstrip("/") + "/index.json"
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.get(index_url)
+                    response.raise_for_status()
+                    data = response.json()
+                
+                if not isinstance(data, dict) or "skills" not in data:
+                    continue
+                    
+                for skill_info in data["skills"]:
+                    if not isinstance(skill_info, dict):
+                        continue
+                    
+                    skill_name = skill_info.get("name")
+                    remote_version = skill_info.get("version")
+                    
+                    if not skill_name:
+                        continue
+                    
+                    local_version = self.get_cached_skill_version(skill_name)
+                    
+                    if remote_version and local_version and remote_version != local_version:
+                        updates.append({
+                            "name": skill_name,
+                            "local_version": local_version,
+                            "remote_version": remote_version,
+                            "url": url,
+                        })
+            except Exception as e:
+                logger.debug(f"Failed to check updates from {url}: {e}")
+        
+        return updates
+
+    async def update_skill(self, name: str, url: str) -> Skill | None:
+        """Update a cached skill to latest version."""
+        cache_dir = _get_skills_cache_dir()
+        
+        # Remove cached version
+        cached_path = cache_dir / f"{name}.md"
+        if cached_path.exists():
+            cached_path.unlink()
+        
+        # Fetch fresh version
+        skill_url = url.rstrip("/") + f"/{name}/{self.SKILL_FILE_NAME}"
+        return await self._fetch_skill_from_url(skill_url, cache_dir)
 
     def load_skills(self) -> int:
         """Load all discovered skills."""
@@ -494,6 +612,24 @@ class SkillsManager:
             )
 
         return tools
+
+    def get_stats(self) -> dict:
+        """Get skill system statistics."""
+        local_count = sum(1 for s in self.skills.values() if not s.location.startswith("http"))
+        remote_count = sum(1 for s in self.skills.values() if s.location.startswith("http"))
+        
+        all_tags = set()
+        for skill in self.skills.values():
+            if skill.tags:
+                all_tags.update(skill.tags)
+        
+        return {
+            "total_skills": len(self.skills),
+            "local_skills": local_count,
+            "remote_skills": remote_count,
+            "unique_tags": len(all_tags),
+            "tags": sorted(all_tags),
+        }
 
 
 def create_skills_manager(base_dir: str = None, config: dict = None) -> SkillsManager:
