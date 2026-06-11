@@ -65,6 +65,11 @@ class Session(Base):
         cascade="all, delete-orphan",
         order_by="Todo.position",
     )
+    tasks: Mapped[list["Task"]] = relationship(
+        "Task",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
 
 
 class Message(Base):
@@ -107,7 +112,7 @@ class MessagePart(Base):
 
 
 class Todo(Base):
-    """Todo model - task tracking within a session."""
+    """Todo model - task tracking within a session (legacy)."""
 
     __tablename__ = "todos"
 
@@ -124,6 +129,60 @@ class Todo(Base):
     )
 
     session: Mapped["Session"] = relationship("Session", back_populates="todos")
+
+
+class Task(Base):
+    """Task model - hierarchical task tracking with lifecycle management.
+
+    Based on MiMo-Code's tree-shaped task system.
+    Tasks can have parent-child relationships (T1, T1.1, T1.2, etc.)
+    """
+
+    __tablename__ = "tasks"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    parent_task_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # open, in_progress, blocked, done, abandoned
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    owner: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[int] = mapped_column(Integer, nullable=False)  # Unix timestamp ms
+    last_event_at: Mapped[int] = mapped_column(Integer, nullable=False)  # Unix timestamp ms
+    ended_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cleanup_after: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    session: Mapped["Session"] = relationship("Session", back_populates="tasks")
+    events: Mapped[list["TaskEvent"]] = relationship(
+        "TaskEvent", back_populates="task", cascade="all, delete-orphan"
+    )
+
+
+class TaskEvent(Base):
+    """TaskEvent model - tracks all state changes for tasks."""
+
+    __tablename__ = "task_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    task_id: Mapped[str] = mapped_column(
+        String(50),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    at: Mapped[int] = mapped_column(Integer, nullable=False)  # Unix timestamp ms
+    kind: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # created, started, unstarted, blocked, unblocked, done, abandoned, renamed
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    session: Mapped["Session"] = relationship("Session")
+    task: Mapped["Task"] = relationship("Task", back_populates="events")
 
 
 class SessionShare(Base):
@@ -196,6 +255,8 @@ __all__ = [
     "Message",
     "MessagePart",
     "Todo",
+    "Task",
+    "TaskEvent",
     "SessionShare",
     "Skill",
     "Memory",

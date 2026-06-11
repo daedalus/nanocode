@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from nanocode.state import ExecutionPlan, TaskStep
+from nanocode.planning.task_registry import TaskRegistry, TaskStatus, TaskData, TaskEventData
 
 
 def _get_default_storage_dir() -> Path:
