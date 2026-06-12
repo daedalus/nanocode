@@ -8,15 +8,14 @@ Based on Aura's fs_edit_transaction.py:
 
 import hashlib
 import logging
-import os
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class EditOperationType(str, Enum):
+class EditOperationType(StrEnum):
     """Types of edit operations."""
 
     REPLACE_TEXT_ONCE = "replace_text_once"
@@ -32,13 +31,13 @@ class EditOperation:
     """A single edit operation."""
 
     operation_type: EditOperationType
-    old_text: Optional[str] = None
-    new_text: Optional[str] = None
-    line_number: Optional[int] = None
-    start_line: Optional[int] = None
-    end_line: Optional[int] = None
-    target_line: Optional[int] = None
-    content_hash: Optional[str] = None  # Hash of file content before edit
+    old_text: str | None = None
+    new_text: str | None = None
+    line_number: int | None = None
+    start_line: int | None = None
+    end_line: int | None = None
+    target_line: int | None = None
+    content_hash: str | None = None  # Hash of file content before edit
 
     def to_dict(self) -> dict:
         return {
@@ -59,10 +58,10 @@ class EditResult:
 
     success: bool
     operations_applied: int = 0
-    error: Optional[str] = None
-    old_content_hash: Optional[str] = None
-    new_content_hash: Optional[str] = None
-    changes: List[Dict[str, Any]] = field(default_factory=list)
+    error: str | None = None
+    old_content_hash: str | None = None
+    new_content_hash: str | None = None
+    changes: list[dict[str, Any]] = field(default_factory=list)
 
 
 def calculate_content_hash(content: str) -> str:
@@ -80,8 +79,8 @@ class EditTransaction:
     """
 
     def __init__(self):
-        self.operations: List[EditOperation] = []
-        self._file_hashes: Dict[str, str] = {}
+        self.operations: list[EditOperation] = []
+        self._file_hashes: dict[str, str] = {}
 
     def add_operation(self, operation: EditOperation) -> "EditTransaction":
         """Add an operation to the transaction.
@@ -99,7 +98,7 @@ class EditTransaction:
         self,
         old_text: str,
         new_text: str,
-        content_hash: Optional[str] = None,
+        content_hash: str | None = None,
     ) -> "EditTransaction":
         """Add a replace_text_once operation.
 
@@ -125,7 +124,7 @@ class EditTransaction:
         self,
         old_text: str,
         new_text: str,
-        content_hash: Optional[str] = None,
+        content_hash: str | None = None,
     ) -> "EditTransaction":
         """Add a replace_text_all operation.
 
@@ -151,7 +150,7 @@ class EditTransaction:
         self,
         target_text: str,
         insert_text: str,
-        content_hash: Optional[str] = None,
+        content_hash: str | None = None,
     ) -> "EditTransaction":
         """Add an insert_before operation.
 
@@ -177,7 +176,7 @@ class EditTransaction:
         self,
         target_text: str,
         insert_text: str,
-        content_hash: Optional[str] = None,
+        content_hash: str | None = None,
     ) -> "EditTransaction":
         """Add an insert_after operation.
 
@@ -203,7 +202,7 @@ class EditTransaction:
         self,
         start_line: int,
         end_line: int,
-        content_hash: Optional[str] = None,
+        content_hash: str | None = None,
     ) -> "EditTransaction":
         """Add a delete_lines operation.
 
@@ -230,7 +229,7 @@ class EditTransaction:
         start_line: int,
         end_line: int,
         target_line: int,
-        content_hash: Optional[str] = None,
+        content_hash: str | None = None,
     ) -> "EditTransaction":
         """Add a move_lines operation.
 
@@ -314,8 +313,8 @@ class EditTransaction:
         )
 
     def _apply_operation(
-        self, lines: List[str], op: EditOperation
-    ) -> Dict[str, Any]:
+        self, lines: list[str], op: EditOperation
+    ) -> dict[str, Any]:
         """Apply a single operation to the lines list."""
         if op.operation_type == EditOperationType.REPLACE_TEXT_ONCE:
             return self._replace_text_once(lines, op)
@@ -333,8 +332,8 @@ class EditTransaction:
             return {"success": False, "error": f"Unknown operation: {op.operation_type}"}
 
     def _replace_text_once(
-        self, lines: List[str], op: EditOperation
-    ) -> Dict[str, Any]:
+        self, lines: list[str], op: EditOperation
+    ) -> dict[str, Any]:
         """Replace first occurrence of text."""
         content = "\n".join(lines)
         if op.old_text not in content:
@@ -343,11 +342,11 @@ class EditTransaction:
         new_content = content.replace(op.old_text, op.new_text, 1)
         lines.clear()
         lines.extend(new_content.split("\n"))
-        return {"success": True, "details": f"Replaced first occurrence"}
+        return {"success": True, "details": "Replaced first occurrence"}
 
     def _replace_text_all(
-        self, lines: List[str], op: EditOperation
-    ) -> Dict[str, Any]:
+        self, lines: list[str], op: EditOperation
+    ) -> dict[str, Any]:
         """Replace all occurrences of text."""
         content = "\n".join(lines)
         if op.old_text not in content:
@@ -360,8 +359,8 @@ class EditTransaction:
         return {"success": True, "details": f"Replaced {count} occurrences"}
 
     def _insert_before(
-        self, lines: List[str], op: EditOperation
-    ) -> Dict[str, Any]:
+        self, lines: list[str], op: EditOperation
+    ) -> dict[str, Any]:
         """Insert text before target."""
         content = "\n".join(lines)
         if op.old_text not in content:
@@ -373,8 +372,8 @@ class EditTransaction:
         return {"success": True, "details": "Inserted text before target"}
 
     def _insert_after(
-        self, lines: List[str], op: EditOperation
-    ) -> Dict[str, Any]:
+        self, lines: list[str], op: EditOperation
+    ) -> dict[str, Any]:
         """Insert text after target."""
         content = "\n".join(lines)
         if op.old_text not in content:
@@ -386,8 +385,8 @@ class EditTransaction:
         return {"success": True, "details": "Inserted text after target"}
 
     def _delete_lines(
-        self, lines: List[str], op: EditOperation
-    ) -> Dict[str, Any]:
+        self, lines: list[str], op: EditOperation
+    ) -> dict[str, Any]:
         """Delete lines by line number."""
         if not op.start_line or not op.end_line:
             return {"success": False, "error": "start_line and end_line required"}
@@ -403,8 +402,8 @@ class EditTransaction:
         return {"success": True, "details": f"Deleted {deleted} lines"}
 
     def _move_lines(
-        self, lines: List[str], op: EditOperation
-    ) -> Dict[str, Any]:
+        self, lines: list[str], op: EditOperation
+    ) -> dict[str, Any]:
         """Move lines to a new position."""
         if not op.start_line or not op.end_line or not op.target_line:
             return {"success": False, "error": "start_line, end_line, and target_line required"}
@@ -435,9 +434,9 @@ class EditTransactionManager:
     """Manages edit transactions for files."""
 
     def __init__(self):
-        self._file_hashes: Dict[str, str] = {}
+        self._file_hashes: dict[str, str] = {}
 
-    def get_file_hash(self, file_path: str) -> Optional[str]:
+    def get_file_hash(self, file_path: str) -> str | None:
         """Get cached content hash for a file."""
         return self._file_hashes.get(file_path)
 
@@ -460,7 +459,7 @@ class EditTransactionManager:
             EditResult
         """
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
 
             result = transaction.execute(content)
@@ -481,7 +480,7 @@ class EditTransactionManager:
                 error=f"File error: {e}",
             )
 
-    def clear_cache(self, file_path: Optional[str] = None):
+    def clear_cache(self, file_path: str | None = None):
         """Clear cached hashes."""
         if file_path:
             self._file_hashes.pop(file_path, None)
@@ -490,7 +489,7 @@ class EditTransactionManager:
 
 
 # Global instance
-_edit_transaction_manager: Optional[EditTransactionManager] = None
+_edit_transaction_manager: EditTransactionManager | None = None
 
 
 def get_edit_transaction_manager() -> EditTransactionManager:

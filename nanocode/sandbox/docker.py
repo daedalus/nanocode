@@ -13,13 +13,13 @@ Note: This is optional and requires Docker to be installed.
 
 import asyncio
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 from nanocode.sandbox.base import Sandbox, SandboxProvider
 
 
-class SandboxMode(str, Enum):
+class SandboxMode(StrEnum):
     """Sandbox execution modes."""
 
     READ_ONLY = "read-only"  # For dynamic tools (safe execution)
@@ -36,13 +36,13 @@ class SandboxConfig:
     memory_limit: str = "2g"
     cpu_limit: float = 2.0
     pid_limit: int = 200
-    cap_drop: List[str] = field(default_factory=lambda: ["ALL"])
-    volumes: Dict[str, str] = field(default_factory=dict)
+    cap_drop: list[str] = field(default_factory=lambda: ["ALL"])
+    volumes: dict[str, str] = field(default_factory=dict)
     read_only_rootfs: bool = False
-    tmpfs: Dict[str, str] = field(default_factory=lambda: {"/tmp": "size=100M"})
+    tmpfs: dict[str, str] = field(default_factory=lambda: {"/tmp": "size=100M"})
     network_mode: str = "none"  # No network by default for security
 
-    def to_docker_args(self) -> List[str]:
+    def to_docker_args(self) -> list[str]:
         """Convert config to docker create arguments."""
         args = [
             "--memory", self.memory_limit,
@@ -105,7 +105,7 @@ class DockerSandboxProvider(SandboxProvider):
     async def create(
         self,
         session_id: str,
-        mode: Optional[SandboxMode] = None,
+        mode: SandboxMode | None = None,
         **kwargs,
     ) -> Sandbox:
         """Create a new Docker container for a session.
@@ -176,7 +176,7 @@ class DockerSandboxProvider(SandboxProvider):
         except Exception as e:
             raise RuntimeError(f"Docker create failed: {e}")
 
-    def get_mode(self, session_id: str) -> Optional[SandboxMode]:
+    def get_mode(self, session_id: str) -> SandboxMode | None:
         """Get the mode for a session's sandbox."""
         return self._container_modes.get(session_id)
 

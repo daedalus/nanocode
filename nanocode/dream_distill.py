@@ -5,19 +5,18 @@ Based on MiMo-Code's dream/distill system:
 - /distill: Discover repeated workflows, package into reusable skills
 """
 
-import json
 import logging
 import os
 import time
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class DreamStatus(str, Enum):
+class DreamStatus(StrEnum):
     """Dream/distill run status."""
 
     PENDING = "pending"
@@ -35,7 +34,7 @@ class DreamResult:
     entries_removed: int = 0
     skills_created: int = 0
     summary: str = ""
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
     timestamp: float = field(default_factory=time.time)
 
 
@@ -45,10 +44,10 @@ class WorkflowPattern:
 
     name: str
     description: str
-    steps: List[str]
+    steps: list[str]
     frequency: int
     confidence: float
-    suggested_skill: Optional[str] = None
+    suggested_skill: str | None = None
 
 
 class DreamManager:
@@ -62,7 +61,7 @@ class DreamManager:
 
     def __init__(
         self,
-        memory_dir: Optional[str] = None,
+        memory_dir: str | None = None,
         max_age_days: int = 30,
     ):
         """Initialize the dream manager.
@@ -79,7 +78,7 @@ class DreamManager:
 
     async def run_dream(
         self,
-        sessions: List[Dict[str, Any]],
+        sessions: list[dict[str, Any]],
         llm=None,
     ) -> DreamResult:
         """Run a dream consolidation pass.
@@ -120,9 +119,9 @@ class DreamManager:
 
     async def _extract_knowledge(
         self,
-        sessions: List[Dict[str, Any]],
+        sessions: list[dict[str, Any]],
         llm=None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Extract persistent knowledge from sessions."""
         knowledge = []
 
@@ -169,17 +168,13 @@ class DreamManager:
         else:
             return "note"
 
-    async def _save_to_memory(self, knowledge: List[Dict[str, Any]]):
+    async def _save_to_memory(self, knowledge: list[dict[str, Any]]):
         """Save extracted knowledge to memory files."""
         memory_path = Path(self.memory_dir) / "global"
         memory_path.mkdir(parents=True, exist_ok=True)
 
         # Append to knowledge.md
         knowledge_file = memory_path / "knowledge.md"
-        existing = ""
-        if knowledge_file.exists():
-            existing = knowledge_file.read_text()
-
         new_entries = []
         for item in knowledge:
             entry = f"\n\n## {item['type'].title()} ({item['session_id']})\n\n{item['content']}"
@@ -203,7 +198,7 @@ class DistillManager:
     - Package into reusable skills/subagents/commands
     """
 
-    def __init__(self, skills_dir: Optional[str] = None):
+    def __init__(self, skills_dir: str | None = None):
         """Initialize the distill manager.
 
         Args:
@@ -216,8 +211,8 @@ class DistillManager:
 
     async def run_distill(
         self,
-        sessions: List[Dict[str, Any]],
-        existing_skills: Optional[List[str]] = None,
+        sessions: list[dict[str, Any]],
+        existing_skills: list[str] | None = None,
     ) -> DreamResult:
         """Run a distill pass to discover and package workflows.
 
@@ -262,8 +257,8 @@ class DistillManager:
 
     async def _discover_patterns(
         self,
-        sessions: List[Dict[str, Any]],
-    ) -> List[WorkflowPattern]:
+        sessions: list[dict[str, Any]],
+    ) -> list[WorkflowPattern]:
         """Discover repeated workflow patterns."""
         patterns = []
 
@@ -284,7 +279,7 @@ class DistillManager:
                 tool_sequences.append(sequence)
 
         # Find repeated subsequences
-        pattern_counts: Dict[str, int] = {}
+        pattern_counts: dict[str, int] = {}
         for seq in tool_sequences:
             for length in range(2, min(5, len(seq) + 1)):
                 for i in range(len(seq) - length + 1):
@@ -341,11 +336,11 @@ It has been detected {pattern.frequency} times with {pattern.confidence:.0%} con
 
 
 # Global instances
-_dream_manager: Optional[DreamManager] = None
-_distill_manager: Optional[DistillManager] = None
+_dream_manager: DreamManager | None = None
+_distill_manager: DistillManager | None = None
 
 
-def get_dream_manager(memory_dir: Optional[str] = None) -> DreamManager:
+def get_dream_manager(memory_dir: str | None = None) -> DreamManager:
     """Get or create the global dream manager."""
     global _dream_manager
     if _dream_manager is None:
@@ -353,7 +348,7 @@ def get_dream_manager(memory_dir: Optional[str] = None) -> DreamManager:
     return _dream_manager
 
 
-def get_distill_manager(skills_dir: Optional[str] = None) -> DistillManager:
+def get_distill_manager(skills_dir: str | None = None) -> DistillManager:
     """Get or create the global distill manager."""
     global _distill_manager
     if _distill_manager is None:

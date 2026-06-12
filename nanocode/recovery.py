@@ -6,17 +6,16 @@ Based on MiMo-Code's approach:
 - Complements doom_loop detection with failure-specific tracking
 """
 
-import json
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class FailureType(str, Enum):
+class FailureType(StrEnum):
     """Types of failures that can occur."""
 
     EDIT_NO_MATCH = "edit_no_match"
@@ -29,7 +28,7 @@ class FailureType(str, Enum):
     WRITE_FAILED = "write_failed"
 
 
-class RecoveryAction(str, Enum):
+class RecoveryAction(StrEnum):
     """Recovery actions to suggest."""
 
     RETRY_DIFFERENT = "retry_different"
@@ -48,11 +47,11 @@ class FailureRecord:
 
     failure_type: FailureType
     tool_name: str
-    file_path: Optional[str]
+    file_path: str | None
     error_message: str
     attempt_number: int
     timestamp: float = field(default_factory=lambda: __import__("time").time())
-    context: Dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -60,7 +59,7 @@ class FileFailureTracker:
     """Tracks failures for a specific file."""
 
     file_path: str
-    failures: List[FailureRecord] = field(default_factory=list)
+    failures: list[FailureRecord] = field(default_factory=list)
     total_attempts: int = 0
     successful_edits: int = 0
 
@@ -88,7 +87,7 @@ class RecoveryNudge:
     action: RecoveryAction
     message: str
     priority: int = 1  # Higher = more important
-    context: Dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
 
 
 class RecoveryStateMachine:
@@ -110,9 +109,9 @@ class RecoveryStateMachine:
         """
         self.max_failures_before_nudge = max_failures_before_nudge
         self.max_attempts_per_file = max_attempts_per_file
-        self._file_trackers: Dict[str, FileFailureTracker] = {}
-        self._recent_failures: List[FailureRecord] = []
-        self._recovery_suggestions: Dict[str, List[RecoveryNudge]] = defaultdict(list)
+        self._file_trackers: dict[str, FileFailureTracker] = {}
+        self._recent_failures: list[FailureRecord] = []
+        self._recovery_suggestions: dict[str, list[RecoveryNudge]] = defaultdict(list)
         self._syntax_repair_mode: bool = False
         self._current_turn_failures: int = 0
 
@@ -120,10 +119,10 @@ class RecoveryStateMachine:
         self,
         failure_type: FailureType,
         tool_name: str,
-        file_path: Optional[str],
+        file_path: str | None,
         error_message: str,
-        context: Dict[str, Any] = None,
-    ) -> Optional[RecoveryNudge]:
+        context: dict[str, Any] = None,
+    ) -> RecoveryNudge | None:
         """Record a failure and return recovery suggestion if needed.
 
         Args:
@@ -173,7 +172,7 @@ class RecoveryStateMachine:
 
         return nudge
 
-    def record_success(self, tool_name: str, file_path: Optional[str]):
+    def record_success(self, tool_name: str, file_path: str | None):
         """Record a successful operation."""
         self._current_turn_failures = 0
 
@@ -184,8 +183,8 @@ class RecoveryStateMachine:
         self._syntax_repair_mode = False
 
     def _suggest_recovery(
-        self, record: FailureRecord, tracker: Optional[FileFailureTracker]
-    ) -> Optional[RecoveryNudge]:
+        self, record: FailureRecord, tracker: FileFailureTracker | None
+    ) -> RecoveryNudge | None:
         """Suggest a recovery action based on failure pattern."""
         if not tracker:
             return None
@@ -237,7 +236,7 @@ class RecoveryStateMachine:
 
         return None
 
-    def get_nudges_for_file(self, file_path: str) -> List[RecoveryNudge]:
+    def get_nudges_for_file(self, file_path: str) -> list[RecoveryNudge]:
         """Get pending recovery nudges for a file."""
         return self._recovery_suggestions.get(file_path, [])
 
@@ -259,7 +258,7 @@ class RecoveryStateMachine:
         """Check if we're in syntax repair mode."""
         return self._syntax_repair_mode
 
-    def get_file_stats(self, file_path: str) -> Optional[Dict[str, Any]]:
+    def get_file_stats(self, file_path: str) -> dict[str, Any] | None:
         """Get failure statistics for a file."""
         tracker = self._file_trackers.get(file_path)
         if not tracker:
@@ -273,7 +272,7 @@ class RecoveryStateMachine:
             "consecutive_failures": tracker.consecutive_failures,
         }
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get overall recovery statistics."""
         total_files = len(self._file_trackers)
         total_failures = sum(len(t.failures) for t in self._file_trackers.values())
@@ -320,9 +319,9 @@ class RecoveryHandler:
         self,
         tool_name: str,
         error: str,
-        file_path: Optional[str] = None,
-        arguments: Dict[str, Any] = None,
-    ) -> Optional[str]:
+        file_path: str | None = None,
+        arguments: dict[str, Any] = None,
+    ) -> str | None:
         """Handle a tool failure and return recovery suggestion if available.
 
         Args:
@@ -353,7 +352,7 @@ class RecoveryHandler:
             return nudge.message
         return None
 
-    def on_tool_success(self, tool_name: str, file_path: Optional[str] = None):
+    def on_tool_success(self, tool_name: str, file_path: str | None = None):
         """Handle a tool success."""
         if self.enabled:
             self.state_machine.record_success(tool_name, file_path)
@@ -379,7 +378,7 @@ class RecoveryHandler:
         else:
             return FailureType.RUNTIME_ERROR
 
-    def get_recovery_message(self, file_path: str = None) -> Optional[str]:
+    def get_recovery_message(self, file_path: str = None) -> str | None:
         """Get a recovery message to inject into the conversation."""
         if not file_path:
             # Get most recent nudge from any file
@@ -403,7 +402,7 @@ class RecoveryHandler:
 
 
 # Global instance
-_recovery_handler: Optional[RecoveryHandler] = None
+_recovery_handler: RecoveryHandler | None = None
 
 
 def get_recovery_handler(max_failures: int = 2, max_attempts: int = 5) -> RecoveryHandler:

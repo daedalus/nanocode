@@ -49,6 +49,10 @@ llm:
         api_key: ${OPENROUTER_API_KEY}
         base_url: https://openrouter.ai/api/v1
         model: openrouter/free
+      - name: mimo
+        api_key: anonymous
+        base_url: https://api.xiaomimimo.com/api/free-ai/openai
+        model: mimo-auto
 
   use_model_registry: false
   user_agent: opencode/1.4.8

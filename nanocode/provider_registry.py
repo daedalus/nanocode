@@ -13,7 +13,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Optional
 
 from nanocode.llm.registry import ModelInfo, ModelRegistry, ProviderInfo
 
@@ -28,10 +28,10 @@ class ProviderSpec:
     name: str
     api_base: str
     auth_type: str = "api_key"
-    env_vars: List[str] = field(default_factory=list)
-    models: Dict[str, "ModelSpec"] = field(default_factory=dict)
-    health_check_url: Optional[str] = None
-    capabilities: Dict[str, Any] = field(default_factory=dict)
+    env_vars: list[str] = field(default_factory=list)
+    models: dict[str, "ModelSpec"] = field(default_factory=dict)
+    health_check_url: str | None = None
+    capabilities: dict[str, Any] = field(default_factory=dict)
     version: int = 1
     last_updated: float = field(default_factory=time.time)
 
@@ -39,7 +39,7 @@ class ProviderSpec:
         """Get a model by ID."""
         return self.models.get(model_id)
 
-    def list_models(self) -> List[str]:
+    def list_models(self) -> list[str]:
         """List all model IDs."""
         return list(self.models.keys())
 
@@ -75,7 +75,7 @@ class ModelSpec:
     supports_streaming: bool = True
     supports_json_mode: bool = False
     supports_system_prompt: bool = True
-    reasoning_effort: Optional[str] = None
+    reasoning_effort: str | None = None
     description: str = ""
     version: int = 1
 
@@ -124,7 +124,7 @@ class ProviderRegistry:
     Builds on existing ModelRegistry with cleaner separation.
     """
 
-    def __init__(self, cache_dir: Optional[str] = None):
+    def __init__(self, cache_dir: str | None = None):
         """Initialize the provider registry.
 
         Args:
@@ -136,10 +136,10 @@ class ProviderRegistry:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-        self._providers: Dict[str, ProviderSpec] = {}
-        self._model_registry: Optional[ModelRegistry] = None
-        self._health_status: Dict[str, bool] = {}
-        self._last_health_check: Dict[str, float] = {}
+        self._providers: dict[str, ProviderSpec] = {}
+        self._model_registry: ModelRegistry | None = None
+        self._health_status: dict[str, bool] = {}
+        self._last_health_check: dict[str, float] = {}
 
     @property
     def model_registry(self) -> ModelRegistry:
@@ -183,29 +183,29 @@ class ProviderRegistry:
             },
         )
 
-    def get_provider(self, provider_id: str) -> Optional[ProviderSpec]:
+    def get_provider(self, provider_id: str) -> ProviderSpec | None:
         """Get provider by ID."""
         return self._providers.get(provider_id)
 
-    def get_model(self, provider_id: str, model_id: str) -> Optional[ModelSpec]:
+    def get_model(self, provider_id: str, model_id: str) -> ModelSpec | None:
         """Get model by provider and model ID."""
         provider = self._providers.get(provider_id)
         if not provider:
             return None
         return provider.get_model(model_id)
 
-    def get_model_by_full_id(self, full_id: str) -> Optional[ModelSpec]:
+    def get_model_by_full_id(self, full_id: str) -> ModelSpec | None:
         """Get model by full ID (e.g., 'openai/gpt-4o')."""
         if "/" not in full_id:
             return None
         provider_id, model_id = full_id.split("/", 1)
         return self.get_model(provider_id, model_id)
 
-    def list_providers(self) -> List[str]:
+    def list_providers(self) -> list[str]:
         """List all provider IDs."""
         return list(self._providers.keys())
 
-    def list_models(self, provider_id: Optional[str] = None) -> List[str]:
+    def list_models(self, provider_id: str | None = None) -> list[str]:
         """List model IDs, optionally filtered by provider."""
         if provider_id:
             provider = self._providers.get(provider_id)
@@ -220,10 +220,10 @@ class ProviderRegistry:
         self,
         query: str,
         limit: int = 10,
-        supports_tools: Optional[bool] = None,
-        supports_vision: Optional[bool] = None,
-        max_cost: Optional[float] = None,
-    ) -> List[ModelSpec]:
+        supports_tools: bool | None = None,
+        supports_vision: bool | None = None,
+        max_cost: float | None = None,
+    ) -> list[ModelSpec]:
         """Search models with filters.
 
         Args:
@@ -259,7 +259,7 @@ class ProviderRegistry:
 
         return results
 
-    def get_free_models(self) -> List[ModelSpec]:
+    def get_free_models(self) -> list[ModelSpec]:
         """Get all free models."""
         results = []
         for provider in self._providers.values():
@@ -272,7 +272,7 @@ class ProviderRegistry:
         self,
         capability: str,
         value: Any = True,
-    ) -> List[ModelSpec]:
+    ) -> list[ModelSpec]:
         """Get models by capability."""
         results = []
         for provider in self._providers.values():
@@ -314,7 +314,7 @@ class ProviderRegistry:
 
         return healthy
 
-    def get_provider_stats(self) -> Dict[str, Any]:
+    def get_provider_stats(self) -> dict[str, Any]:
         """Get provider statistics."""
         total_models = sum(len(p.models) for p in self._providers.values())
         free_models = len(self.get_free_models())
@@ -376,10 +376,10 @@ class ProviderRegistry:
 
 
 # Global instance
-_provider_registry: Optional[ProviderRegistry] = None
+_provider_registry: ProviderRegistry | None = None
 
 
-def get_provider_registry(cache_dir: Optional[str] = None) -> ProviderRegistry:
+def get_provider_registry(cache_dir: str | None = None) -> ProviderRegistry:
     """Get or create the global provider registry."""
     global _provider_registry
     if _provider_registry is None:

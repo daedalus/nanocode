@@ -1,9 +1,7 @@
 """Memory indexer - indexes memory files into SQLite FTS5."""
 
 import os
-from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -97,7 +95,7 @@ class MemoryIndexer:
         self,
         file_path: str,
         scope: str = "global",
-        scope_id: Optional[str] = None,
+        scope_id: str | None = None,
         memory_type: str = "memory",
     ) -> int:
         """Index a single memory file into FTS5.
@@ -116,7 +114,7 @@ class MemoryIndexer:
         if not os.path.exists(file_path):
             return 0
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
 
         if not content.strip():
@@ -193,8 +191,8 @@ class MemoryIndexer:
         self,
         directory: str,
         scope: str = "global",
-        scope_id: Optional[str] = None,
-        patterns: Optional[list[str]] = None,
+        scope_id: str | None = None,
+        patterns: list[str] | None = None,
     ) -> int:
         """Index all memory files in a directory.
 

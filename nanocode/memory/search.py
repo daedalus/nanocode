@@ -1,7 +1,6 @@
 """Memory search with BM25 ranking."""
 
 from dataclasses import dataclass
-from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +14,7 @@ class SearchResult:
     snippet: str
     score: float
     scope: str
-    scope_id: Optional[str]
+    scope_id: str | None
     memory_type: str
 
 
@@ -28,9 +27,9 @@ class MemorySearch:
     async def search(
         self,
         query: str,
-        scope: Optional[str] = None,
-        scope_id: Optional[str] = None,
-        memory_type: Optional[str] = None,
+        scope: str | None = None,
+        scope_id: str | None = None,
+        memory_type: str | None = None,
         limit: int = 10,
         score_floor_ratio: float = 0.15,
     ) -> list[SearchResult]:
@@ -92,9 +91,9 @@ class MemorySearch:
     def _build_search_query(
         self,
         fts_query: str,
-        scope: Optional[str],
-        scope_id: Optional[str],
-        memory_type: Optional[str],
+        scope: str | None,
+        scope_id: str | None,
+        memory_type: str | None,
         limit: int,
     ) -> tuple[str, dict]:
         """Build SQL query and params for search."""

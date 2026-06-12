@@ -12,7 +12,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ class ModelPricing:
 
 
 # Default pricing for major models (prices per million tokens)
-DEFAULT_PRICING: Dict[str, ModelPricing] = {
+DEFAULT_PRICING: dict[str, ModelPricing] = {
     # OpenAI models
     "gpt-4o": ModelPricing("gpt-4o", "openai", 2.50, 1.25, 10.00),
     "gpt-4o-mini": ModelPricing("gpt-4o-mini", "openai", 0.15, 0.075, 0.60),
@@ -123,7 +123,7 @@ class SessionCost:
     """Total cost for a session."""
 
     session_id: str
-    entries: List[CostEntry] = field(default_factory=list)
+    entries: list[CostEntry] = field(default_factory=list)
     total_cost: float = 0.0
     total_input_tokens: int = 0
     total_output_tokens: int = 0
@@ -149,8 +149,8 @@ class CostTracker:
 
     def __init__(
         self,
-        custom_pricing: Optional[Dict[str, ModelPricing]] = None,
-        storage_dir: Optional[str] = None,
+        custom_pricing: dict[str, ModelPricing] | None = None,
+        storage_dir: str | None = None,
     ):
         """Initialize the cost tracker.
 
@@ -168,10 +168,10 @@ class CostTracker:
         self.storage_dir = storage_dir
         os.makedirs(storage_dir, exist_ok=True)
 
-        self._sessions: Dict[str, SessionCost] = {}
+        self._sessions: dict[str, SessionCost] = {}
         self._global_cost: float = 0.0
 
-    def get_pricing(self, model_id: str) -> Optional[ModelPricing]:
+    def get_pricing(self, model_id: str) -> ModelPricing | None:
         """Get pricing for a model.
 
         Args:
@@ -242,7 +242,7 @@ class CostTracker:
 
         return cost
 
-    def get_session_cost(self, session_id: str) -> Optional[SessionCost]:
+    def get_session_cost(self, session_id: str) -> SessionCost | None:
         """Get cost for a session."""
         return self._sessions.get(session_id)
 
@@ -250,7 +250,7 @@ class CostTracker:
         """Get total cost across all sessions."""
         return self._global_cost
 
-    def get_stats(self, session_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_stats(self, session_id: str | None = None) -> dict[str, Any]:
         """Get cost statistics.
 
         Args:
@@ -394,10 +394,10 @@ class CostTracker:
 
 
 # Global instance
-_cost_tracker: Optional[CostTracker] = None
+_cost_tracker: CostTracker | None = None
 
 
-def get_cost_tracker(custom_pricing: Optional[Dict[str, ModelPricing]] = None) -> CostTracker:
+def get_cost_tracker(custom_pricing: dict[str, ModelPricing] | None = None) -> CostTracker:
     """Get or create the global cost tracker."""
     global _cost_tracker
     if _cost_tracker is None:

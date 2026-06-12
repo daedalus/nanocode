@@ -2,7 +2,6 @@
 
 import os
 from pathlib import Path
-from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +11,7 @@ from .indexer import MemoryIndexer
 class MemoryReconciler:
     """Reconciles memory files with FTS5 index."""
 
-    def __init__(self, session: AsyncSession, memory_dir: Optional[str] = None):
+    def __init__(self, session: AsyncSession, memory_dir: str | None = None):
         self.session = session
         self.indexer = MemoryIndexer(session)
         self.memory_dir = memory_dir or self._get_default_memory_dir()
@@ -25,7 +24,7 @@ class MemoryReconciler:
     async def reconcile(
         self,
         force: bool = False,
-        scopes: Optional[list[str]] = None,
+        scopes: list[str] | None = None,
     ) -> dict:
         """Reconcile memory files with index.
 
@@ -85,7 +84,7 @@ class MemoryReconciler:
         return {row[0] for row in result.fetchall()}
 
     async def _scan_memory_files(
-        self, scopes: Optional[list[str]] = None
+        self, scopes: list[str] | None = None
     ) -> dict[str, dict]:
         """Scan memory directories for files to index.
 
@@ -106,7 +105,7 @@ class MemoryReconciler:
         return files
 
     def _scan_global(
-        self, files: dict, memory_path: Path, scopes: Optional[list[str]]
+        self, files: dict, memory_path: Path, scopes: list[str] | None
     ) -> None:
         """Scan global memory directory."""
         if scopes is not None and "global" not in scopes:
@@ -121,7 +120,7 @@ class MemoryReconciler:
             }
 
     def _scan_projects(
-        self, files: dict, memory_path: Path, scopes: Optional[list[str]]
+        self, files: dict, memory_path: Path, scopes: list[str] | None
     ) -> None:
         """Scan project memory directories."""
         if scopes is not None and "project" not in scopes:
@@ -140,7 +139,7 @@ class MemoryReconciler:
                     }
 
     def _scan_sessions(
-        self, files: dict, memory_path: Path, scopes: Optional[list[str]]
+        self, files: dict, memory_path: Path, scopes: list[str] | None
     ) -> None:
         """Scan session memory directories."""
         if scopes is not None and "session" not in scopes:

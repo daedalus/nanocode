@@ -3,7 +3,6 @@
 import logging
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -162,8 +161,8 @@ class HardwareKeyManager:
         if self._machine_key is not None:
             return self._machine_key
 
-        import hashlib
         import base64
+        import hashlib
         import uuid
 
         # Get machine identifiers
@@ -200,7 +199,7 @@ class HardwareKeyManager:
             return {}
 
         try:
-            with open(self.key_file, "r") as f:
+            with open(self.key_file) as f:
                 data = __import__("json").load(f)
 
             fernet = self._get_fernet()
@@ -292,7 +291,7 @@ class HardwareKeyManager:
             return 0
 
         try:
-            with open(plaintext_file, "r") as f:
+            with open(plaintext_file) as f:
                 plaintext_keys = __import__("json").load(f)
 
             migrated = 0
@@ -330,7 +329,7 @@ class HardwareKeyManager:
 
 
 # Global instance
-_hw_key_manager: Optional[HardwareKeyManager] = None
+_hw_key_manager: HardwareKeyManager | None = None
 
 
 def get_key_manager() -> HardwareKeyManager:

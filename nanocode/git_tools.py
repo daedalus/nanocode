@@ -9,8 +9,7 @@ Based on Aura's git_tools.py:
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
-from typing import List, Optional
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +21,9 @@ class GitBranch:
     name: str
     is_current: bool = False
     is_remote: bool = False
-    tracking: Optional[str] = None
-    last_commit: Optional[str] = None
-    last_commit_message: Optional[str] = None
+    tracking: str | None = None
+    last_commit: str | None = None
+    last_commit_message: str | None = None
 
 
 @dataclass
@@ -35,7 +34,7 @@ class GitStash:
     branch: str
     description: str
     commit: str
-    timestamp: Optional[str] = None
+    timestamp: str | None = None
 
 
 @dataclass
@@ -46,7 +45,7 @@ class GitCommit:
     author: str
     date: str
     message: str
-    files_changed: Optional[List[str]] = None
+    files_changed: list[str] | None = None
 
 
 @dataclass
@@ -58,7 +57,7 @@ class GitLogEntry:
     author: str
     date: str
     subject: str
-    files: Optional[List[str]] = None
+    files: list[str] | None = None
 
 
 class GitIntrospection:
@@ -100,7 +99,7 @@ class GitIntrospection:
         file_path: str,
         max_count: int = 20,
         follow: bool = True,
-    ) -> List[GitLogEntry]:
+    ) -> list[GitLogEntry]:
         """Get git log for a specific file, following renames.
 
         Args:
@@ -163,7 +162,7 @@ class GitIntrospection:
         self,
         include_remote: bool = True,
         include_tracking: bool = True,
-    ) -> List[GitBranch]:
+    ) -> list[GitBranch]:
         """List all branches with tracking info.
 
         Args:
@@ -223,14 +222,14 @@ class GitIntrospection:
 
         return branches
 
-    async def _get_current_branch(self) -> Optional[str]:
+    async def _get_current_branch(self) -> str | None:
         """Get the current branch name."""
         result = await self._git("branch", "--show-current")
         if result["returncode"] == 0:
             return result["stdout"].strip()
         return None
 
-    async def stash_list(self) -> List[GitStash]:
+    async def stash_list(self) -> list[GitStash]:
         """List all stashes.
 
         Returns:
@@ -297,9 +296,9 @@ class GitIntrospection:
     async def blame_file(
         self,
         file_path: str,
-        line_start: Optional[int] = None,
-        line_end: Optional[int] = None,
-    ) -> List[dict]:
+        line_start: int | None = None,
+        line_end: int | None = None,
+    ) -> list[dict]:
         """Get git blame for a file.
 
         Args:
@@ -346,7 +345,7 @@ class GitIntrospection:
     async def diff_stat(
         self,
         base: str = "HEAD",
-        head: Optional[str] = None,
+        head: str | None = None,
     ) -> dict:
         """Get diff statistics.
 
@@ -374,14 +373,14 @@ class GitIntrospection:
         result = await self._git("status", "--porcelain")
         return bool(result["stdout"].strip())
 
-    async def get_repo_root(self) -> Optional[str]:
+    async def get_repo_root(self) -> str | None:
         """Get the repository root directory."""
         result = await self._git("rev-parse", "--show-toplevel")
         if result["returncode"] == 0:
             return result["stdout"].strip()
         return None
 
-    async def get_current_commit(self) -> Optional[str]:
+    async def get_current_commit(self) -> str | None:
         """Get the current commit hash."""
         result = await self._git("rev-parse", "HEAD")
         if result["returncode"] == 0:
@@ -390,7 +389,7 @@ class GitIntrospection:
 
 
 # Global instance
-_git_introspection: Optional[GitIntrospection] = None
+_git_introspection: GitIntrospection | None = None
 
 
 def get_git_introspection(workdir: str = ".") -> GitIntrospection:

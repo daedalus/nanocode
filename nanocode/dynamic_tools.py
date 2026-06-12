@@ -15,7 +15,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +26,11 @@ class ToolSchema:
 
     name: str
     description: str
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
     source_file: str
     function_name: str
     is_async: bool = False
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
     def to_openai_schema(self) -> dict:
         """Convert to OpenAI function schema format."""
@@ -47,7 +47,7 @@ class ToolSchema:
 class ASTToolParser:
     """Parse Python files using AST to extract tool schemas."""
 
-    def parse_file(self, file_path: str) -> List[ToolSchema]:
+    def parse_file(self, file_path: str) -> list[ToolSchema]:
         """Parse a Python file and extract tool schemas.
 
         Args:
@@ -57,7 +57,7 @@ class ASTToolParser:
             List of ToolSchema objects
         """
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
 
             tree = ast.parse(content, filename=file_path)
@@ -80,7 +80,7 @@ class ASTToolParser:
         node: ast.FunctionDef | ast.AsyncFunctionDef,
         file_path: str,
         content: str,
-    ) -> Optional[ToolSchema]:
+    ) -> ToolSchema | None:
         """Parse a function definition into a ToolSchema."""
         # Skip private functions
         if node.name.startswith("_"):
@@ -107,7 +107,7 @@ class ASTToolParser:
             tags=tags,
         )
 
-    def _parse_parameters(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> Dict[str, Any]:
+    def _parse_parameters(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> dict[str, Any]:
         """Parse function parameters into JSON Schema."""
         properties = {}
         required = []
@@ -179,7 +179,7 @@ class ASTToolParser:
             }
         return None
 
-    def _extract_tags(self, docstring: str) -> List[str]:
+    def _extract_tags(self, docstring: str) -> list[str]:
         """Extract tags from docstring."""
         tags = []
         for line in docstring.split("\n"):
@@ -207,8 +207,8 @@ class DynamicToolExecutor:
         self,
         tool_file: str,
         function_name: str,
-        arguments: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
         """Execute a tool function in isolation.
 
         Args:
@@ -251,7 +251,7 @@ class DynamicToolExecutor:
         self,
         tool_file: str,
         function_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
     ) -> str:
         """Create a wrapper script for isolated execution."""
         import json
@@ -288,7 +288,7 @@ except Exception as e:
 class DynamicToolManager:
     """Manage dynamic tools with AST parsing and isolation."""
 
-    def __init__(self, tools_dir: Optional[str] = None):
+    def __init__(self, tools_dir: str | None = None):
         """Initialize the dynamic tool manager.
 
         Args:
@@ -299,10 +299,10 @@ class DynamicToolManager:
         self.tools_dir = Path(tools_dir)
         self.parser = ASTToolParser()
         self.executor = DynamicToolExecutor()
-        self._schemas: Dict[str, ToolSchema] = {}
-        self._loaded_modules: Dict[str, Any] = {}
+        self._schemas: dict[str, ToolSchema] = {}
+        self._loaded_modules: dict[str, Any] = {}
 
-    def discover(self) -> List[ToolSchema]:
+    def discover(self) -> list[ToolSchema]:
         """Discover all tools in the tools directory.
 
         Returns:
@@ -325,23 +325,23 @@ class DynamicToolManager:
         logger.info(f"Discovered {len(schemas)} dynamic tools")
         return schemas
 
-    def get_schema(self, tool_name: str) -> Optional[ToolSchema]:
+    def get_schema(self, tool_name: str) -> ToolSchema | None:
         """Get schema for a tool."""
         return self._schemas.get(tool_name)
 
-    def list_tools(self) -> List[str]:
+    def list_tools(self) -> list[str]:
         """List all discovered tool names."""
         return list(self._schemas.keys())
 
-    def get_schemas(self) -> List[ToolSchema]:
+    def get_schemas(self) -> list[ToolSchema]:
         """Get all discovered schemas."""
         return list(self._schemas.values())
 
     def execute(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
         """Execute a tool by name.
 
         Args:
@@ -366,7 +366,7 @@ class DynamicToolManager:
         name: str,
         func: Callable,
         description: str = "",
-        parameters: Optional[Dict[str, Any]] = None,
+        parameters: dict[str, Any] | None = None,
     ):
         """Register a tool from a function.
 
@@ -393,7 +393,7 @@ class DynamicToolManager:
 
         self._schemas[name] = schema
 
-    def _generate_schema_from_function(self, func: Callable) -> Dict[str, Any]:
+    def _generate_schema_from_function(self, func: Callable) -> dict[str, Any]:
         """Generate JSON Schema from function signature."""
         sig = inspect.signature(func)
         properties = {}
@@ -431,10 +431,10 @@ class DynamicToolManager:
 
 
 # Global instance
-_dynamic_tool_manager: Optional[DynamicToolManager] = None
+_dynamic_tool_manager: DynamicToolManager | None = None
 
 
-def get_dynamic_tool_manager(tools_dir: Optional[str] = None) -> DynamicToolManager:
+def get_dynamic_tool_manager(tools_dir: str | None = None) -> DynamicToolManager:
     """Get or create the global dynamic tool manager."""
     global _dynamic_tool_manager
     if _dynamic_tool_manager is None:

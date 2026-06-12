@@ -26,7 +26,7 @@ class CheckpointMessage:
     timestamp: float
     tokens: int = 0
     importance: float = 0.5
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -34,10 +34,10 @@ class Checkpoint:
     """Session checkpoint for context reconstruction."""
 
     session_id: str
-    messages: List[CheckpointMessage] = field(default_factory=list)
+    messages: list[CheckpointMessage] = field(default_factory=list)
     summary: str = ""
-    task_progress: Dict[str, str] = field(default_factory=dict)
-    memory_highlights: List[str] = field(default_factory=list)
+    task_progress: dict[str, str] = field(default_factory=dict)
+    memory_highlights: list[str] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
     token_count: int = 0
@@ -92,7 +92,7 @@ class Checkpoint:
 class CheckpointManager:
     """Manages session checkpoints for context reconstruction."""
 
-    def __init__(self, storage_dir: Optional[str] = None):
+    def __init__(self, storage_dir: str | None = None):
         """Initialize the checkpoint manager.
 
         Args:
@@ -128,7 +128,7 @@ class CheckpointManager:
             logger.error(f"Failed to save checkpoint: {e}")
             return False
 
-    def load_checkpoint(self, session_id: str) -> Optional[Checkpoint]:
+    def load_checkpoint(self, session_id: str) -> Checkpoint | None:
         """Load a checkpoint from disk.
 
         Args:
@@ -167,7 +167,7 @@ class CheckpointManager:
             logger.error(f"Failed to delete checkpoint: {e}")
             return False
 
-    def list_checkpoints(self) -> List[str]:
+    def list_checkpoints(self) -> list[str]:
         """List all checkpoint session IDs."""
         try:
             files = os.listdir(self.storage_dir)
@@ -187,7 +187,7 @@ class ContextReconstructor:
 
     def __init__(
         self,
-        checkpoint_manager: Optional[CheckpointManager] = None,
+        checkpoint_manager: CheckpointManager | None = None,
         max_context_tokens: int = 8000,
         preserve_recent_count: int = 6,
         importance_threshold: float = 0.3,
@@ -220,7 +220,7 @@ class ContextReconstructor:
     def create_checkpoint_from_messages(
         self,
         session_id: str,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         summary: str = "",
     ) -> Checkpoint:
         """Create a checkpoint from current messages.
@@ -270,9 +270,9 @@ class ContextReconstructor:
     def reconstruct_context(
         self,
         session_id: str,
-        current_messages: List[Dict[str, Any]],
-        memory_highlights: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
+        current_messages: list[dict[str, Any]],
+        memory_highlights: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """Reconstruct context from checkpoint and current messages.
 
         Args:
@@ -352,9 +352,9 @@ class ContextReconstructor:
     def save_session_checkpoint(
         self,
         session_id: str,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         summary: str = "",
-        task_progress: Optional[Dict[str, str]] = None,
+        task_progress: dict[str, str] | None = None,
     ) -> bool:
         """Save a session checkpoint.
 
@@ -415,11 +415,11 @@ class ContextReconstructor:
 
 
 # Global instances
-_checkpoint_manager: Optional[CheckpointManager] = None
-_context_reconstructor: Optional[ContextReconstructor] = None
+_checkpoint_manager: CheckpointManager | None = None
+_context_reconstructor: ContextReconstructor | None = None
 
 
-def get_checkpoint_manager(storage_dir: Optional[str] = None) -> CheckpointManager:
+def get_checkpoint_manager(storage_dir: str | None = None) -> CheckpointManager:
     """Get or create the global checkpoint manager."""
     global _checkpoint_manager
     if _checkpoint_manager is None:

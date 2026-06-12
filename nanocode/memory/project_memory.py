@@ -10,19 +10,19 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .indexer import MemoryIndexer
-from .search import MemorySearch, SearchResult
+from .search import MemorySearch
 
 logger = logging.getLogger(__name__)
 
 
-class MemoryEntryType(str, Enum):
+class MemoryEntryType(StrEnum):
     """Types of memory entries."""
 
     TASK_COMPLETE = "task_complete"
@@ -37,13 +37,13 @@ class MemoryEntryType(str, Enum):
 class MemoryEntry:
     """A single memory entry."""
 
-    id: Optional[int] = None
+    id: int | None = None
     key: str = ""
     content: str = ""
     entry_type: MemoryEntryType = MemoryEntryType.NOTE
     scope: str = "project"
-    scope_id: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    scope_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
 
@@ -168,7 +168,7 @@ class ProjectMemory:
         task_id: str,
         summary: str,
         details: str = "",
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> int:
         """Auto-save a completed task record.
 
@@ -194,7 +194,7 @@ class ProjectMemory:
         key: str,
         decision: str,
         rationale: str = "",
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> int:
         """Save an architecture/design decision.
 
@@ -223,7 +223,7 @@ class ProjectMemory:
         self,
         key: str,
         learning: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> int:
         """Save a learning/pattern discovered.
 
@@ -248,7 +248,7 @@ class ProjectMemory:
         key: str,
         error: str,
         solution: str = "",
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> int:
         """Save an error and its solution.
 
@@ -273,7 +273,7 @@ class ProjectMemory:
         )
         return await self.save_entry(entry)
 
-    async def get_entry(self, entry_id: int) -> Optional[MemoryEntry]:
+    async def get_entry(self, entry_id: int) -> MemoryEntry | None:
         """Get a memory entry by ID."""
         await self.initialize()
 
@@ -301,9 +301,9 @@ class ProjectMemory:
     async def search(
         self,
         query: str,
-        entry_type: Optional[MemoryEntryType] = None,
+        entry_type: MemoryEntryType | None = None,
         limit: int = 10,
-    ) -> List[MemoryEntry]:
+    ) -> list[MemoryEntry]:
         """Search memory entries.
 
         Args:
@@ -315,9 +315,6 @@ class ProjectMemory:
             List of matching entries
         """
         await self.initialize()
-
-        # First try FTS search
-        fts_results = await self.search_engine.search(query, limit=limit)
 
         # Also search project_memory table
         conditions = ["content LIKE :query OR key LIKE :query"]
@@ -355,9 +352,9 @@ class ProjectMemory:
 
     async def list_entries(
         self,
-        entry_type: Optional[MemoryEntryType] = None,
+        entry_type: MemoryEntryType | None = None,
         limit: int = 50,
-    ) -> List[MemoryEntry]:
+    ) -> list[MemoryEntry]:
         """List memory entries.
 
         Args:
@@ -370,7 +367,7 @@ class ProjectMemory:
         await self.initialize()
 
         conditions = []
-        params: Dict[str, Any] = {"limit": limit}
+        params: dict[str, Any] = {"limit": limit}
 
         if entry_type:
             conditions.append("entry_type = :entry_type")
@@ -410,7 +407,7 @@ class ProjectMemory:
         await self.session.commit()
         return result.rowcount > 0
 
-    async def get_stats(self) -> Dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         """Get memory statistics."""
         await self.initialize()
 

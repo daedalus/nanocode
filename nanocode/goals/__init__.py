@@ -10,13 +10,13 @@ Based on MiMo-Code's goal system:
 import json
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 
-class GoalStatus(str, Enum):
+class GoalStatus(StrEnum):
     """Goal status."""
 
     ACTIVE = "active"
@@ -57,7 +57,7 @@ class Goal:
     session_id: str
     status: GoalStatus = GoalStatus.ACTIVE
     react_count: int = 0
-    last_verdict: Optional[Verdict] = None
+    last_verdict: Verdict | None = None
     created_at: float = field(default_factory=lambda: __import__("time").time())
 
     def to_dict(self) -> dict:
@@ -106,7 +106,7 @@ class GoalManager:
         """
         self.llm = llm
         self.max_react = max_react
-        self._goals: Dict[str, Goal] = {}  # session_id -> Goal
+        self._goals: dict[str, Goal] = {}  # session_id -> Goal
 
     def set_goal(self, session_id: str, condition: str) -> Goal:
         """Set a stop-condition goal for a session.
@@ -126,7 +126,7 @@ class GoalManager:
         logger.info(f"Goal set for session {session_id}: {condition}")
         return goal
 
-    def get_goal(self, session_id: str) -> Optional[Goal]:
+    def get_goal(self, session_id: str) -> Goal | None:
         """Get the active goal for a session."""
         return self._goals.get(session_id)
 
@@ -194,7 +194,7 @@ class GoalManager:
     async def evaluate(
         self,
         session_id: str,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
     ) -> Verdict:
         """Evaluate the goal condition against conversation transcript.
 
@@ -247,7 +247,7 @@ class GoalManager:
             # Fail open - don't block the agent
             return Verdict(ok=False, reason=f"judge error: {e}")
 
-    def _format_transcript(self, messages: List[Dict[str, Any]]) -> str:
+    def _format_transcript(self, messages: list[dict[str, Any]]) -> str:
         """Format conversation messages for the judge."""
         lines = ["Conversation Transcript:", "=" * 40]
 
@@ -265,7 +265,7 @@ class GoalManager:
                         elif part.get("type") == "tool_use":
                             content_parts.append(f"[Tool call: {part.get('name', 'unknown')}]")
                         elif part.get("type") == "tool_result":
-                            content_parts.append(f"[Tool result]")
+                            content_parts.append("[Tool result]")
                     else:
                         content_parts.append(str(part))
                 content = " ".join(content_parts)
@@ -316,7 +316,7 @@ class GoalManager:
 
 
 # Global instance
-_goal_manager: Optional[GoalManager] = None
+_goal_manager: GoalManager | None = None
 
 
 def get_goal_manager(llm=None, max_react: int = 5) -> GoalManager:

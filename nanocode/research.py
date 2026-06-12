@@ -11,8 +11,7 @@ import asyncio
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +43,7 @@ class ScrapedPage:
     title: str
     content: str
     summary: str = ""
-    links: List[str] = field(default_factory=list)
+    links: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -52,11 +51,11 @@ class ResearchReport:
     """Synthesized research report."""
 
     topic: str
-    queries_used: List[str]
-    sources: List[ScrapedPage]
+    queries_used: list[str]
+    sources: list[ScrapedPage]
     summary: str
-    key_findings: List[str]
-    recommendations: List[str] = field(default_factory=list)
+    key_findings: list[str]
+    recommendations: list[str] = field(default_factory=list)
     confidence_score: float = 0.0
 
 
@@ -75,7 +74,7 @@ class QueryGenerator:
         self,
         topic: str,
         num_queries: int = 5,
-    ) -> List[ResearchQuery]:
+    ) -> list[ResearchQuery]:
         """Generate search queries from a topic.
 
         Args:
@@ -94,7 +93,7 @@ class QueryGenerator:
         self,
         topic: str,
         num_queries: int,
-    ) -> List[ResearchQuery]:
+    ) -> list[ResearchQuery]:
         """Generate queries using LLM."""
         from nanocode.llm import Message
 
@@ -126,7 +125,7 @@ Example: ["query 1", "query 2", "query 3"]
         self,
         topic: str,
         num_queries: int,
-    ) -> List[ResearchQuery]:
+    ) -> list[ResearchQuery]:
         """Generate basic queries without LLM."""
         queries = [
             topic,
@@ -153,7 +152,7 @@ class WebSearcher:
         self,
         query: str,
         max_results: int = 5,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Search the web.
 
         Args:
@@ -164,7 +163,6 @@ class WebSearcher:
             List of SearchResult objects
         """
         try:
-            import httpx
 
             # Use a search API (fallback to simple scraping)
             results = await self._search_with_httpx(query, max_results)
@@ -178,7 +176,7 @@ class WebSearcher:
         self,
         query: str,
         max_results: int,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Search using httpx."""
         import httpx
 
@@ -194,7 +192,7 @@ class WebSearcher:
             results = self._parse_ddg_results(response.text)
             return results[:max_results]
 
-    def _parse_ddg_results(self, html: str) -> List[SearchResult]:
+    def _parse_ddg_results(self, html: str) -> list[SearchResult]:
         """Parse DuckDuckGo lite results."""
         results = []
 
@@ -233,7 +231,7 @@ class PageScraper:
         """
         self.timeout = timeout
 
-    async def scrape(self, url: str) -> Optional[ScrapedPage]:
+    async def scrape(self, url: str) -> ScrapedPage | None:
         """Scrape a single page.
 
         Args:
@@ -265,7 +263,7 @@ class PageScraper:
             logger.warning(f"Failed to scrape {url}: {e}")
             return None
 
-    async def scrape_many(self, urls: List[str]) -> List[ScrapedPage]:
+    async def scrape_many(self, urls: list[str]) -> list[ScrapedPage]:
         """Scrape multiple pages concurrently.
 
         Args:
@@ -304,7 +302,7 @@ class PageScraper:
 
         return text
 
-    def _extract_links(self, html: str, base_url: str) -> List[str]:
+    def _extract_links(self, html: str, base_url: str) -> list[str]:
         """Extract links from HTML."""
         links = []
         for match in re.finditer(r'href="([^"]*)"', html):
@@ -401,7 +399,7 @@ class ResearchAgent:
     async def _generate_summary(
         self,
         topic: str,
-        pages: List[ScrapedPage],
+        pages: list[ScrapedPage],
     ) -> str:
         """Generate summary of research findings."""
         if not pages:
@@ -415,7 +413,7 @@ class ResearchAgent:
     async def _generate_summary_with_llm(
         self,
         topic: str,
-        pages: List[ScrapedPage],
+        pages: list[ScrapedPage],
     ) -> str:
         """Generate summary using LLM."""
         from nanocode.llm import Message
@@ -446,7 +444,7 @@ Provide a concise summary (2-3 paragraphs) covering:
     def _generate_basic_summary(
         self,
         topic: str,
-        pages: List[ScrapedPage],
+        pages: list[ScrapedPage],
     ) -> str:
         """Generate basic summary without LLM."""
         if not pages:
@@ -462,7 +460,7 @@ Provide a concise summary (2-3 paragraphs) covering:
 
         return f"Research on {topic}:\n\n" + "\n".join(summaries)
 
-    async def _extract_key_findings(self, pages: List[ScrapedPage]) -> List[str]:
+    async def _extract_key_findings(self, pages: list[ScrapedPage]) -> list[str]:
         """Extract key findings from pages."""
         findings = []
         for p in pages[:5]:
@@ -478,8 +476,8 @@ Provide a concise summary (2-3 paragraphs) covering:
 
     def _calculate_confidence(
         self,
-        pages: List[ScrapedPage],
-        results: List[SearchResult],
+        pages: list[ScrapedPage],
+        results: list[SearchResult],
     ) -> float:
         """Calculate confidence score for research."""
         if not pages:
@@ -497,7 +495,7 @@ Provide a concise summary (2-3 paragraphs) covering:
 
 
 # Global instance
-_research_agent: Optional[ResearchAgent] = None
+_research_agent: ResearchAgent | None = None
 
 
 def get_research_agent(llm=None) -> ResearchAgent:

@@ -10,13 +10,12 @@ Builds on existing session_manager.py with:
 import json
 import logging
 import os
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from .session_manager import Session, SessionManager, SessionMessage
+from .session_manager import Session, SessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ class SessionSearchResult:
 
     session_id: str
     session_title: str
-    matching_messages: List[Dict[str, Any]]
+    matching_messages: list[dict[str, Any]]
     relevance_score: float
     last_updated: datetime
 
@@ -44,8 +43,8 @@ class SessionAnalytics:
     total_tokens: int = 0
     avg_message_length: float = 0.0
     duration_minutes: float = 0.0
-    first_message_at: Optional[datetime] = None
-    last_message_at: Optional[datetime] = None
+    first_message_at: datetime | None = None
+    last_message_at: datetime | None = None
 
 
 @dataclass
@@ -56,7 +55,7 @@ class SessionVersion:
     session_id: str
     timestamp: datetime
     message_count: int
-    snapshot: Dict[str, Any]
+    snapshot: dict[str, Any]
     description: str = ""
 
 
@@ -66,7 +65,7 @@ class EnhancedSessionManager:
     Builds on existing SessionManager with additional capabilities.
     """
 
-    def __init__(self, storage_dir: Optional[str] = None):
+    def __init__(self, storage_dir: str | None = None):
         """Initialize enhanced session manager.
 
         Args:
@@ -79,14 +78,14 @@ class EnhancedSessionManager:
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
         self.base_manager = SessionManager(storage_dir)
-        self._versions: Dict[str, List[SessionVersion]] = {}
+        self._versions: dict[str, list[SessionVersion]] = {}
 
     def search(
         self,
         query: str,
         limit: int = 10,
-        session_id: Optional[str] = None,
-    ) -> List[SessionSearchResult]:
+        session_id: str | None = None,
+    ) -> list[SessionSearchResult]:
         """Search across sessions and messages.
 
         Args:
@@ -136,7 +135,7 @@ class EnhancedSessionManager:
         results.sort(key=lambda r: r.relevance_score, reverse=True)
         return results[:limit]
 
-    def get_analytics(self, session_id: str) -> Optional[SessionAnalytics]:
+    def get_analytics(self, session_id: str) -> SessionAnalytics | None:
         """Get analytics for a session.
 
         Args:
@@ -187,7 +186,7 @@ class EnhancedSessionManager:
         self,
         session_id: str,
         description: str = "",
-    ) -> Optional[SessionVersion]:
+    ) -> SessionVersion | None:
         """Create a version snapshot of a session.
 
         Args:
@@ -228,7 +227,7 @@ class EnhancedSessionManager:
         logger.debug(f"Created version {version_num} for session {session_id}")
         return version
 
-    def get_versions(self, session_id: str) -> List[SessionVersion]:
+    def get_versions(self, session_id: str) -> list[SessionVersion]:
         """Get all versions for a session."""
         return self._versions.get(session_id, [])
 
@@ -322,7 +321,7 @@ class EnhancedSessionManager:
         self,
         import_path: str,
         format: str = "json",
-    ) -> Optional[str]:
+    ) -> str | None:
         """Import a session from a file.
 
         Args:
@@ -371,7 +370,7 @@ class EnhancedSessionManager:
             logger.error(f"Failed to import session: {e}")
             return None
 
-    def get_global_analytics(self) -> Dict[str, Any]:
+    def get_global_analytics(self) -> dict[str, Any]:
         """Get analytics across all sessions."""
         sessions = self.base_manager.list(limit=1000)
 
@@ -428,10 +427,10 @@ class EnhancedSessionManager:
 
 
 # Global instance
-_enhanced_session_manager: Optional[EnhancedSessionManager] = None
+_enhanced_session_manager: EnhancedSessionManager | None = None
 
 
-def get_enhanced_session_manager(storage_dir: Optional[str] = None) -> EnhancedSessionManager:
+def get_enhanced_session_manager(storage_dir: str | None = None) -> EnhancedSessionManager:
     """Get or create the global enhanced session manager."""
     global _enhanced_session_manager
     if _enhanced_session_manager is None:

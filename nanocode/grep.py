@@ -12,7 +12,6 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -32,12 +31,12 @@ class GrepMatch:
 class GrepResult:
     """Result from a grep operation."""
 
-    matches: List[GrepMatch] = field(default_factory=list)
+    matches: list[GrepMatch] = field(default_factory=list)
     total_matches: int = 0
     files_searched: int = 0
     engine_used: str = ""
     query_time_ms: float = 0.0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class DualEngineGrep:
@@ -62,7 +61,7 @@ class DualEngineGrep:
         """
         self.max_results = max_results
         self.timeout_seconds = timeout_seconds
-        self._ripgrep_available: Optional[bool] = None
+        self._ripgrep_available: bool | None = None
 
     def is_ripgrep_available(self) -> bool:
         """Check if ripgrep is available."""
@@ -74,8 +73,8 @@ class DualEngineGrep:
         self,
         pattern: str,
         path: str = ".",
-        include: Optional[str] = None,
-        exclude: Optional[str] = None,
+        include: str | None = None,
+        exclude: str | None = None,
         case_insensitive: bool = False,
         whole_word: bool = False,
         literal: bool = False,
@@ -133,8 +132,8 @@ class DualEngineGrep:
         self,
         pattern: str,
         path: str,
-        include: Optional[str],
-        exclude: Optional[str],
+        include: str | None,
+        exclude: str | None,
         case_insensitive: bool,
         whole_word: bool,
         literal: bool,
@@ -219,8 +218,8 @@ class DualEngineGrep:
         self,
         pattern: str,
         path: str,
-        include: Optional[str],
-        exclude: Optional[str],
+        include: str | None,
+        exclude: str | None,
         case_insensitive: bool,
         whole_word: bool,
         literal: bool,
@@ -249,7 +248,7 @@ class DualEngineGrep:
 
         for file_path in files[:self.max_results]:
             try:
-                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                with open(file_path, encoding="utf-8", errors="ignore") as f:
                     for line_number, line in enumerate(f, 1):
                         match = regex.search(line)
                         if match:
@@ -267,7 +266,7 @@ class DualEngineGrep:
                             if len(result.matches) >= self.max_results:
                                 break
 
-            except (IOError, UnicodeDecodeError):
+            except (OSError, UnicodeDecodeError):
                 continue
 
             if len(result.matches) >= self.max_results:
@@ -280,9 +279,9 @@ class DualEngineGrep:
     def _get_files(
         self,
         path: str,
-        include: Optional[str],
-        exclude: Optional[str],
-    ) -> List[str]:
+        include: str | None,
+        exclude: str | None,
+    ) -> list[str]:
         """Get files to search."""
         files = []
         include_pattern = self._glob_to_regex(include) if include else None
@@ -320,7 +319,7 @@ class DualEngineGrep:
 
 
 # Global instance
-_dual_engine_grep: Optional[DualEngineGrep] = None
+_dual_engine_grep: DualEngineGrep | None = None
 
 
 def get_dual_engine_grep(max_results: int = 1000) -> DualEngineGrep:
