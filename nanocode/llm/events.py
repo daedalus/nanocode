@@ -2,6 +2,12 @@
 
 Opencode uses Effect-TS streams, we use Python async generators.
 Events drive the session processor to build message parts incrementally.
+
+Enhanced with Aura-style events:
+- ToolCallStart/ToolCallArgsDelta/ToolCallEnd pattern
+- Usage event with cache_hit/cache_miss buckets
+- ApiError as a first-class event
+- WorkerDispatchRequested event
 """
 
 from dataclasses import dataclass, field
@@ -28,6 +34,14 @@ class EventType(Enum):
     FINISH_STEP = "finish-step"
     FINISH = "finish"
     ERROR = "error"
+
+    # Enhanced events (Aura-style)
+    TOOL_CALL_START = "tool-call-start"
+    TOOL_CALL_ARGS_DELTA = "tool-call-args-delta"
+    TOOL_CALL_END = "tool-call-end"
+    USAGE = "usage"
+    API_ERROR = "api-error"
+    WORKER_DISPATCH_REQUESTED = "worker-dispatch-requested"
 
 
 @dataclass
@@ -108,3 +122,116 @@ class ErrorEvent(StreamEvent):
     """Error event."""
     type: EventType = field(default=EventType.ERROR, init=False)
     error: Optional[Exception] = None
+
+
+# =====================================================
+# Enhanced Events (Aura-style)
+# =====================================================
+
+
+@dataclass
+class ToolCallStartEvent(StreamEvent):
+    """Tool call started - initial announcement."""
+
+    type: EventType = field(default=EventType.TOOL_CALL_START, init=False)
+    tool_call_id: str = ""
+    tool_name: str = ""
+    provider_metadata: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class ToolCallArgsDeltaEvent(StreamEvent):
+    """Tool call arguments streaming delta."""
+
+    type: EventType = field(default=EventType.TOOL_CALL_ARGS_DELTA, init=False)
+    tool_call_id: str = ""
+    tool_name: str = ""
+    args_delta: str = ""  # Partial JSON string
+
+
+@dataclass
+class ToolCallEndEvent(StreamEvent):
+    """Tool call completed - final arguments."""
+
+    type: EventType = field(default=EventType.TOOL_CALL_END, init=False)
+    tool_call_id: str = ""
+    tool_name: str = ""
+    input: Dict[str, Any] = field(default_factory=dict)
+    provider_metadata: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class UsageEvent(StreamEvent):
+    """Token usage with cache hit/miss buckets."""
+
+    type: EventType = field(default=EventType.USAGE, init=False)
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cache_hit_tokens: int = 0
+    cache_miss_tokens: int = 0
+    model: str = ""
+    provider: str = ""
+
+
+@dataclass
+class ApiErrorEvent(StreamEvent):
+    """API error as a first-class event (not exception)."""
+
+    type: EventType = field(default=EventType.API_ERROR, init=False)
+    error_code: str = ""
+    error_message: str = ""
+    status_code: Optional[int] = None
+    retryable: bool = False
+    provider: str = ""
+
+
+@dataclass
+class WorkerDispatchRequestedEvent(StreamEvent):
+    """Worker dispatch requested for planner/worker handoff."""
+
+    type: EventType = field(default=EventType.WORKER_DISPATCH_REQUESTED, init=False)
+    task_id: str = ""
+    task_description: str = ""
+    spec: Optional[Dict[str, Any]] = None
+    worker_model: Optional[str] = None
+    provider_metadata: Optional[Dict[str, Any]] = None
+
+
+# =====================================================
+# Event Factory
+# =====================================================
+
+
+def create_event(event_type: EventType, **kwargs) -> StreamEvent:
+    """Create an event by type.
+
+    Args:
+        event_type: Type of event to create
+        **kwargs: Event-specific arguments
+
+    Returns:
+        StreamEvent instance
+    """
+    event_map = {
+        EventType.START: StreamEvent,
+        EventType.REASONING_START: ReasoningStartEvent,
+        EventType.REASONING_DELTA: ReasoningDeltaEvent,
+        EventType.REASONING_END: ReasoningEndEvent,
+        EventType.TOOL_INPUT_START: ToolInputStartEvent,
+        EventType.TOOL_CALL: ToolCallEvent,
+        EventType.TEXT_START: TextStartEvent,
+        EventType.TEXT_DELTA: TextDeltaEvent,
+        EventType.TEXT_END: TextEndEvent,
+        EventType.FINISH_STEP: FinishStepEvent,
+        EventType.ERROR: ErrorEvent,
+        EventType.TOOL_CALL_START: ToolCallStartEvent,
+        EventType.TOOL_CALL_ARGS_DELTA: ToolCallArgsDeltaEvent,
+        EventType.TOOL_CALL_END: ToolCallEndEvent,
+        EventType.USAGE: UsageEvent,
+        EventType.API_ERROR: ApiErrorEvent,
+        EventType.WORKER_DISPATCH_REQUESTED: WorkerDispatchRequestedEvent,
+    }
+
+    event_class = event_map.get(event_type, StreamEvent)
+    return event_class(**kwargs)
