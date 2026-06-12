@@ -1,25 +1,81 @@
 """Docker sandbox provider - runs commands in Docker containers.
 
-Provides isolation via Docker containers:
+Provides isolation via Docker containers with resource limits:
 - One container per session (or reuse)
 - Suspend = pause container (fast, ~25ms with Blaxel-style approach)
 - Resume = unpause container
 - Destroy = stop + remove container
+- Two modes: read-only rootfs (dynamic tools), read-write (terminal commands)
+- Resource limits: memory, CPU, PIDs, capabilities
 
 Note: This is optional and requires Docker to be installed.
 """
 
 import asyncio
-from typing import Any
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 from nanocode.sandbox.base import Sandbox, SandboxProvider
 
 
+class SandboxMode(str, Enum):
+    """Sandbox execution modes."""
+
+    READ_ONLY = "read-only"  # For dynamic tools (safe execution)
+    READ_WRITE = "read-write"  # For terminal commands (full access)
+
+
+@dataclass
+class SandboxConfig:
+    """Configuration for Docker sandbox."""
+
+    image: str = "nanocode-sandbox:latest"
+    workdir: str = "/workspace"
+    mode: SandboxMode = SandboxMode.READ_WRITE
+    memory_limit: str = "2g"
+    cpu_limit: float = 2.0
+    pid_limit: int = 200
+    cap_drop: List[str] = field(default_factory=lambda: ["ALL"])
+    volumes: Dict[str, str] = field(default_factory=dict)
+    read_only_rootfs: bool = False
+    tmpfs: Dict[str, str] = field(default_factory=lambda: {"/tmp": "size=100M"})
+    network_mode: str = "none"  # No network by default for security
+
+    def to_docker_args(self) -> List[str]:
+        """Convert config to docker create arguments."""
+        args = [
+            "--memory", self.memory_limit,
+            "--cpus", str(self.cpu_limit),
+            "--pids-limit", str(self.pid_limit),
+            "--read-only" if self.read_only_rootfs else "--read-write",
+            "--network", self.network_mode,
+        ]
+
+        # Drop capabilities
+        for cap in self.cap_drop:
+            args.extend(["--cap-drop", cap])
+
+        # Volume mounts
+        for host_path, container_path in self.volumes.items():
+            args.extend(["-v", f"{host_path}:{container_path}"])
+
+        # Tmpfs mounts
+        for mount_path, options in self.tmpfs.items():
+            args.extend(["--tmpfs", f"{mount_path}:{options}"])
+
+        return args
+
+
 class DockerSandboxProvider(SandboxProvider):
-    """Sandbox provider using Docker containers.
+    """Sandbox provider using Docker containers with resource limits.
 
     Each session gets its own container for isolation.
     Uses 'docker create/pause/unpause/rm' for lifecycle management.
+
+    Supports two modes:
+    - read-only: For dynamic tools (safe execution)
+    - read-write: For terminal commands (full access)
     """
 
     def __init__(self, config: Any = None):
@@ -29,33 +85,65 @@ class DockerSandboxProvider(SandboxProvider):
             image: Docker image to use (default: 'nanocode-sandbox:latest')
             workdir: Working directory in container (default: '/workspace')
             volumes: Volume mounts (dict: host_path -> container_path)
+            mode: SandboxMode (read-only or read-write)
+            memory_limit: Memory limit (default: '2g')
+            cpu_limit: CPU limit (default: 2.0)
+            pid_limit: PID limit (default: 200)
         """
         self.config = config or {}
         self._containers: dict[str, str] = {}  # session_id -> container_id
-        self._image = getattr(config, "sandbox_image", "nanocode-sandbox:latest")
-        self._workdir = getattr(config, "sandbox_workdir", "/workspace")
+        self._container_modes: dict[str, SandboxMode] = {}  # session_id -> mode
+        self._sandbox_config = SandboxConfig(
+            image=getattr(config, "sandbox_image", "nanocode-sandbox:latest"),
+            workdir=getattr(config, "sandbox_workdir", "/workspace"),
+            mode=getattr(config, "sandbox_mode", SandboxMode.READ_WRITE),
+            memory_limit=getattr(config, "memory_limit", "2g"),
+            cpu_limit=getattr(config, "cpu_limit", 2.0),
+            pid_limit=getattr(config, "pid_limit", 200),
+        )
 
-    async def create(self, session_id: str, **kwargs) -> Sandbox:
+    async def create(
+        self,
+        session_id: str,
+        mode: Optional[SandboxMode] = None,
+        **kwargs,
+    ) -> Sandbox:
         """Create a new Docker container for a session.
 
-        Uses 'docker create' to create a paused container,
-        then 'docker start' to begin execution when needed.
+        Args:
+            session_id: Session identifier
+            mode: Sandbox mode (read-only or read-write)
+            **kwargs: Additional configuration overrides
+
+        Returns:
+            Sandbox instance
         """
         container_name = f"nanocode-{session_id}"
+        sandbox_mode = mode or self._sandbox_config.mode
 
         # Build docker create command
-        cmd = [
-            "docker", "create",
-            "--name", container_name,
-            "--workdir", self._workdir,
-            self._image,
-            "tail", "-f", "/dev/null",  # Keep container running
-        ]
+        cmd = ["docker", "create", "--name", container_name]
 
-        # Add volume mounts if configured
-        volumes = getattr(self.config, "sandbox_volumes", {})
-        for host_path, container_path in volumes.items():
+        # Add resource limits
+        cmd.extend(self._sandbox_config.to_docker_args())
+
+        # Override read-only based on mode
+        if sandbox_mode == SandboxMode.READ_ONLY:
+            cmd.extend(["--read-only", "--tmpfs", "/tmp:size=100M"])
+            # Add writable layers for common paths
+            cmd.extend(["--tmpfs", "/var/run:size=10M"])
+            cmd.extend(["--tmpfs", "/var/log:size=50M"])
+
+        # Add volumes
+        for host_path, container_path in self._sandbox_config.volumes.items():
             cmd.extend(["-v", f"{host_path}:{container_path}"])
+
+        # Add workdir and image
+        cmd.extend([
+            "--workdir", self._sandbox_config.workdir,
+            self._sandbox_config.image,
+            "tail", "-f", "/dev/null",  # Keep container running
+        ])
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -70,6 +158,7 @@ class DockerSandboxProvider(SandboxProvider):
 
             container_id = stdout.decode().strip()
             self._containers[session_id] = container_id
+            self._container_modes[session_id] = sandbox_mode
 
             # Start the container
             start_proc = await asyncio.create_subprocess_exec(
@@ -86,6 +175,10 @@ class DockerSandboxProvider(SandboxProvider):
 
         except Exception as e:
             raise RuntimeError(f"Docker create failed: {e}")
+
+    def get_mode(self, session_id: str) -> Optional[SandboxMode]:
+        """Get the mode for a session's sandbox."""
+        return self._container_modes.get(session_id)
 
     async def suspend(self, sandbox_id: str):
         """Suspend a running container (pause it).
