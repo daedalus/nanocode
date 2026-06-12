@@ -121,6 +121,24 @@ class TestMemorySearch:
         query = search._build_fts_query("!!!")
         assert query == ""
 
+    def test_build_search_query(self, search):
+        """Test SQL query building."""
+        sql, params = search._build_search_query(
+            '"test"', scope="project", scope_id="123", memory_type="memory", limit=10
+        )
+        assert "memory_fts_idx MATCH :query" in sql
+        assert "m.scope = :scope" in sql
+        assert "m.scope_id = :scope_id" in sql
+        assert "m.type = :memory_type" in sql
+        assert params["scope"] == "project"
+        assert params["scope_id"] == "123"
+
+    def test_build_search_query_no_filters(self, search):
+        """Test SQL query building without filters."""
+        sql, params = search._build_search_query('"test"', None, None, None, 5)
+        assert "WHERE m.scope" not in sql  # No scope filter in WHERE
+        assert params["limit"] == 15  # 5 * 3 for over-fetch
+
 
 class TestMemoryReconciler:
     """Tests for MemoryReconciler."""
@@ -137,6 +155,46 @@ class TestMemoryReconciler:
         assert reconciler._detect_type("task.md") == "task"
         assert reconciler._detect_type("memory.md") == "memory"
         assert reconciler._detect_type("unknown.md") == "memory"
+
+    def test_scan_global(self, reconciler, tmp_path):
+        """Test scanning global directory."""
+        # Create test structure
+        global_dir = tmp_path / "global"
+        global_dir.mkdir()
+        (global_dir / "memory.md").write_text("content")
+
+        files = {}
+        reconciler._scan_global(files, tmp_path, None)
+        assert len(files) == 1
+        assert list(files.values())[0]["scope"] == "global"
+
+    def test_scan_global_skip(self, reconciler, tmp_path):
+        """Test scanning global with scope filter."""
+        files = {}
+        reconciler._scan_global(files, tmp_path, ["project"])
+        assert len(files) == 0
+
+    def test_scan_projects(self, reconciler, tmp_path):
+        """Test scanning projects directory."""
+        projects_dir = tmp_path / "projects" / "proj1"
+        projects_dir.mkdir(parents=True)
+        (projects_dir / "memory.md").write_text("content")
+
+        files = {}
+        reconciler._scan_projects(files, tmp_path, None)
+        assert len(files) == 1
+        assert list(files.values())[0]["scope"] == "project"
+
+    def test_scan_sessions(self, reconciler, tmp_path):
+        """Test scanning sessions directory."""
+        session_dir = tmp_path / "sessions" / "ses1"
+        session_dir.mkdir(parents=True)
+        (session_dir / "checkpoint.md").write_text("content")
+
+        files = {}
+        reconciler._scan_sessions(files, tmp_path, None)
+        assert len(files) == 1
+        assert list(files.values())[0]["scope"] == "session"
 
     @pytest.mark.asyncio
     async def test_reconcile_empty_dir(self, reconciler):

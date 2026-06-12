@@ -55,37 +55,8 @@ class MemorySearch:
         if not fts_query:
             return []
 
-        # Build WHERE clauses for filtering
-        conditions = []
-        params = {"query": fts_query, "limit": limit * 3}  # Over-fetch for floor filtering
-
-        if scope:
-            conditions.append("m.scope = :scope")
-            params["scope"] = scope
-        if scope_id:
-            conditions.append("m.scope_id = :scope_id")
-            params["scope_id"] = scope_id
-        if memory_type:
-            conditions.append("m.type = :memory_type")
-            params["memory_type"] = memory_type
-
-        where_clause = f"AND {' AND '.join(conditions)}" if conditions else ""
-
-        sql = f"""
-            SELECT
-                m.path,
-                snippet(memory_fts_idx, 4, '<<', '>>', '...', 32) AS snippet,
-                bm25(memory_fts_idx) AS score,
-                m.scope,
-                m.scope_id,
-                m.type
-            FROM memory_fts_idx
-            JOIN memory_fts m ON m.id = memory_fts_idx.rowid
-            WHERE memory_fts_idx MATCH :query
-            {where_clause}
-            ORDER BY score
-            LIMIT :limit
-        """
+        # Build query and params
+        sql, params = self._build_search_query(fts_query, scope, scope_id, memory_type, limit)
 
         result = await self.session.execute(text(sql), params)
         rows = result.fetchall()
@@ -117,6 +88,48 @@ class MemorySearch:
             results = [r for i, r in enumerate(results) if i == 0 or r.score >= cutoff]
 
         return results[:limit]
+
+    def _build_search_query(
+        self,
+        fts_query: str,
+        scope: Optional[str],
+        scope_id: Optional[str],
+        memory_type: Optional[str],
+        limit: int,
+    ) -> tuple[str, dict]:
+        """Build SQL query and params for search."""
+        conditions = []
+        params = {"query": fts_query, "limit": limit * 3}
+
+        if scope:
+            conditions.append("m.scope = :scope")
+            params["scope"] = scope
+        if scope_id:
+            conditions.append("m.scope_id = :scope_id")
+            params["scope_id"] = scope_id
+        if memory_type:
+            conditions.append("m.type = :memory_type")
+            params["memory_type"] = memory_type
+
+        where_clause = f"AND {' AND '.join(conditions)}" if conditions else ""
+
+        sql = f"""
+            SELECT
+                m.path,
+                snippet(memory_fts_idx, 4, '<<', '>>', '...', 32) AS snippet,
+                bm25(memory_fts_idx) AS score,
+                m.scope,
+                m.scope_id,
+                m.type
+            FROM memory_fts_idx
+            JOIN memory_fts m ON m.id = memory_fts_idx.rowid
+            WHERE memory_fts_idx MATCH :query
+            {where_clause}
+            ORDER BY score
+            LIMIT :limit
+        """
+
+        return sql, params
 
     def _build_fts_query(self, query: str) -> str:
         """Build FTS5 query from user input.

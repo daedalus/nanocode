@@ -98,59 +98,84 @@ class MemoryReconciler:
         if not memory_path.exists():
             return files
 
-        # Scan global memory
-        if scopes is None or "global" in scopes:
-            global_dir = memory_path / "global"
-            if global_dir.exists():
-                for md_file in global_dir.glob("*.md"):
+        # Scan each scope
+        self._scan_global(files, memory_path, scopes)
+        self._scan_projects(files, memory_path, scopes)
+        self._scan_sessions(files, memory_path, scopes)
+
+        return files
+
+    def _scan_global(
+        self, files: dict, memory_path: Path, scopes: Optional[list[str]]
+    ) -> None:
+        """Scan global memory directory."""
+        if scopes is not None and "global" not in scopes:
+            return
+        global_dir = memory_path / "global"
+        if not global_dir.exists():
+            return
+        for md_file in global_dir.glob("*.md"):
+            files[str(md_file)] = {
+                "scope": "global",
+                "type": self._detect_type(md_file.name),
+            }
+
+    def _scan_projects(
+        self, files: dict, memory_path: Path, scopes: Optional[list[str]]
+    ) -> None:
+        """Scan project memory directories."""
+        if scopes is not None and "project" not in scopes:
+            return
+        projects_dir = memory_path / "projects"
+        if not projects_dir.exists():
+            return
+        for project_dir in projects_dir.iterdir():
+            if project_dir.is_dir():
+                project_id = project_dir.name
+                for md_file in project_dir.glob("*.md"):
                     files[str(md_file)] = {
-                        "scope": "global",
+                        "scope": "project",
+                        "scope_id": project_id,
                         "type": self._detect_type(md_file.name),
                     }
 
-        # Scan project memories
-        projects_dir = memory_path / "projects"
-        if projects_dir.exists():
-            for project_dir in projects_dir.iterdir():
-                if project_dir.is_dir():
-                    project_id = project_dir.name
-                    if scopes is None or "project" in scopes:
-                        for md_file in project_dir.glob("*.md"):
-                            files[str(md_file)] = {
-                                "scope": "project",
-                                "scope_id": project_id,
-                                "type": self._detect_type(md_file.name),
-                            }
-
-        # Scan session memories
+    def _scan_sessions(
+        self, files: dict, memory_path: Path, scopes: Optional[list[str]]
+    ) -> None:
+        """Scan session memory directories."""
+        if scopes is not None and "session" not in scopes:
+            return
         sessions_dir = memory_path / "sessions"
-        if sessions_dir.exists():
-            for session_dir in sessions_dir.iterdir():
-                if session_dir.is_dir():
-                    session_id = session_dir.name
-                    if scopes is None or "session" in scopes:
-                        for md_file in session_dir.glob("*.md"):
-                            files[str(md_file)] = {
-                                "scope": "session",
-                                "scope_id": session_id,
-                                "type": self._detect_type(md_file.name),
-                            }
+        if not sessions_dir.exists():
+            return
+        for session_dir in sessions_dir.iterdir():
+            if session_dir.is_dir():
+                session_id = session_dir.name
+                self._scan_session_files(files, session_dir, session_id)
 
-                        # Also scan task progress files
-                        tasks_dir = session_dir / "tasks"
-                        if tasks_dir.exists():
-                            for task_dir in tasks_dir.iterdir():
-                                if task_dir.is_dir():
-                                    task_id = task_dir.name
-                                    progress_file = task_dir / "progress.md"
-                                    if progress_file.exists():
-                                        files[str(progress_file)] = {
-                                            "scope": "session",
-                                            "scope_id": f"{session_id}:{task_id}",
-                                            "type": "task",
-                                        }
-
-        return files
+    def _scan_session_files(
+        self, files: dict, session_dir: Path, session_id: str
+    ) -> None:
+        """Scan files within a session directory."""
+        for md_file in session_dir.glob("*.md"):
+            files[str(md_file)] = {
+                "scope": "session",
+                "scope_id": session_id,
+                "type": self._detect_type(md_file.name),
+            }
+        # Also scan task progress files
+        tasks_dir = session_dir / "tasks"
+        if tasks_dir.exists():
+            for task_dir in tasks_dir.iterdir():
+                if task_dir.is_dir():
+                    task_id = task_dir.name
+                    progress_file = task_dir / "progress.md"
+                    if progress_file.exists():
+                        files[str(progress_file)] = {
+                            "scope": "session",
+                            "scope_id": f"{session_id}:{task_id}",
+                            "type": "task",
+                        }
 
     def _detect_type(self, filename: str) -> str:
         """Detect memory type from filename."""
