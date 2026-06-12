@@ -355,27 +355,19 @@ class ModelExplorerScreen(ModalScreen):
 
     def _load_registry(self, force: bool = False):
         async def load_models():
-            from nanocode.llm.registry import get_registry
-            from nanocode.llm.registry import CACHE_TTL_SECONDS
-            registry = get_registry()
-            await registry.load(force_refresh=force)
-            age = registry._cache_age_seconds() if not force else 0
-            remaining = CACHE_TTL_SECONDS - age
-            return registry, age, remaining
+            from nanocode.provider_registry import get_provider_registry
+            registry = get_provider_registry()
+            await registry.initialize(force_refresh=force)
+            return registry
 
-        async def set_models(result):
-            registry, age, remaining = result
+        async def set_models(registry):
             subtitle = self.query_one("#model-subtitle", Static)
-            if age < 60:
-                subtitle.update(f"Cache: just refreshed ({len(registry._providers)} providers)")
-            else:
-                mins = int(remaining / 60)
-                subtitle.update(f"Cache: {mins}m remaining ({len(registry._providers)} providers)")
+            subtitle.update(f"Loaded: {len(registry._providers)} providers")
 
             models = []
             for pid, provider in registry._providers.items():
-                for mname, minfo in provider.models.items():
-                    models.append((f"{pid}/{mname}", pid, minfo.context_limit))
+                for mname, model_spec in provider.models.items():
+                    models.append((f"{pid}/{mname}", pid, model_spec.context_limit))
             models.sort(key=lambda x: -x[2])
 
             self._models = models
@@ -1575,24 +1567,24 @@ Footer {
         self._update_sidebar()
 
     def _fetch_model_info(self):
-        """Fetch model info from models.dev registry."""
+        """Fetch model info from provider registry."""
         try:
             import asyncio
 
-            from nanocode.llm.registry import get_registry
+            from nanocode.provider_registry import get_provider_registry
 
             async def fetch():
-                registry = get_registry()
-                await registry.load()
+                registry = get_provider_registry()
+                await registry.initialize()
                 return registry
 
             registry = asyncio.run(fetch())
             if self.agent and hasattr(self.agent, "llm") and self.agent.llm:
                 model = self.agent.llm.model
                 if registry and model:
-                    info = registry.get_model_by_full_id(model)
-                    if info:
-                        return info
+                    model_spec = registry.get_model_by_full_id(model)
+                    if model_spec:
+                        return model_spec
         except Exception:
             pass
         return None

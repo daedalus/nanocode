@@ -1,12 +1,16 @@
 """Provider router for dynamic LLM provider selection.
 
 Supports model ID format: provider/model (e.g., "openai/gpt-4o", "anthropic/claude-sonnet-4-5")
+
+Uses ProviderRegistry for clean provider/model separation.
 """
 
 import os
 from dataclasses import dataclass
+from typing import Optional, TYPE_CHECKING
 
-from nanocode.llm.registry import ModelRegistry, get_registry
+if TYPE_CHECKING:
+    from nanocode.provider_registry import ProviderRegistry, ProviderSpec, ModelSpec
 
 OUTPUT_TOKEN_MAX = 32000
 
@@ -115,10 +119,16 @@ class ProviderConfig:
 
 
 class ProviderRouter:
-    """Routes LLM requests to the appropriate provider based on model ID."""
+    """Routes LLM requests to the appropriate provider based on model ID.
 
-    def __init__(self, registry: ModelRegistry = None):
-        self.registry = registry or get_registry()
+    Uses ProviderRegistry for clean provider/model separation.
+    """
+
+    def __init__(self, registry=None):
+        if registry is None:
+            from nanocode.provider_registry import get_provider_registry
+            registry = get_provider_registry()
+        self.registry = registry
         self._explicit_providers: dict[str, dict] = {}
 
     def add_explicit_provider(self, provider: str, config: dict):
@@ -197,27 +207,20 @@ class ProviderRouter:
                 model=parsed.model,
             )
 
-        # Check models.dev registry
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_closed():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            coro = self.registry.load()
-            loop.run_until_complete(coro)
-        except RuntimeError:
-            pass
-        model_info = self.registry.get_model_by_full_id(model_id)
-        if model_info and model_info.api_endpoint:
+        # Check provider registry
+        model_spec = self.registry.get_model_by_full_id(model_id)
+        if model_spec:
+            # Get provider info for API base
+            provider_spec = self.registry.get_provider(parsed.provider)
+            api_base = provider_spec.api_base if provider_spec else ""
             api_key = self._get_api_key(parsed.provider)
             return ProviderConfig(
                 provider=parsed.provider,
-                base_url=model_info.api_endpoint,
+                base_url=api_base,
                 api_key=api_key,
                 model=parsed.model,
-                max_tokens=max(model_info.max_output_tokens, OUTPUT_TOKEN_MAX) if model_info.max_output_tokens > 0 else OUTPUT_TOKEN_MAX,
-                context_limit=model_info.context_limit if model_info.context_limit > 0 else None,
+                max_tokens=max(model_spec.max_output_tokens, OUTPUT_TOKEN_MAX) if model_spec.max_output_tokens > 0 else OUTPUT_TOKEN_MAX,
+                context_limit=model_spec.context_limit if model_spec.context_limit > 0 else None,
             )
 
         # Fall back to defaults

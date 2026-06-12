@@ -245,38 +245,38 @@ class ModelLimits:
 
     @classmethod
     def _get_registry(cls):
-        """Get the model registry."""
+        """Get the provider registry."""
         if cls._registry is None:
             try:
-                from nanocode.llm.registry import get_registry
+                from nanocode.provider_registry import get_provider_registry
 
-                cls._registry = get_registry()
+                cls._registry = get_provider_registry()
             except ImportError:
                 pass
         return cls._registry
 
     @classmethod
     async def load_registry(cls):
-        """Load model registry from models.dev."""
+        """Load provider registry from models.dev."""
         import logging
 
         logger = logging.getLogger("nanocode.context")
-        logger.debug("Loading model registry from API...")
+        logger.debug("Loading provider registry from API...")
         registry = cls._get_registry()
         if registry:
             try:
-                await registry.load()
+                await registry.initialize()
                 logger.debug(
-                    f"Model registry loaded: {len(registry._providers)} providers"
+                    f"Provider registry loaded: {len(registry._providers)} providers"
                 )
             except Exception as e:
-                logger.debug(f"Failed to load model registry: {e}")
+                logger.debug(f"Failed to load provider registry: {e}")
 
     @classmethod
     def get_limits(cls, model: str) -> dict:
         """Get context and output limits for a model.
 
-        First tries to get limits from models.dev registry,
+        First tries to get limits from provider registry,
         then falls back to built-in defaults.
         """
         registry = cls._get_registry()
@@ -284,9 +284,9 @@ class ModelLimits:
         if registry and registry._providers:
             full_id = model
             if "/" in full_id:
-                model_info = registry.get_model_by_full_id(full_id)
-                if model_info:
-                    context_limit = model_info.context_limit
+                model_spec = registry.get_model_by_full_id(full_id)
+                if model_spec:
+                    context_limit = model_spec.context_limit
                     output_limit = min(context_limit // 8, 16384)
                     return {"context": context_limit, "output": output_limit}
 

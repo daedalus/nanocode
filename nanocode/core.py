@@ -460,15 +460,12 @@ class AutonomousAgent:
         self.file_tracker = FileTracker(cache_dir)
 
     def _load_registry(self):
-        """Ensure model registry is loaded."""
+        """Ensure provider registry is loaded."""
         import asyncio
-        from nanocode.llm.registry import get_registry
-        registry = get_registry()
+        from nanocode.provider_registry import get_provider_registry
+        registry = get_provider_registry()
         if not registry._providers:
-            if os.path.exists(registry.cache_file):
-                registry._providers = registry._load_from_cache() or {}
-            else:
-                asyncio.create_task(registry.load())
+            asyncio.create_task(registry.initialize())
         return registry
 
     def _find_endpoint_config(self, default_connector: str, default_model: str):
@@ -492,9 +489,9 @@ class AutonomousAgent:
             return explicit
         from nanocode.llm.router import OUTPUT_TOKEN_MAX
         model_id = model if "/" in model else f"{default_connector}/{model}"
-        info = registry.get_model_by_full_id(model_id)
-        if info and info.max_output_tokens > 0:
-            return max(info.max_output_tokens, OUTPUT_TOKEN_MAX)
+        model_spec = registry.get_model_by_full_id(model_id)
+        if model_spec and model_spec.max_output_tokens > 0:
+            return max(model_spec.max_output_tokens, OUTPUT_TOKEN_MAX)
         return None
 
     def _init_llm(self):
