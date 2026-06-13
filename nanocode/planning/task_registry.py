@@ -440,3 +440,112 @@ class TaskRegistry:
             )
         )
         return result.scalar_one_or_none()
+
+    async def write_progress(
+        self,
+        session_id: str,
+        task_id: str,
+        content: str,
+        data_dir: str | None = None,
+    ) -> str:
+        """Write progress.md for a task.
+
+        Args:
+            session_id: Session ID
+            task_id: Task ID (e.g., T1, T1.1)
+            content: Progress content to write
+            data_dir: Optional data directory override
+
+        Returns:
+            Path to the written progress file
+        """
+        from nanocode.checkpoint import progress_path
+
+        path = progress_path(session_id, task_id, data_dir)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        return str(path)
+
+    async def read_progress(
+        self,
+        session_id: str,
+        task_id: str,
+        data_dir: str | None = None,
+    ) -> str | None:
+        """Read progress.md for a task.
+
+        Args:
+            session_id: Session ID
+            task_id: Task ID
+            data_dir: Optional data directory override
+
+        Returns:
+            Progress content or None if not found
+        """
+        from nanocode.checkpoint import progress_path
+
+        path = progress_path(session_id, task_id, data_dir)
+        if path.exists():
+            return path.read_text()
+        return None
+
+    async def render_task_ledger(
+        self,
+        session_id: str,
+        include_terminal: bool = True,
+        data_dir: str | None = None,
+    ) -> str:
+        """Render a hierarchical task ledger for checkpoint injection.
+
+        Args:
+            session_id: Session ID
+            include_terminal: Include done/abandoned tasks
+            data_dir: Optional data directory override
+
+        Returns:
+            Formatted task ledger string
+        """
+        from nanocode.checkpoint import progress_path
+
+        tasks = await self.list(session_id, include_terminal=include_terminal)
+
+        if not tasks:
+            return "(none)"
+
+        status_icons = {
+            TaskStatus.OPEN: "🔵",
+            TaskStatus.IN_PROGRESS: "🔄",
+            TaskStatus.BLOCKED: "🟡",
+            TaskStatus.DONE: "✅",
+            TaskStatus.ABANDONED: "❌",
+        }
+
+        # Build parent -> children mapping
+        by_parent: dict[str | None, list[TaskData]] = {}
+        for task in tasks:
+            parent = task.parent_task_id
+            if parent not in by_parent:
+                by_parent[parent] = []
+            by_parent[parent].append(task)
+
+        lines: list[str] = []
+
+        def render_task(task: TaskData, indent: int = 0):
+            icon = status_icons.get(task.status, "")
+            prefix = "  " * indent
+            progress_hint = ""
+            path = progress_path(session_id, task.id, data_dir)
+            if path.exists():
+                progress_hint = f" (progress: tasks/{task.id}/progress.md)"
+            lines.append(f"{prefix}- {icon} {task.id} {task.status.value} — {task.summary}{progress_hint}")
+            # Render children
+            children = by_parent.get(task.id, [])
+            for child in children:
+                render_task(child, indent + 1)
+
+        # Render top-level tasks
+        top_level = by_parent.get(None, [])
+        for task in top_level:
+            render_task(task)
+
+        return "\n".join(lines)

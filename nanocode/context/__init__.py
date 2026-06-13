@@ -413,6 +413,77 @@ class ContextReconstructor:
             "importance_threshold": self.importance_threshold,
         }
 
+    def render_rebuild_context(
+        self,
+        session_id: str,
+        project_id: str = "default",
+        data_dir: str | None = None,
+        caps: dict[str, int] | None = None,
+    ) -> str:
+        """Render rebuild context from checkpoint.md, MEMORY.md, and notes.md.
+
+        Reads files using budgeted section-aware reads and injects them
+        into context with an "Already loaded" header.
+
+        Args:
+            session_id: Session identifier
+            project_id: Project identifier for memory path
+            data_dir: Optional data directory override
+            caps: Optional token budget caps per file type
+
+        Returns:
+            Formatted context string for injection
+        """
+        from nanocode.checkpoint import (
+            checkpoint_path,
+            memory_path,
+            notes_path,
+        )
+        from nanocode.budgeted import read_budgeted_section_aware
+
+        if caps is None:
+            caps = {
+                "checkpoint": 11000,
+                "memory": 10000,
+                "notes": 6000,
+            }
+
+        lines = [
+            "The following blocks are auto-loaded from your session memory. "
+            "They are already in your context — do not Read them as whole files. "
+            "Use Grep for specific facts instead.",
+            "",
+        ]
+
+        # Read checkpoint.md
+        cp_path = str(checkpoint_path(session_id, data_dir))
+        cp_result = read_budgeted_section_aware(cp_path, caps.get("checkpoint", 11000))
+        if cp_result and cp_result.text.strip():
+            lines.append("## Session checkpoint")
+            lines.append(cp_result.text.strip())
+            lines.append("")
+
+        # Read MEMORY.md
+        mem_path = str(memory_path(project_id, data_dir))
+        mem_result = read_budgeted_section_aware(mem_path, caps.get("memory", 10000))
+        if mem_result and mem_result.text.strip():
+            lines.append("## Project memory")
+            lines.append(mem_result.text.strip())
+            lines.append("")
+
+        # Read notes.md
+        notes_file = str(notes_path(session_id, data_dir))
+        notes_result = read_budgeted_section_aware(notes_file, caps.get("notes", 6000))
+        if notes_result and notes_result.text.strip():
+            lines.append("## Session notes")
+            lines.append(notes_result.text.strip())
+            lines.append("")
+
+        if len(lines) <= 2:
+            return ""
+
+        return "\n".join(lines)
+
 
 # Global instances
 _checkpoint_manager: CheckpointManager | None = None
