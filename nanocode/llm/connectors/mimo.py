@@ -23,23 +23,40 @@ class MiMoConnector(LLMBase):
         api_key: str = "anonymous",
         base_url: str = "https://api.xiaomimimo.com",
         model: str = "mimo-auto",
+        proxy: str = None,
         **kwargs,
     ):
-        super().__init__(api_key=api_key, base_url=base_url, model=model, **kwargs)
+        super().__init__(api_key=api_key, base_url=base_url, model=model, proxy=proxy, **kwargs)
         self._jwt: str | None = None
         self._jwt_exp: float = 0
         self._fingerprint = self._get_fingerprint()
+        self._proxy = proxy or os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
 
     def _get_fingerprint(self) -> str:
         """Generate client fingerprint for bootstrap."""
+        fingerprint_file = os.path.expanduser("~/.local/share/nanocode/mimo-fingerprint")
+        os.makedirs(os.path.dirname(fingerprint_file), exist_ok=True)
+
+        try:
+            with open(fingerprint_file) as f:
+                return f.read().strip()
+        except FileNotFoundError:
+            pass
+
         import socket
         seed = f"{socket.gethostname()}|{os.name}|{os.getlogin()}"
-        return hashlib.sha256(seed.encode()).hexdigest()
+        fingerprint = hashlib.sha256(seed.encode()).hexdigest()
+        try:
+            with open(fingerprint_file, "w") as f:
+                f.write(fingerprint)
+        except Exception:
+            pass
+        return fingerprint
 
     async def _bootstrap(self) -> str:
         """Get JWT from bootstrap endpoint."""
         url = f"{self.base_url}/api/free-ai/bootstrap"
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(proxy=self._proxy, timeout=30) as client:
             response = await client.post(
                 url,
                 json={"client": self._fingerprint},
@@ -97,7 +114,7 @@ class MiMoConnector(LLMBase):
         if tools:
             payload["tools"] = tools
 
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(proxy=self._proxy, timeout=120) as client:
             async with client.stream("POST", url, json=payload, headers=headers) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
