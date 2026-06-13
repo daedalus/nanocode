@@ -1426,6 +1426,151 @@ class TodoTool(Tool):
             )
 
 
+class MemoryTool(Tool):
+    """Search and manage persistent memory with FTS5 full-text search."""
+
+    def __init__(self):
+        super().__init__(
+            name="memory",
+            description="Search and manage persistent memory. Use 'search' to find relevant past context, 'reindex' to update the search index.",
+        )
+
+    def get_schema(self) -> dict:
+        return {
+            "type": "function",
+            "function": {
+                "name": "memory",
+                "description": "Search and manage persistent memory with full-text search. Use 'search' to recall project context, past decisions, and learned patterns.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "operation": {
+                            "type": "string",
+                            "enum": ["search", "reindex", "stats"],
+                            "description": "Operation: 'search' for FTS5 search, 'reindex' to sync index with files, 'stats' for index statistics",
+                        },
+                        "query": {
+                            "type": "string",
+                            "description": "Search query (for 'search' operation)",
+                        },
+                        "scope": {
+                            "type": "string",
+                            "enum": ["global", "project", "session"],
+                            "description": "Filter by scope (optional)",
+                        },
+                        "scope_id": {
+                            "type": "string",
+                            "description": "Filter by scope ID, e.g. project ID or session ID (optional)",
+                        },
+                        "type": {
+                            "type": "string",
+                            "enum": ["memory", "checkpoint", "notes", "task"],
+                            "description": "Filter by memory type (optional)",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum results (default 10)",
+                        },
+                    },
+                    "required": ["operation"],
+                },
+            },
+        }
+
+    async def execute(
+        self,
+        operation: str = "search",
+        query: str = "",
+        scope: str = None,
+        scope_id: str = None,
+        type: str = None,
+        limit: int = 10,
+    ) -> ToolResult:
+        try:
+            from nanocode.storage.database import get_db
+            from nanocode.memory import MemoryIndexer, MemoryReconciler, MemorySearch
+
+            db = await get_db()
+            async with db.session() as session:
+                if operation == "search":
+                    if not query:
+                        return ToolResult(
+                            success=False, content=None, error="Query required for search"
+                        )
+
+                    reconciler = MemoryReconciler(session)
+                    await reconciler.reconcile_on_search()
+
+                    searcher = MemorySearch(session)
+                    results = await searcher.search(
+                        query=query,
+                        scope=scope,
+                        scope_id=scope_id,
+                        memory_type=type,
+                        limit=limit,
+                    )
+
+                    if not results:
+                        return ToolResult(
+                            success=True,
+                            content="No memory entries found matching query",
+                            metadata={"count": 0, "results": []},
+                        )
+
+                    output_parts = []
+                    for r in results:
+                        output_parts.append(
+                            f"[{r.scope}/{r.memory_type}] {r.path}\n{r.snippet}"
+                        )
+
+                    return ToolResult(
+                        success=True,
+                        content=f"Found {len(results)} results:\n\n" + "\n\n".join(output_parts),
+                        metadata={
+                            "count": len(results),
+                            "results": [
+                                {
+                                    "path": r.path,
+                                    "score": r.score,
+                                    "scope": r.scope,
+                                    "type": r.memory_type,
+                                    "snippet": r.snippet,
+                                }
+                                for r in results
+                            ],
+                        },
+                    )
+
+                elif operation == "reindex":
+                    reconciler = MemoryReconciler(session)
+                    stats = await reconciler.reconcile(force=True)
+                    return ToolResult(
+                        success=True,
+                        content=f"Reindexed: {stats['indexed']} chunks indexed, {stats['pruned']} pruned",
+                        metadata=stats,
+                    )
+
+                elif operation == "stats":
+                    indexer = MemoryIndexer(session)
+                    await indexer.initialize()
+                    stats = await indexer.get_stats()
+                    return ToolResult(
+                        success=True,
+                        content=f"Memory index: {stats['total_entries']} entries across {stats['total_files']} files",
+                        metadata=stats,
+                    )
+
+                else:
+                    return ToolResult(
+                        success=False,
+                        content=None,
+                        error=f"Unknown operation: {operation}. Use 'search', 'reindex', or 'stats'.",
+                    )
+
+        except Exception as e:
+            return ToolResult(success=False, content=None, error=str(e))
+
+
 class LSPTool(Tool):
     """LSP operations tool."""
 
@@ -2379,6 +2524,8 @@ def create_builtin_tools(
         EditSymbolTool(),
         FindUsagesTool(),
         SearchCodebaseTool(),
+        # Memory tool
+        MemoryTool(),
     ]
     return tools
 

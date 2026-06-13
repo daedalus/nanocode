@@ -921,6 +921,36 @@ Summary:"""
             "message_count": len(self._messages),
         }
 
+    def pressure_level(self) -> int:
+        """Get context pressure level (0-3).
+
+        Returns:
+            0: <50% usage (low pressure)
+            1: 50-70% usage (moderate)
+            2: 70-85% usage (high)
+            3: >=85% usage (critical, compaction imminent)
+        """
+        total = TokenCounter.count_messages_tokens(self._messages)
+        if self._system_parts:
+            total += sum(p.tokens for p in self._system_parts)
+
+        usable = self._context_limit - self._reserved_tokens
+        if usable <= 0:
+            return 0
+
+        ratio = total / usable
+        if ratio < 0.50:
+            return 0
+        if ratio < 0.70:
+            return 1
+        if ratio < 0.85:
+            return 2
+        return 3
+
+    def is_overflow(self) -> bool:
+        """Check if context has exceeded usable limit."""
+        return self.pressure_level() >= 3
+
     def clear(self):
         """Clear all messages (except system)."""
         self._messages.clear()

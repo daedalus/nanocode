@@ -891,7 +891,7 @@ class AutonomousAgent:
     def _find_prunable_tool_results(self, messages) -> tuple[list[tuple[int, int]], int]:
         """Find tool results that can be pruned. Returns (to_remove, pruned_tokens)."""
         PRUNE_PROTECT = 40000
-        PRUNE_PROTECTED_TOOLS = {"skill"}
+        PRUNE_PROTECTED_TOOLS = {"skill", "task", "question", "memory"}
 
         total = 0
         pruned = 0
@@ -932,15 +932,17 @@ class AutonomousAgent:
             return 0
 
         for i, j in reversed(to_remove):
-            for i, j in reversed(to_remove):
-                msg = messages[i]
-                if j < len(msg.parts):
-                    del msg.parts[j]
-                    msg.tokens = max(1, msg.tokens - estimate)
-            logger.info(
-                f"[{self.current_agent.name if self.current_agent else 'unknown'}] Pruned {len(to_remove)} tool results ({pruned} tokens)"
-            )
-            return len(to_remove)
+            msg = messages[i]
+            if j < len(msg.parts):
+                part = msg.parts[j]
+                estimate = len(str(part.content)) // 4
+                del msg.parts[j]
+                msg.tokens = max(1, msg.tokens - estimate)
+
+        logger.info(
+            f"[{self.current_agent.name if self.current_agent else 'unknown'}] Pruned {len(to_remove)} tool results ({pruned} tokens)"
+        )
+        return len(to_remove)
 
     async def _check_pending_todos(self) -> list[str]:
         """Check for pending todos that need completion. Returns list of pending todo contents."""
