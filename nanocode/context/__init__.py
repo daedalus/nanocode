@@ -516,3 +516,18 @@ def reset_context_reconstruction():
     global _checkpoint_manager, _context_reconstructor
     _checkpoint_manager = None
     _context_reconstructor = None
+
+
+# Re-export from context.py module (which is shadowed by this package)
+# These are needed by core.py and other modules
+from nanocode.context.context import (  # noqa: E402, F401
+    ContextManager,
+    ContextStrategy,
+    Message,
+    MessagePart,
+    MessagePartType,
+    MessageRole,
+    ModelLimits,
+    ScrapManager,
+    TokenCounter,
+)

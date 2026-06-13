@@ -8,6 +8,7 @@ Connector resolution:
 
 from nanocode.llm.base import LLMBase, Message
 from nanocode.llm.connectors.anthropic import AnthropicLLM
+from nanocode.llm.connectors.mimo import MiMoConnector
 from nanocode.llm.connectors.ollama import OllamaLLM
 from nanocode.llm.connectors.openai import OpenAILLM
 from nanocode.llm.router import ProviderConfig, get_router
@@ -26,6 +27,7 @@ _EXPLICIT_PROVIDERS: dict[str, type[LLMBase]] = {
     "lm-studio": OpenAILLM,
     "opencode": OpenAILLM,
     "openrouter": OpenAILLM,
+    "mimo": MiMoConnector,
 }
 
 
